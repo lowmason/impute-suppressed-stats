@@ -2143,3 +2143,26 @@ This specification is a synthesis, not an independent source-verification report
 - `logging-research-chatgpt.md.md`, especially the verified target and source-dimensionality findings (lines 3–27), deterministic strategy (lines 133–226), model and reconciliation design (lines 228–499), validation and disclosure design (lines 501–575), and production requirements (lines 576–680).
 - `logging-research-copilot.md.md`, especially the core estimand and CBP finding (lines 7–17), deterministic bounds (lines 198–211), robust model and reconciliation (lines 213–287), and validation pipeline (lines 289–318).
 - `logging-research-gemini.md.md`, especially the decomposition and source roles (lines 3–15 and 120–163), model components (lines 164–233), and staged pipeline (lines 244–283). Claims about exact current suppression thresholds and universally available size constraints were not adopted.
+
+---
+
+## Rollout
+
+Roadmap: `specs/logging-employment-spec-roadmap.md` — every stage implements
+this spec. Stage stamps below are authoritative (derive-roadmap §5).
+
+### Decisions resolved at roadmap derivation (2026-09-03)
+
+These resolve §21 rows. Every stage plan copies the ones it needs into its
+Global Constraints verbatim.
+
+- **D1 Historical period:** pilot `2017-01` → `2024-12` as in Appendix A. Every quarter in the window is final under QCEW's finalize-with-next-year-Q1 rule.
+- **D2 Scope ceiling:** Phases 0–5 are in scope. Phase 6 is an optional, separately routed stage.
+- **D3 Source access:** live fetch from `data.bls.gov` and `api.census.gov`. Credentials come from an untracked repo-root `.env` (keys present: `CENSUS_API_KEY`, `BLS_API_KEY`, `BEA_API_KEY`, `FRED_API_KEY`, `BLS_CONTACT_EMAIL`) loaded with python-dotenv. `.env` MUST be gitignored before the first commit that adds code, and no key value may appear in any manifest (§7.2).
+- **D4 Toolchain:** a single installable package — `src/logging_employment/` laid out per §6.1 — built with hatchling and managed by uv; `requires-python >= 3.14`; author `Lowell Mason <mason.lowell@mac.com>`, MIT license; ruff and black at line length 100, pytest markers `network` and `slow`, interrogate at 100%, python-dotenv in the `dev` dependency group. Tooling is modeled on the owner's `alt-nfp` `pyproject.toml` (supplied 2026-09-03) but NOT its workspace layout. Stage 1's plan verifies that jax/jaxlib, numpyro, highspy, polars, and pyarrow publish 3.14 wheels before locking and records any that do not as an open decision.
+
+Other §21 rows keep their Appendix A defaults until a stage's plan or finding changes them.
+
+### Stage stamps
+
+- Roadmap: specs/logging-employment-spec-roadmap.md, Stage 0 — on plan completion, tick the stage and re-validate later stages against what shipped.
