@@ -211,6 +211,23 @@ def disclosure_code_values(panel: pl.DataFrame) -> list[dict[str, Any]]:
     )
 
 
+def estabs_survival(supp_rows: pl.DataFrame) -> float | None:
+    """Fraction of suppressed cells whose `qtrly_estabs` is above zero, or None if there are
+    none to measure.
+
+    §2.2 row 2 says establishment counts may remain available when employment is suppressed,
+    and Task 5's universe test depends on it, so it is measured rather than assumed. `None`
+    rather than `0.0` on an empty frame for the same reason `suppression_share_overall` is:
+    0.0 is the measurable result "no suppressed cell kept its establishment count", and a
+    panel with nothing suppressed must not be reported as having produced it.
+    """
+    if not supp_rows.height:
+        return None
+    # fill_null before comparing: a null qtrly_estabs is otherwise dropped from the .mean()
+    # denominator instead of counting as "not > 0" (same hazard as `suppressed` above).
+    return float((supp_rows["qtrly_estabs"].fill_null(0) > 0).mean())
+
+
 def cell_coverage(states: pl.DataFrame) -> dict[str, Any]:
     """How many states_dc monthly cells the shares are actually divided by.
 
@@ -317,12 +334,7 @@ def main() -> None:
     hist, interior_gaps = _state_runs(states)
 
     supp_rows = states.filter(pl.col("suppressed"))
-    estabs_survive = (
-        # fill_null before comparing: a null qtrly_estabs is otherwise dropped from the
-        # .mean() denominator instead of counting as "not > 0" (same hazard as `suppressed`
-        # above).
-        float((supp_rows["qtrly_estabs"].fill_null(0) > 0).mean()) if supp_rows.height else 0.0
-    )
+    estabs_survive = estabs_survival(supp_rows)
 
     others = (panel.filter(pl.col("area_class") == "other_state_level")
               .select("area_fips", "area_title").unique().sort("area_fips").to_dicts())

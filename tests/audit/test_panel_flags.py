@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import polars as pl
 
-from qcew_panel import PANEL_SCHEMA, build_panel, run_lengths
+from qcew_panel import PANEL_SCHEMA, build_panel, estabs_survival, run_lengths
 
 
 def write_fixture(tmp_path, monkeypatch):
@@ -113,3 +113,19 @@ def test_run_lengths_breaks_a_run_at_an_absent_month():
 
 def test_run_lengths_of_no_suppression_is_empty():
     assert run_lengths([1, 2, 3], [False, False, False]) == []
+
+
+# --- estabs_survival: a measured 0.0 and an unmeasurable one are not the same ------------
+
+
+def test_estabs_survival_is_none_when_nothing_is_suppressed():
+    """0.0 would read as 'no suppressed cell keeps its establishment count' -- a measurement
+    that was never taken. suppression_share_overall already returns None on an empty
+    denominator; this field is what Task 5's universe test reads."""
+    empty = pl.DataFrame({"qtrly_estabs": []}, schema={"qtrly_estabs": pl.Int64})
+    assert estabs_survival(empty) is None
+
+
+def test_estabs_survival_counts_a_null_establishment_count_as_not_surviving():
+    rows = pl.DataFrame({"qtrly_estabs": [3, None, 0]}, schema={"qtrly_estabs": pl.Int64})
+    assert estabs_survival(rows) == 1 / 3
