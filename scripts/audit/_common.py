@@ -8,6 +8,13 @@ Retention rule (plan Global Constraints): `record_extract` and `download_extract
 response body byte-for-byte. No row filter, no column projection, and no aggregation-level
 restriction is ever applied on the way to disk. Filtering happens only in analysis, and every
 filter predicate is recorded in the source summary.
+
+Secret-guard scope: the plan's Global Constraints name `record_extract` and `write_summary` for
+the no-leaked-key guard, not `download_extract`. `record_extract` scans both `url` and the
+fully-buffered `content`; `download_extract` scans only `url` — its body is streamed to disk in
+fixed-size chunks and never fully buffered, and a correct substring scan across chunk boundaries
+would need a rolling buffer. That's a deliberate boundary for the twelve consumers of this
+module to know about, not an oversight.
 """
 
 from __future__ import annotations
@@ -169,23 +176,23 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def assert_no_secrets(text: str) -> None:
-    """D3: no key value may appear in any manifest (§7.2)."""
-    for name in SECRET_ENV_VARS:
-        value = os.environ.get(name, "").strip()
-        if value and value in text:
-            raise RuntimeError(f"{name} value leaked into an audit artifact")
-
-
 def assert_no_secrets_bytes(data: bytes) -> None:
-    """Byte-wise sibling of `assert_no_secrets` for response bodies already held in memory.
-    Checks the encoded key values against the raw bytes rather than decoding the buffer, so
-    non-UTF-8 extract content — expected, since these are third-party source bytes — can never
-    raise here."""
+    """Sole implementation of the secret-value comparison. Checks each secret env value's
+    UTF-8-encoded bytes against the raw bytes rather than decoding the buffer, so non-UTF-8
+    extract content — expected, since these are third-party source bytes — can never raise
+    here. `assert_no_secrets` (the text-taking, frozen-signature entry point) delegates here so
+    a hardening change made on one side can never be forgotten on the other."""
     for name in SECRET_ENV_VARS:
         value = os.environ.get(name, "").strip()
         if value and value.encode("utf-8") in data:
             raise RuntimeError(f"{name} value leaked into an audit artifact")
+
+
+def assert_no_secrets(text: str) -> None:
+    """D3: no key value may appear in any manifest (§7.2). Delegates to
+    `assert_no_secrets_bytes`; `surrogateescape` means a stray lone surrogate in `text` (e.g.
+    from upstream data decoded that way) can never raise `UnicodeEncodeError` here."""
+    assert_no_secrets_bytes(text.encode("utf-8", "surrogateescape"))
 
 
 def _write_sidecar(dest: Path, digest: str) -> None:
@@ -245,17 +252,21 @@ def download_extract(
         # Matches request()'s defaults (retries=3, backoff=2.0); time.sleep is looked up here,
         # at call time, rather than bound as a default parameter, so tests can monkeypatch it.
         status, hexdigest, size = _retry(_attempt, retries=3, backoff=2.0, sleep=time.sleep)
+        # Sidecar write and the atomic rename are inside this try too: a failure in either one
+        # (permissions, full disk) must still hit the `.part` cleanup below, not orphan it.
+        _write_sidecar(dest, hexdigest)
+        os.replace(tmp_dest, dest)
     except Exception:
         tmp_dest.unlink(missing_ok=True)
         raise
 
-    _write_sidecar(dest, hexdigest)
-    os.replace(tmp_dest, dest)
     return ExtractRecord(source, url, str(dest), hexdigest, size, _utcnow(), status)
 
 
 def validate_summary(payload: dict[str, Any]) -> None:
     """Raise `ValueError` unless the payload matches the Task 1 summary schema exactly."""
+    if not isinstance(payload, dict):
+        raise ValueError("summary payload must be a dict")
     for key in ("source", "generated_utc", "coverage_span", "access", "extracts", "findings"):
         if key not in payload:
             raise ValueError(f"summary missing top-level key {key!r}")
@@ -276,7 +287,10 @@ def validate_summary(payload: dict[str, Any]) -> None:
         raise ValueError(f"access.status must be one of {ACCESS_STATUSES}")
     if access["status"] != "verified" and not access.get("reason"):
         raise ValueError("access.reason is required unless access.status == 'verified'")
-    for rec in payload["extracts"]:
+    extracts = payload["extracts"]
+    if not isinstance(extracts, list):
+        raise ValueError("extracts must be a list")
+    for rec in extracts:
         if not isinstance(rec, dict):
             raise ValueError("extract record must be a dict")
         for key in ("source", "url", "path", "sha256", "bytes", "retrieved_utc", "http_status"):
@@ -301,7 +315,10 @@ def write_summary(
         "findings": findings,
     }
     validate_summary(payload)
-    text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    # ensure_ascii=False: the default would rewrite a non-ASCII secret value's characters as
+    # \uXXXX escapes, so assert_no_secrets's substring check below would never see the literal
+    # value and would miss the leak.
+    text = json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
     assert_no_secrets(text)
     dest = AUDIT_ROOT / source / "summary.json"
     dest.parent.mkdir(parents=True, exist_ok=True)

@@ -65,20 +65,45 @@ def test_download_extract_streams_bytes_verbatim_with_sidecar(tmp_path, monkeypa
 def test_download_extract_leaves_no_file_on_interrupted_stream(tmp_path, monkeypatch):
     monkeypatch.setattr(_common, "AUDIT_ROOT", tmp_path)
     monkeypatch.setattr(_common.time, "sleep", lambda _: None)
+    calls = {"n": 0}
 
     def flaky_body():
         yield b"chunk-one-"
         yield b"chunk-two-"
         raise httpx.ReadError("connection reset mid-stream")
 
-    client = httpx.Client(
-        transport=httpx.MockTransport(lambda r: httpx.Response(200, content=flaky_body()))
-    )
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, content=flaky_body())
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
     with pytest.raises(httpx.TransportError):
         _common.download_extract(client, "qcew", "https://example.test/big.zip", "big.zip")
     assert not (tmp_path / "qcew" / "big.zip").exists()
     assert not (tmp_path / "qcew" / "big.zip.part").exists()
     assert not (tmp_path / "qcew" / "big.zip.sha256").exists()
+    # G4: a transport error is retryable, so this must be retries=3 => 4 total attempts, not a
+    # regression that gives up (or stops retrying) after the first failure.
+    assert calls["n"] == 4
+
+
+def test_download_extract_cleans_up_part_file_when_sidecar_write_fails(tmp_path, monkeypatch):
+    """G3: `_write_sidecar` and `os.replace` used to run after the try/except that unlinks the
+    `.part` file, so a failing sidecar write (permissions, full disk) orphaned it."""
+    monkeypatch.setattr(_common, "AUDIT_ROOT", tmp_path)
+    body = b"z" * 5000
+    client = httpx.Client(
+        transport=httpx.MockTransport(lambda r: httpx.Response(200, content=body))
+    )
+
+    def boom(dest: Path, digest: str) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(_common, "_write_sidecar", boom)
+    with pytest.raises(OSError):
+        _common.download_extract(client, "qcew", "https://example.test/big.zip", "big.zip")
+    assert not (tmp_path / "qcew" / "big.zip").exists()
+    assert not (tmp_path / "qcew" / "big.zip.part").exists()
 
 
 def test_download_extract_retries_5xx_and_transport_errors_like_request(tmp_path, monkeypatch):
@@ -96,6 +121,25 @@ def test_download_extract_retries_5xx_and_transport_errors_like_request(tmp_path
     assert calls["n"] == 3
     assert (tmp_path / "qcew" / "big.zip").read_bytes() == body
     assert rec.sha256 == _common.sha256_bytes(body)
+
+
+def test_download_extract_fails_fast_on_4xx_without_retrying(tmp_path, monkeypatch):
+    """G4: `download_extract` must fast-fail a 4xx exactly like `request` does, not retry it —
+    coverage gap the retry-parity tests never closed."""
+    monkeypatch.setattr(_common, "AUDIT_ROOT", tmp_path)
+    monkeypatch.setattr(_common.time, "sleep", lambda _: None)
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(404)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    with pytest.raises(httpx.HTTPStatusError):
+        _common.download_extract(client, "qcew", "https://example.test/missing.zip", "missing.zip")
+    assert calls["n"] == 1
+    assert not (tmp_path / "qcew" / "missing.zip").exists()
+    assert not (tmp_path / "qcew" / "missing.zip.part").exists()
 
 
 def test_write_summary_round_trips_and_validates(tmp_path, monkeypatch):
@@ -133,6 +177,8 @@ def test_write_summary_round_trips_and_validates(tmp_path, monkeypatch):
         lambda p: p.__setitem__(
             "extracts", ["source url path sha256 bytes retrieved_utc http_status"]
         ),
+        lambda p: p.__setitem__("extracts", None),
+        lambda p: p.__setitem__("extracts", ""),
     ],
 )
 def test_validate_summary_rejects_broken_payloads(mutate):
@@ -148,6 +194,24 @@ def test_validate_summary_rejects_broken_payloads(mutate):
         _common.validate_summary(payload)
 
 
+@pytest.mark.parametrize(
+    "bad_payload",
+    [
+        None,
+        42,
+        ["source", "generated_utc", "coverage_span", "access", "extracts", "findings"],
+        "source generated_utc coverage_span access extracts findings",
+    ],
+)
+def test_validate_summary_rejects_non_dict_payload(bad_payload):
+    """The list/string cases are adversarial: each one carries all six required top-level
+    keys (as elements or as substrings), so the presence loop finds every key and falls
+    through to `payload["coverage_span"]` — a non-dict subscript, which must still surface
+    as `ValueError`, not `TypeError`."""
+    with pytest.raises(ValueError):
+        _common.validate_summary(bad_payload)
+
+
 def test_write_summary_refuses_to_leak_a_key(tmp_path, monkeypatch):
     monkeypatch.setattr(_common, "AUDIT_ROOT", tmp_path)
     monkeypatch.setenv("CENSUS_API_KEY", "sekret-value-0123")
@@ -159,6 +223,22 @@ def test_write_summary_refuses_to_leak_a_key(tmp_path, monkeypatch):
             access={"route": "https://api.census.gov/data/2022/cbp?key=sekret-value-0123",
                     "status": "verified", "reason": None},
             extracts=[], findings={},
+        )
+
+
+def test_write_summary_refuses_to_leak_a_non_ascii_key(tmp_path, monkeypatch):
+    """G7: `json.dumps(..., ensure_ascii=True)` (the default) would rewrite a non-ASCII secret
+    value's characters as `\\uXXXX` escapes, so the literal value no longer appears as a
+    substring of the serialized text and the guard misses it."""
+    monkeypatch.setattr(_common, "AUDIT_ROOT", tmp_path)
+    monkeypatch.setenv("CENSUS_API_KEY", "sekret-café-0123")
+    with pytest.raises(RuntimeError, match="CENSUS_API_KEY"):
+        _common.write_summary(
+            "cbp",
+            coverage_span={"published_start": "", "published_end": "", "window_start": "2017-01",
+                           "window_end": "2024-12", "covered": "", "uncovered": ""},
+            access={"route": "r", "status": "verified", "reason": None},
+            extracts=[], findings={"note": "leaked sekret-café-0123 here"},
         )
 
 
@@ -199,3 +279,22 @@ def test_contact_email_required(monkeypatch):
     monkeypatch.delenv("BLS_CONTACT_EMAIL", raising=False)
     with pytest.raises(RuntimeError, match="BLS_CONTACT_EMAIL"):
         _common.contact_email()
+
+
+def test_assert_no_secrets_delegates_to_the_bytes_implementation(monkeypatch):
+    """G2: `assert_no_secrets` must not run its own copy of the comparison loop — it must
+    call `assert_no_secrets_bytes` so there is exactly one implementation. Proven by spying on
+    the module-level name rather than by behavior alone, since a text-only and a bytes-only
+    loop can behave identically on ASCII input while still being two maintained copies."""
+    calls = []
+    monkeypatch.setattr(_common, "assert_no_secrets_bytes", lambda data: calls.append(data))
+    _common.assert_no_secrets("hello world")
+    assert calls == [b"hello world"]
+
+
+def test_assert_no_secrets_still_raises_on_a_key_bearing_url(monkeypatch):
+    """Unpatched sibling of the spy test above: pins that the delegation preserves the
+    documented exception type and message, not just that a call happened."""
+    monkeypatch.setenv("CENSUS_API_KEY", "sekret-value-0123")
+    with pytest.raises(RuntimeError, match="CENSUS_API_KEY"):
+        _common.assert_no_secrets("https://example.test/x?key=sekret-value-0123")
