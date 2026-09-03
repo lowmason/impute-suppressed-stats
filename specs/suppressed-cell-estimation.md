@@ -28,35 +28,35 @@ For legitimate research, therefore, **better statistical accuracy is not always 
 
 **The basic linear system.** Let $z\in\mathbb R^m$ denote the vector of the finest mutually exclusive cells relevant to a set of releases—for example, county × six-digit NAICS × ownership × quarter for one additive measure. Every valid published total is a linear functional of those atomic cells,
 
-$$
+```math
 y = A z,
-$$
+```
 
 where rows of $A$ describe parent totals, ownership totals, industry rollups, state/county totals, annual sums, or other published aggregations. QCEW's current aggregation-level documentation contains national, state, county, metropolitan, ownership, supersector and multiple NAICS detail levels, so the actual public constraint graph is substantially richer than a single parent-child tree. Historical BLS disclosure research likewise emphasized simultaneous ownership-industry, area, size, and time relationships. [[15](#ref-15), [1](#ref-1)]
 
 Partition $z=(z_O,x)$, where $z_O$ is observed and $x\in\mathbb R^s$ contains suppressed atomic quantities. Moving observed contributions to the right-hand side produces
 
-$$
+```math
 B x=c.
-$$
+```
 
 For exactly reported additive margins, define
 
-$$
+```math
 \mathcal F_0=\{x:B x=c\}.
-$$
+```
 
 The affine dimension before inequalities is
 
-$$
+```math
 \dim(\mathcal F_0)=s-\operatorname{rank}(B),
-$$
+```
 
 assuming consistency. Equivalently, if $N$ spans the null space of $B$, every solution is
 
-$$
+```math
 x=x_0+Nv.
-$$
+```
 
 The coordinates of $v$ are precisely the directions in which suppressed cells can change without changing any of the public accounting identities. This rank/null-space formulation converts the intuitive question “can I subtract enough totals?” into a formal identification test.
 
@@ -64,29 +64,29 @@ If $\operatorname{rank}(B)=s$, the continuous system has at most one solution. R
 
 **Partial identification.** Add defensible public restrictions,
 
-$$
+```math
 x\ge0,\qquad Gx\le h,
-$$
+```
 
 and, for genuine counts,
 
-$$
+```math
 x_j\in\mathbb Z.
-$$
+```
 
 Then the identified set becomes
 
-$$
+```math
 \mathcal F=
 \{x:B x=c,\;Gx\le h,\;x\ge0,\;x_{\mathcal I}\in\mathbb Z\}.
-$$
+```
 
 For each suppressed coordinate $j$,
 
-$$
+```math
 L_j=\min_{x\in\mathcal F}x_j,\qquad
 U_j=\max_{x\in\mathcal F}x_j.
-$$
+```
 
 With continuous variables these are linear programs; with integer constraints they are mixed-integer linear programs. The interval $[L_j,U_j]$ is not a confidence interval. It is the **sharp feasible range given the stated public information and constraints**. BLS's 2004 Disclosure Audit System used essentially this min/max logic, and FCSM describes suppression auditing in exactly these terms: equal minima and maxima imply exact disclosure; excessively close extrema imply insufficient protection. [[1](#ref-1), [3](#ref-3)]
 
@@ -95,16 +95,16 @@ This leads to a useful five-way classification:
 | Status | Formal criterion | What may properly be reported |
 |---|---|---|
 | **Exactly recoverable** | $L_j=U_j$ | “Public identities imply $x_j=L_j$,” subject to disclosure review |
-| **Partially identified** | $L_j<U_j<\infty$ | The feasible range, preferably before any point estimate |
+| **Partially identified** | $L_j\lt U_j\lt\infty$ | The feasible range, preferably before any point estimate |
 | **Model-estimable** | Wide $[L_j,U_j]$, but predictive structure exists | Point/posterior estimate explicitly labeled model-based |
 | **Assumption-sensitive** | Estimate changes materially across plausible models | Scenario ranges, model ensemble, or multiple imputations |
 | **Fundamentally unidentified** | Public constraints and defensible models provide little concentration | No cell estimate; aggregate or use restricted data |
 
 A useful discipline is to keep **identified-set width**
 
-$$
+```math
 W_j=U_j-L_j
-$$
+```
 
 separate from **posterior or predictive uncertainty**. A model cannot turn an unidentified value into a logically identified fact; it can only assign probabilities within an identified region under assumptions.
 
@@ -116,13 +116,13 @@ Moreover, current suppression practice substantially limits the usefulness of th
 
 **Rounding should be represented explicitly.** If an underlying aggregate $a_i^\top x$ is published after rounding to grid width $r_i$, the correct constraint is approximately
 
-$$
+```math
 \tilde y_i-r_i/2
 \le
 a_i^\top x
 <
 \tilde y_i+r_i/2,
-$$
+```
 
 with endpoint details determined by the documented rounding convention. Treating a rounded statistic as exact can create false recoverability. Conversely, several independently rounded overlapping margins can have intervals whose intersection is substantially narrower than any individual interval. Historical BLS disclosure-audit work explicitly incorporated rounding bounds around published values. Current QCEW file documentation expressly labels location quotients as rounded to hundredths and percentage changes to tenths; analysts should therefore model documented rounding **field by field rather than assuming a universal QCEW rounding rule**. [[1](#ref-1), [7](#ref-7), [8](#ref-8)]
 
@@ -132,20 +132,20 @@ The historical BLS disclosure paper already recognized time as part of the suppr
 
 **Never mix incompatible vintages silently.** Let
 
-$$
+```math
 B^{(v)}x^{(v)}=c^{(v)}
-$$
+```
 
 denote constraints from release vintage $v$. If a later revision changes establishments, classification, employment or wages, $x^{(v)}$ and $x^{(v+1)}$ are not necessarily the same latent vector. Stacking the equations as though they were can yield a unique but fictitious solution—or an empty feasible set. BLS's current methodology permits revisions and explicitly notes that adjusted news-release growth rates can be based on unpublished previous-year data not equal to the public download. [[6](#ref-6)]
 
 When incompatibility is unavoidable, use a slack formulation,
 
-$$
+```math
 \min_{x,e}\sum_i w_i|e_i|
 \quad
 \text{s.t.}\quad
 B_i x=c_i+e_i,
-$$
+```
 
 and interpret $e_i$ as revision/rounding inconsistency rather than estimation noise. Better still, retain separate vintage-specific latent quantities and model the revision process.
 
@@ -192,17 +192,17 @@ The main analytical danger is exactly the reason agencies use LP audits: a very 
 
 **Historical-share allocation.** Let a group of jointly suppressed children have public subtotal
 
-$$
+```math
 S_t=P_t-\sum_{i\in O_t}x_{it}.
-$$
+```
 
 For child $j$,
 
-$$
+```math
 \hat x_{jt}=\hat s_{jt}S_t,
 \qquad
 \sum_{j\in S_t}\hat s_{jt}=1.
-$$
+```
 
 The share $\hat s_{jt}$ may be the last observed share, same-quarter seasonal share, rolling mean, median, exponentially weighted average, or a robust pre/post-break estimate. Its advantages are transparency, near-zero computational cost, and exact preservation of the jointly suppressed subtotal. It is attractive when cell composition is stable and only short gaps occur.
 
@@ -212,9 +212,9 @@ A defensible historical-share method should use only classification-consistent p
 
 **Growth-rate and interpolation models.** A missing value can be forecast from the previous visible value,
 
-$$
+```math
 \hat x_t=x_{t-1}(1+\hat g_t),
-$$
+```
 
 interpolated between $t-1$ and $t+1$, or estimated from peer-industry/geographic growth. Modeling log levels or shares often makes multiplicative growth more natural.
 
@@ -224,7 +224,7 @@ Accordingly, temporal methods should incorporate change-point detection, robust 
 
 **Benchmarking and reconciliation.** Suppose an initial unconstrained estimate $\hat x$ is available. A general reconciliation estimator is
 
-$$
+```math
 x^\star
 =
 \arg\min_x
@@ -232,7 +232,7 @@ x^\star
 \quad
 \text{s.t.}\quad
 A x=y,\;x\ge0.
-$$
+```
 
 Depending on the objective, this encompasses generalized least squares, weighted quadratic adjustment and related constrained estimators. Proportional allocation and iterative proportional fitting are attractive for strictly positive tabular quantities; entropy minimization preserves relative structure; Denton-style benchmarking is especially appropriate when preserving period-to-period movement matters; generalized forecast-reconciliation methods provide covariance-weighted solutions for large systems. Probabilistic reconciliation extends the same principle to distributions rather than only means. [[17](#ref-17), [18](#ref-18), [19](#ref-19)]
 
@@ -240,13 +240,13 @@ Reconciliation is best viewed as an **output coherence layer**, not a substitute
 
 **Time-series and state-space models.** A natural QCEW formulation is
 
-$$
+```math
 x_t = F_t x_{t-1}+u_t,
-$$
+```
 
-$$
+```math
 y_t=A_t x_t+v_t,
-$$
+```
 
 where $x_t$ contains latent detailed cells and $y_t$ contains published totals or visible cells. Exact accounting equations can be represented as zero-variance observations or, often more stably, by reparameterizing the latent state so constraints hold identically. Rounded or revised measurements receive nonzero observation error.
 
@@ -258,21 +258,21 @@ These models offer a principled distinction between *filtering*—what could hav
 
 For example, if $S_{gt}$ is a known suppressed subtotal and $p_{jgt}$ latent shares,
 
-$$
+```math
 x_{jgt}=S_{gt}p_{jgt},
 \qquad
 p_{jgt}\ge0,\quad
 \sum_j p_{jgt}=1,
-$$
+```
 
 with
 
-$$
+```math
 \operatorname{logit\!-\!ratio}(p_{jgt})
 =
 X_{jgt}\beta+
 \alpha_j+\gamma_g+\delta_t+\eta_{jgt}.
-$$
+```
 
 This automatically preserves the subtotal, and posterior draws directly support multiple completed datasets. Spatial, industry and temporal hierarchies borrow strength where a cell has little direct history. Small-area hierarchical Bayes research provides substantial precedent for borrowing strength across sparsely measured domains, while modern Bayesian benchmarking work shows how to condition or tilt posteriors to satisfy aggregate benchmarks. [[20](#ref-20), [19](#ref-19), [21](#ref-21)]
 
@@ -284,9 +284,9 @@ Spatial borrowing should therefore be substantively structured. “Nearby counti
 
 **Matrix and tensor completion.** Arrange QCEW as a matrix or tensor across geography × industry × ownership × measure × time and posit approximate low rank,
 
-$$
+```math
 X \approx U_1\otimes U_2\otimes\cdots.
-$$
+```
 
 The attraction is obvious: a huge repeated panel provides substantial cross-sectional structure, and latent factors can capture common industries or regional cycles. Constraints such as $AX=y$ and $X\ge0$ can be added to nuclear-norm or factorized objectives.
 
@@ -296,9 +296,9 @@ Low rank is also least convincing exactly where confidentiality is often difficu
 
 **Multiple imputation.** Multiple imputation is an output representation rather than a unique prediction model. Generate
 
-$$
+```math
 x_{\text{mis}}^{(1)},\ldots,x_{\text{mis}}^{(M)}
-$$
+```
 
 from a suppression-aware predictive distribution, with every draw satisfying deterministic constraints. Downstream analyses are repeated across completed datasets, allowing imputation uncertainty to propagate.
 
@@ -308,7 +308,7 @@ Drawing uniformly over the deterministic feasible polytope is not “assumption 
 
 **Hybrid methods.** The strongest general solution is a combination:
 
-$$
+```math
 \boxed{
 \text{identified set}
 +
@@ -318,7 +318,7 @@ $$
 +
 \text{multiple draws}
 }
-$$
+```
 
 For example, derive $[L,U]$ by LP/MILP; fit a hierarchical dynamic model to published cells; truncate/condition its predictions to the feasible set; reconcile to every valid margin; and publish multiple imputations or quantiles rather than one number. This preserves the distinction among logical information, modeling information and residual uncertainty.
 
@@ -348,30 +348,30 @@ First, an **identification layer** constructs sparse public accounting constrain
 
 For groups of suppressed children whose subtotal $S_t$ is known, modeling **shares** is usually preferable to modeling raw children separately, because
 
-$$
+```math
 x_{jt}=S_t p_{jt},\qquad \sum_j p_{jt}=1
-$$
+```
 
 automatically preserves the most important identity. Log-ratio or logistic-normal dynamic models are more flexible than a fixed Dirichlet when shares show correlation and time dependence. Where the number of jointly suppressed children is only two, the problem reduces to a one-dimensional latent share $p_t$:
 
-$$
+```math
 a_t=S_t p_t,\qquad
 b_t=S_t(1-p_t).
-$$
+```
 
 This makes transparent how little a point estimate adds unless there is independent information about $p_t$.
 
 **Suppression-aware likelihood.** Let $R_{jt}=1$ denote publication and $R_{jt}=0$ suppression. A naïve model implicitly assumes
 
-$$
+```math
 P(R_{jt}\mid x_{jt},\text{latent respondent composition},\ldots)
-$$
+```
 
 is ignorable. QCEW documentation makes that implausible. A better conceptual model is
 
-$$
+```math
 P(x,R)=P(x)\,P(R\mid x,H,C,\mathcal T),
-$$
+```
 
 where $H$ represents hierarchy/table geometry, $C$ confidential concentration or respondent-composition variables, and $\mathcal T$ the disclosure algorithm. Because exact modern $\mathcal T$ and $C$ are not public, the full selection model is not identified. That limitation should be stated rather than hidden. Historical BLS documentation establishes that magnitude/concentration and table structure were inputs to primary and secondary nondisclosure, while current BLS deliberately does not expose all operational details. [[1](#ref-1), [3](#ref-3), [5](#ref-5)]
 
@@ -407,11 +407,11 @@ A particularly informative design is to begin from complete groups where all chi
 
 **Rolling-origin validation** should mimic the actual temporal information set:
 
-$$
+```math
 \{1,\ldots,t-1\}\to t,
 \qquad
 \{1,\ldots,t\}\to t+1,
-$$
+```
 
 rather than randomly allocating quarters to train and test data. Retrospective smoothers can be evaluated separately using both past and future observations. A random split lets a model train on quarters immediately adjacent to a held-out observation and can also leak information through parent totals or overlapping geographic/industry margins that contain the held-out value.
 
@@ -433,54 +433,54 @@ BLS's documentation on administrative changes and classification breaks provides
 
 For point predictions $e_i=\hat x_i-x_i$, use several complementary metrics:
 
-$$
+```math
 \mathrm{MAE}=\frac1n\sum_i|e_i|,
-$$
+```
 
-$$
+```math
 \mathrm{RMSE}=
 \sqrt{\frac1n\sum_i e_i^2},
-$$
+```
 
-$$
+```math
 \mathrm{Bias}=\frac1n\sum_i e_i,
-$$
+```
 
 and, where true values are safely away from zero,
 
-$$
+```math
 \mathrm{MdAPE}
 =
 \operatorname{median}_i
 \left(
 \frac{|e_i|}{|x_i|}
 \right).
-$$
+```
 
 For heterogeneous QCEW magnitude cells, weighted absolute percentage error,
 
-$$
+```math
 \mathrm{WAPE}
 =
 \frac{\sum_i|\hat x_i-x_i|}
 {\sum_i|x_i|},
-$$
+```
 
 is often more stable than averaging cell-level percentages. MAPE-type measures are pathological at or near zero, so MAE/RMSE and size-stratified results should remain primary for tiny cells.
 
 For groups in which the substantive target is allocation rather than level, report share errors,
 
-$$
+```math
 |\hat p_{jt}-p_{jt}|,
-$$
+```
 
 rank accuracy, top-child accuracy and—for larger groups—rank correlations.
 
 For deterministic bounds, evaluate:
 
-$$
+```math
 \text{width}_i=U_i-L_i,
-$$
+```
 
 the proportion of pseudo-hidden true values inside $[L_i,U_i]$, and how often the range collapses to a point. With correctly constructed public constraints, a known test value should lie in the feasible set; failures usually signal coding, rounding or vintage errors rather than “bad prediction.”
 
@@ -488,10 +488,10 @@ For probabilistic methods, report empirical coverage of nominal 50%, 80%, 90% an
 
 For every method, report **constraint violations** separately:
 
-$$
+```math
 \|A\hat x-y\|_1,\qquad
 \|A\hat x-y\|_\infty,
-$$
+```
 
 plus counts of negative or noninteger outputs where those are impermissible. A reconciled estimator should make violations zero, apart from explicitly modeled rounding/revision slack.
 
@@ -499,12 +499,12 @@ A strong benchmark suite should include at least: equal split of the suppressed 
 
 **Structural-break sensitivity should be an explicit experiment, not an anecdotal caveat.** Refit the model after excluding pre-break history, using robust/heavy-tailed innovations, allowing change points, altering peer definitions, and varying the half-life of historical weights. Report how much the suppressed-cell estimate moves. A useful diagnostic is
 
-$$
+```math
 S_j=
 \max_m \hat x_j^{(m)}
 -
 \min_m \hat x_j^{(m)},
-$$
+```
 
 where $m$ ranges over plausible model specifications. If $S_j$ is of the same order as the feasible interval, the point estimate is assumption-dominated.
 
@@ -512,12 +512,12 @@ Similarly, conduct a **vintage sensitivity analysis**. Estimate using only the v
 
 Finally, validation must include a privacy-oriented metric: **how much does the estimator reduce uncertainty in protected cells?** For example,
 
-$$
+```math
 R_j=
 1-
 \frac{\text{model interval width}}
 {\text{deterministic feasible width}}.
-$$
+```
 
 A high $R_j$ can be statistically impressive but ethically concerning. In establishment statistics, utility and confidentiality are two objectives, not one. The recent QCEW formal-privacy research is especially useful here because it frames confidentiality itself through intended uncertainty around establishment values rather than only through whether a literal cell is printed. [[13](#ref-13)]
 
@@ -527,25 +527,25 @@ Consider a **completely synthetic** employment table. Nothing in this example re
 
 For quarter $t$, let
 
-$$
+```math
 P_t=1000,
-$$
+```
 
 and suppose the eight published children sum to
 
-$$
+```math
 \sum_{i=1}^{8}x_{it}=840.
-$$
+```
 
 There are two suppressed children $a_t$ and $b_t$. The one indisputable public accounting fact is therefore
 
-$$
+```math
 a_t+b_t
 =
 P_t-\sum_{i=1}^{8}x_{it}
 =
 160.
-$$
+```
 
 Everything below is labeled either **fact/identified restriction** or **modeling assumption**.
 
@@ -553,47 +553,47 @@ Everything below is labeled either **fact/identified restriction** or **modeling
 |---|---|---|
 | Parent and eight published children | $a+b=160$ | **Public accounting fact** |
 | Nonnegativity | $0\le a\le160,\ b=160-a$ | **Definitional/factual for counts** |
-| Integrality | $a\in\{0,\ldots,160\}$, 161 feasible pairs | **Definitional for employment counts** |
+| Integrality | $`a\in\{0,\ldots,160\}`$, 161 feasible pairs | **Definitional for employment counts** |
 | Publicly justified bounds $50\le a\le110,\ 60\le b\le125$ | $50\le a\le100,\ 60\le b\le110$ | **Identifying only if bounds themselves are valid public facts** |
 | Observed $a_{t-1}=72,\ a_{t+1}=84$ | No further restriction by themselves | **Historical facts, but no cross-time identity** |
 | Assume changes no larger than 10 | $74\le a_t\le82,\ 78\le b_t\le86$ | **Model/regularity assumption** |
 | Historical same-quarter shares imply $\hat p_a=0.481$ | $\hat a=76.96,\hat b=83.04$, perhaps reconciled to $77,83$ | **Model-based point estimate** |
 | Additional margin $a+c=210$, with public bound $128\le c\le134$ | $76\le a\le82,\ 78\le b\le84$ | **Additional public partial identification** |
 | Assume $a_t$ grows 8% from $a_{t-1}$ | $\hat a=77.76$, approximately 78; $\hat b\approx82$ | **Growth-model assumption** |
-| Dynamic predictive distributions + all bounds | Posterior over feasible $a\in\{76,\ldots,82\}$ | **Probabilistic model, not identification** |
+| Dynamic predictive distributions + all bounds | Posterior over feasible $`a\in\{76,\ldots,82\}`$ | **Probabilistic model, not identification** |
 
 The first three steps illustrate a subtle point. Before nonnegativity, $a+b=160$ defines an unbounded line. Nonnegativity turns it into a line segment. Integrality changes that segment into 161 discrete points but **does not narrow its extreme values**. Integrality becomes much more important once several overlapping equations and narrow intervals exist.
 
 Now suppose a researcher has legitimately established the synthetic bounds
 
-$$
+```math
 50\le a\le110,\qquad
 60\le b\le125.
-$$
+```
 
 Because $b=160-a$,
 
-$$
+```math
 60\le160-a\le125
-$$
+```
 
 implies
 
-$$
+```math
 35\le a\le100.
-$$
+```
 
 Intersecting with $50\le a\le110$ gives
 
-$$
+```math
 50\le a\le100,
-$$
+```
 
 and therefore
 
-$$
+```math
 60\le b\le110.
-$$
+```
 
 That interval narrowing is **identified**; it does not require a statistical model.
 
@@ -601,118 +601,118 @@ Next suppose $a_{t-1}=72$ and $a_{t+1}=84$ are known. They do **not** logically 
 
 Only after adding the explicit assumption
 
-$$
+```math
 |a_t-a_{t-1}|\le10
-$$
+```
 
 and
 
-$$
+```math
 |a_{t+1}-a_t|\le10
-$$
+```
 
 do we obtain
 
-$$
+```math
 62\le a_t\le82
-$$
+```
 
 from the first inequality and
 
-$$
+```math
 74\le a_t\le94
-$$
+```
 
 from the second. Their intersection is
 
-$$
+```math
 74\le a_t\le82.
-$$
+```
 
 This interval is therefore **assumption-dependent**, unlike the parent-child subtotal.
 
 For historical-share allocation, suppose same-quarter historical shares of the jointly suppressed subtotal for child $a$ were 47%, 49% and 48%, with exponentially recency-weighted weights 0.2, 0.3 and 0.5. Then
 
-$$
+```math
 \hat p_a
 =
 0.2(0.47)+0.3(0.49)+0.5(0.48)
 =
 0.481,
-$$
+```
 
 so
 
-$$
+```math
 \hat a=160(0.481)=76.96,
 \qquad
 \hat b=83.04.
-$$
+```
 
 For integer employment counts a chosen reconciliation rule might report the analytic imputation $77,83$. **Nothing about the public accounting identity proves that split.** It is a historical-share estimate.
 
 Now add an overlapping public margin,
 
-$$
+```math
 a+c=210,
-$$
+```
 
 where another valid constraint establishes
 
-$$
+```math
 128\le c\le134.
-$$
+```
 
 Then
 
-$$
+```math
 76\le a\le82.
-$$
+```
 
 Combined with $a+b=160$,
 
-$$
+```math
 78\le b\le84.
-$$
+```
 
 That is a new identified range resulting from public cross-table information. If $c$ had instead been publicly known **exactly** as 132, then
 
-$$
+```math
 a=210-132=78,\qquad b=82.
-$$
+```
 
 At that point the two cells would be **exactly algebraically recoverable**. No historical-share model, growth model or Bayesian model would be needed to identify them. From a disclosure-control perspective, that exact recoverability would be the important result; publishing the reconstructed suppressed value might defeat the purpose of the suppression. This is precisely why federal guidance calls for audits of the whole system of marginal equations rather than checking one displayed table in isolation. [[3](#ref-3)]
 
 A growth-rate assumption gives a different kind of information. If a peer model predicts 8% growth from 72,
 
-$$
+```math
 \hat a_t=72(1.08)=77.76.
-$$
+```
 
 Subject to integrality and $a+b=160$, one might use $a=78,b=82$. Again, the identified set remains $[76,82]$ for $a$; the growth assumption merely ranks points within it.
 
 Finally consider a synthetic probabilistic state-space prediction before observing the subtotal:
 
-$$
+```math
 a_t\sim N(79,4^2),\qquad
 b_t\sim N(81,4^2),
-$$
+```
 
 independently for illustration. Conditioning on the exact accounting equation $a+b=160$ gives, in the unconstrained Gaussian case,
 
-$$
+```math
 a_t\mid(a_t+b_t=160)
 \sim
 N(79,8),
-$$
+```
 
 with standard deviation approximately $2.83$.
 
 Now also impose the deterministic public interval and integrality,
 
-$$
+```math
 a_t\in\{76,77,\ldots,82\}.
-$$
+```
 
 The resulting discrete posterior probabilities are approximately:
 

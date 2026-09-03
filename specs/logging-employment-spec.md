@@ -101,23 +101,23 @@ The ETL MUST retain source-specific NAICS vintages and MUST verify the 113310 ma
 
 Let:
 
-\[
+```math
 E_{s,t,k_y}
-\]
+```
 
-be the number of **private-sector QCEW-covered wage-and-salary jobs** in state \(s\), month \(t\), at establishments classified into establishment-size class \(k\) using the March reference for year \(y\).
+be the number of **private-sector QCEW-covered wage-and-salary jobs** in state $s$, month $t$, at establishments classified into establishment-size class $k$ using the March reference for year $y$.
 
 The required identities are:
 
-\[
+```math
 E_{s,t} = \sum_k E_{s,t,k_y},
-\]
+```
 
 and, when a definitionally compatible national QCEW control exists,
 
-\[
+```math
 N_t = \sum_{s\in\mathcal S} E_{s,t}.
-\]
+```
 
 The primary geography is the 50 states plus the District of Columbia. Territories or residual areas MAY be included, but only through an explicit geography-universe configuration. A national control MUST NOT be imposed on a state universe that omits components included in the national total.
 
@@ -806,25 +806,25 @@ No bridge may be introduced solely to force totals to agree.
 
 The engine MUST first determine what public information logically implies. Predictive history, spatial borrowing, harvest proxies, temporal smoothness, and prior distributions are not allowed in this stage.
 
-For suppressed target vector \(x\), construct:
+For suppressed target vector $x$, construct:
 
-\[
+```math
 B x = c
-\]
+```
 
 or interval/equality constraints equivalent to:
 
-\[
+```math
 \mathcal F = \{x: Bx=c,\;Gx\le h,\;x\ge0,\;x_{\mathcal I}\in\mathbb Z\}.
-\]
+```
 
-For each target cell \(j\), compute:
+For each target cell $j$, compute:
 
-\[
+```math
 L_j=\min_{x\in\mathcal F}x_j,
 \qquad
 U_j=\max_{x\in\mathcal F}x_j.
-\]
+```
 
 These are sharp feasible bounds under the encoded public information. They are not confidence or credible intervals.
 
@@ -872,11 +872,11 @@ The engine MUST NOT encode as hard constraints:
 
 ### 9.4 Rounding
 
-If a source value \(\tilde y\) is rounded to grid width \(r\), encode:
+If a source value $\tilde y$ is rounded to grid width $r$, encode:
 
-\[
+```math
 \tilde y-r/2 \le a^\top x < \tilde y+r/2,
-\]
+```
 
 with endpoint behavior taken from source documentation. Rounding rules MUST be field-specific.
 
@@ -943,21 +943,21 @@ All baselines MUST use the same source universe, training windows, pseudo-suppre
 
 ### 10.1 Equal residual allocation
 
-For missing set \(M_t\):
+For missing set $M_t$:
 
-\[
+```math
 \hat E_{s,t}=R_t/|M_t|.
-\]
+```
 
 Use only as a sanity check.
 
 ### 10.2 Establishment-count proportional allocation
 
-\[
+```math
 \hat E_{s,t}
 =
 R_t\frac{A_{s,t}}{\sum_{j\in M_t}A_{j,t}}.
-\]
+```
 
 This is the minimum fallback when only QCEW establishment exposure is available.
 
@@ -1013,17 +1013,17 @@ The two components MUST have separable interfaces so the state-total model can b
 
 ### 11.1 State-total exposure and response
 
-Let \(A_{s,q(t)}\) be QCEW quarterly establishment exposure applied to month \(t\) in quarter \(q\). Treating it as constant within quarter is a baseline modeling assumption, not a public identity.
+Let $A_{s,q(t)}$ be QCEW quarterly establishment exposure applied to month $t$ in quarter $q$. Treating it as constant within quarter is a baseline modeling assumption, not a public identity.
 
 For disclosed observations, define:
 
-\[
+```math
 y_{s,t}=\log\left(\frac{E_{s,t}}{A_{s,q(t)}+\epsilon_A}\right).
-\]
+```
 
 The latent mean is:
 
-\[
+```math
 \mu_{s,t}
 =
 \alpha
@@ -1034,27 +1034,27 @@ The latent mean is:
 +X_{s,t}^\top\beta
 +\lambda_H H_{s,y(t)}
 +\eta_{s,t}.
-\]
+```
 
 Required components:
 
-- state random effect \(u_s\);
-- region random effect \(v_{r(s)}\);
-- sum-to-zero month effects \(\gamma_m\);
-- year effects \(\delta_y\);
-- standardized, nonredundant predictors \(X\);
-- annual latent harvest activity \(H\); and
-- robust state dynamics \(\eta\).
+- state random effect $u_s$;
+- region random effect $v_{r(s)}$;
+- sum-to-zero month effects $\gamma_m$;
+- year effects $\delta_y$;
+- standardized, nonredundant predictors $X$;
+- annual latent harvest activity $H$; and
+- robust state dynamics $\eta$.
 
 ### 11.2 Robust temporal dynamics
 
 The default process is:
 
-\[
+```math
 \eta_{s,t}=\rho_s\eta_{s,t-1}+\epsilon_{s,t},
 \qquad
 \epsilon_{s,t}\sim t_\nu(0,\sigma_{\eta,s}).
-\]
+```
 
 A Student-t AR(1) is preferred to an unrestricted random walk because Logging intensity is persistent but plausibly mean-reverting, while heavy tails allow openings, closures, disasters, recodes, relocations, and market shocks.
 
@@ -1066,50 +1066,50 @@ Published QCEW values are exact observations of the selected QCEW-equivalent tar
 
 A practical response model is:
 
-\[
+```math
 y_{s,t}\mid\mu_{s,t}
 \sim t_{\nu_y}(\mu_{s,t},\sigma_y),
-\]
+```
 
 for disclosed training cells. Suppressed cells have no pseudo-observation.
 
 ### 11.4 Latent harvest factor
 
-For annual or survey-cycle latent activity \(H_{s,y}\):
+For annual or survey-cycle latent activity $H_{s,y}$:
 
-\[
+```math
 \log TPO_{s,y}
 =
 a_T+b_T H_{s,y}+\epsilon^T_{s,y},
-\]
+```
 
-\[
+```math
 \log FIA_{s,y}
 =
 a_F+b_F H_{s,y}+\epsilon^F_{s,y}.
-\]
+```
 
-FIA variance should incorporate its published sampling error. TPO and FIA are not conditionally independent employment regressors after conditioning on \(H\).
+FIA variance should incorporate its published sampling error. TPO and FIA are not conditionally independent employment regressors after conditioning on $H$.
 
-The MVP MAY hold \(H_{s,y}\) constant within year. Monthly weather, permits, fire, or road-access indicators MAY explain deviations only after incremental out-of-sample value is established.
+The MVP MAY hold $H_{s,y}$ constant within year. Monthly weather, permits, fire, or road-access indicators MAY explain deviations only after incremental out-of-sample value is established.
 
 ### 11.5 Raw predictions for suppressed state totals
 
 For each suppressed state-month, construct a positive score:
 
-\[
+```math
 q_{s,t}
 =
 (A_{s,q(t)}+\epsilon_A)\exp(\mu_{s,t}).
-\]
+```
 
 These scores are not final estimates. They are inputs to the exact reconciliation layer in Section 12.
 
 ### 11.6 Annual establishment-size composition
 
-For March-reference class \(k\), define annual latent log-ratios:
+For March-reference class $k$, define annual latent log-ratios:
 
-\[
+```math
 z_{s,y,k}
 =
 \mu_k
@@ -1117,27 +1117,27 @@ z_{s,y,k}
 +b_{r(s),k}
 +c_{y,k}
 +f_{s,y,k},
-\]
+```
 
 and:
 
-\[
+```math
 p_{s,y,k}
 =
 \frac{\exp(z_{s,y,k})}{\sum_j\exp(z_{s,y,j})}.
-\]
+```
 
-The core product treats \(p_{s,y,k}\) as an annual March-reference structure. It does not invent large monthly movements in class membership.
+The core product treats $p_{s,y,k}$ as an annual March-reference structure. It does not invent large monthly movements in class membership.
 
 ### 11.7 CBP size measurement model
 
 Where CBP state-year size counts are published, use a multinomial or overdispersed multinomial observation model:
 
-\[
+```math
 \mathbf C^{CBP}_{s,y}
 \sim
 \text{Multinomial}\left(C^{CBP}_{s,y,+},\mathbf p_{s,y}\right),
-\]
+```
 
 or a Dirichlet-multinomial variant when overdispersion is supported.
 
@@ -1154,31 +1154,31 @@ It MUST NOT describe those margins as contemporaneous monthly class membership b
 
 ### 11.9 Employment per establishment by class
 
-For March and each closed size class \([L_k,U_k]\):
+For March and each closed size class $[L_k,U_k]$:
 
-\[
+```math
 m_{s,Mar(y),k}
 =
 L_k+(U_k-L_k)\operatorname{logit}^{-1}(\psi_{s,y,k}).
-\]
+```
 
 For the open-ended class:
 
-\[
+```math
 m_{s,Mar(y),K}=L_K+\exp(\psi_{s,y,K}),
-\]
+```
 
 with a strongly regularized hierarchical tail prior calibrated to national QCEW size data. This is a probabilistic tail, not a public upper bound.
 
 For non-March months, model employment intensity relative to March:
 
-\[
+```math
 \log m_{s,t,k}
 =
 \log m_{s,Mar(y),k}
 +\theta_{m(t),k}
 +\zeta_{s,t,k},
-\]
+```
 
 with strong shrinkage toward no class-specific seasonal deviation in the initial implementation. Hard class endpoints do not apply outside the valid reference period under the March-reference concept.
 
@@ -1186,27 +1186,27 @@ with strong shrinkage toward no class-specific seasonal deviation in the initial
 
 Construct raw class employment weights:
 
-\[
+```math
 g_{s,t,k}=p_{s,y(t),k}m_{s,t,k},
-\]
+```
 
 normalize them:
 
-\[
+```math
 \pi_{s,t,k}=\frac{g_{s,t,k}}{\sum_j g_{s,t,j}},
-\]
+```
 
 then allocate the reconciled state total:
 
-\[
+```math
 E_{s,t,k}=E_{s,t}\pi_{s,t,k}.
-\]
+```
 
 This guarantees:
 
-\[
+```math
 \sum_k E_{s,t,k}=E_{s,t}
-\]
+```
 
 for every draw before any additional national size reconciliation.
 
@@ -1231,10 +1231,10 @@ for every draw before any additional national size reconciliation.
 
 These are configurable modeling defaults, not facts:
 
-- standardized regression coefficients: \(\beta_j\sim N(0,0.5^2)\);
-- state and region scales: half-normal or half-\(t_3\);
+- standardized regression coefficients: $\beta_j\sim N(0,0.5^2)$;
+- state and region scales: half-normal or half-$`t_3`$;
 - persistence: transformed Beta prior centered near 0.8;
-- Student-t degrees of freedom: fixed near 5 for the first implementation or \(4+\text{Exponential}(0.1)\);
+- Student-t degrees of freedom: fixed near 5 for the first implementation or $4+\text{Exponential}(0.1)$;
 - size-composition deviations: hierarchical normal with strong shrinkage;
 - class-specific monthly effects: strong shrinkage toward zero;
 - top-class tail: regularized using national QCEW size evidence.
@@ -1261,7 +1261,7 @@ Required sensitivity variants include:
 The model interface MUST return joint draws and standard diagnostics. Promotion requires:
 
 - no unresolved divergent transitions or equivalent backend failures;
-- \(\hat R\) at or below 1.01 for monitored parameters, unless a documented exception is approved;
+- $\hat R$ at or below 1.01 for monitored parameters, unless a documented exception is approved;
 - adequate effective sample size for all release-relevant summaries;
 - stable posterior summaries across independent seeds/chains;
 - posterior predictive checks on observed cells; and
@@ -1279,19 +1279,19 @@ The predictive model ranks feasible allocations. The reconciliation layer maps e
 
 ### 12.2 Single national residual fast path
 
-Let \(D_t\) be disclosed states and \(M_t\) states requiring imputation. For a compatible national total \(N_t\):
+Let $D_t$ be disclosed states and $M_t$ states requiring imputation. For a compatible national total $N_t$:
 
-\[
+```math
 R_t=N_t-\sum_{s\in D_t}E^{obs}_{s,t}.
-\]
+```
 
-With positive raw weights \(q_{s,t}\):
+With positive raw weights $q_{s,t}$:
 
-\[
+```math
 E_{s,t}
 =
 R_t\frac{q_{s,t}}{\sum_{j\in M_t}q_{j,t}}.
-\]
+```
 
 This is the required no-bound fast path.
 
@@ -1299,31 +1299,31 @@ This is the required no-bound fast path.
 
 When deterministic lower and upper bounds apply, solve:
 
-\[
+```math
 E_{s,t}=\operatorname{clip}(\lambda q_{s,t},L_{s,t},U_{s,t})
-\]
+```
 
-for \(\lambda\) such that:
+for $\lambda$ such that:
 
-\[
+```math
 \sum_{s\in M_t}E_{s,t}=R_t.
-\]
+```
 
-Because the summed clipped allocation is monotone in \(\lambda\), use robust bisection. The function MUST fail if:
+Because the summed clipped allocation is monotone in $\lambda$, use robust bisection. The function MUST fail if:
 
-\[
+```math
 \sum_s L_{s,t}>R_t
 \quad\text{or}\quad
 \sum_s U_{s,t}<R_t.
-\]
+```
 
 This algorithm is deterministic, fast, and exactly preserves the residual and cell bounds.
 
 ### 12.4 General feasible-polytope projection
 
-When several overlapping margins apply, reconcile each raw draw \(\tilde x^{(m)}\) by solving:
+When several overlapping margins apply, reconcile each raw draw $\tilde x^{(m)}$ by solving:
 
-\[
+```math
 x^{(m)}
 =
 \arg\min_{x\in\mathcal F}
@@ -1331,7 +1331,7 @@ x^{(m)}
 \left[
  x_i\log\frac{x_i}{\tilde x_i^{(m)}}-x_i+\tilde x_i^{(m)}
 \right],
-\]
+```
 
 with a small positive floor for zero raw seeds.
 
@@ -1423,7 +1423,7 @@ When a target cell is held out:
 
 Report:
 
-- feasible width \(U_i-L_i\);
+- feasible width $U_i-L_i$;
 - truth-in-bound rate;
 - exact-recovery rate;
 - infeasible-component rate; and
@@ -1458,11 +1458,11 @@ Report:
 
 For every method and draw set, report:
 
-\[
+```math
 \|Ax-y\|_1,
 \qquad
 \|Ax-y\|_\infty,
-\]
+```
 
 plus negative outputs, integerization violations, row-sum violations, and class-margin violations.
 
@@ -1485,9 +1485,9 @@ Required ablations:
 
 For each release cell, compute a model sensitivity envelope:
 
-\[
+```math
 S_i=\max_m \hat E_i^{(m)}-\min_m \hat E_i^{(m)}.
-\]
+```
 
 ### 13.10 Default promotion gates
 
@@ -1534,13 +1534,13 @@ A suppressed cell MUST be routed to review when any of the following holds:
 
 Compute:
 
-\[
+```math
 R_i
 =
 1-
 \frac{\text{model interval width}_i}
      {\text{deterministic feasible width}_i}.
-\]
+```
 
 A high value may represent predictive success and disclosure risk simultaneously. It is a review indicator, not an accuracy score.
 
