@@ -149,9 +149,13 @@ def _observed_detail_sentence(agglvl_present: list[dict]) -> str:
     rendered = "; ".join(
         f"{detail!r} at codes {', '.join(codes)}" for detail, codes in sorted(by_detail.items())
     )
+    # Neutral lead, prefixed to both returns: it must not name an outcome, because the branch
+    # below decides which outcome there is. "Scope of that agreement" read as a contradiction
+    # on the disagreement branch, and had no antecedent at all when title_evidence_note placed
+    # a "comparison was not reached" clause immediately before it.
     lead = (
-        f"Scope of that agreement, computed from the {len(agglvl_present)} agglvl codes "
-        f"observed on {c.INDUSTRY_CODE} rows before the own_code filter: "
+        f"Scope of the fetched-title comparison, computed from the {len(agglvl_present)} "
+        f"agglvl codes observed on {c.INDUSTRY_CODE} rows before the own_code filter: "
     )
     if len(by_detail) == 1:
         return (
@@ -220,7 +224,8 @@ def _geography_universe_note(
             " DC's complete row-level absence is a genuine states_dc coverage gap: a "
             "private-ownership Logging panel over this window will have no DC series at all, "
             "which a later task should expect rather than mistake for a bug. Because US000 "
-            "includes DC by definition while no DC state row is published, DC's contribution "
+            "includes DC on the hand-authored membership premise recorded above -- not by "
+            "anything derived here -- while no DC state row is published, DC's contribution "
             "to the national total is unobservable at the state level -- a "
             "national-vs-sum-of-states residual distinct from, and additional to, cell-level "
             "suppression."
