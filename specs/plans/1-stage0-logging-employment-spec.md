@@ -625,7 +625,15 @@ approximation."*
     empty this is `[2017]`: D5 mandates both routes, so the bulk route is proved on the
     earliest window year regardless.
   - `bulk_member_names` — mapping year → the ZIP member matched for 113310.
-  - `column_parity` — `{"slice_only": [...], "bulk_only": [...], "identical": bool}`.
+  - `column_parity` — `{"slice_only": [...], "bulk_only": [...], "identical": bool,
+    "slice_header_disagreement": {...}, "bulk_header_disagreement": {...}}`. The first three
+    keys are the interface Tasks 3 and 4 read. **`identical` compares column NAMES only** — it
+    is a set difference over headers, never a cell comparison, so `false` means the two routes
+    name their columns differently, not that their values disagree. The two `*_disagreement`
+    maps are empty when every served window quarter (slice) and every fetched year (bulk) share
+    one header; a non-empty map is a finding about schema drift, recorded rather than
+    normalised away. They are nested inside `column_parity` deliberately: Task 13's exit gate
+    rejects any *top-level* `findings` value that is empty, and these are legitimately `{}`.
 
 **Route notes for the implementer.** Two bulk variants exist and the choice is deliberate:
 `https://data.bls.gov/cew/data/files/{year}/csv/{year}_qtrly_by_industry.zip` (~480 MB) holds
