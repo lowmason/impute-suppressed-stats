@@ -944,7 +944,7 @@ def main() -> None:
     st_agglvl = sorted(set(state_like["agglvl_code"].to_list()))
 
     # QCEW publishes no per-row NAICS-vintage column, so this is a documentation fact, not a
-    # derivable one. It ships as "unconfirmed" and is filled by hand in Step 2 below.
+    # derivable one. It ships as "unconfirmed" and is filled by hand in Step 3 below.
     naics_vintage = {str(y): "unconfirmed" for y in c.WINDOW_YEARS}
 
     aligned = (
@@ -1014,7 +1014,21 @@ state agglvl=[<code>]; aligned=<bool>`. If the script raises on the `'Private'` 
 the ownership titles file changed shape — inspect
 `data/raw/audit/qcew_codes/titles/own_code.csv` and fix the parse, never the constant.
 
-- [ ] **Step 3: Verify the summary's shape**
+- [ ] **Step 3: Fill `naics_vintage_by_year` by hand**
+
+The script ships every window year as `"unconfirmed"`: QCEW publishes no per-row NAICS-vintage
+column, so the vintage is a documentation fact, not a derivable one. Confirm the switch year
+against the fetched `data/raw/audit/qcew_codes/titles/industry_titles.csv` and the QCEW
+classification documentation, then edit the `naics_vintage` dict comprehension in
+`qcew_codes.py` into an explicit per-year literal carrying what you confirmed, and re-run
+Step 2 so the summary is regenerated from it.
+
+Where the check is inconclusive for a year, leave that year `"unconfirmed"` **and say why** in
+the sibling `notes` field. An `"unconfirmed"` with a stated reason is a legitimate finding; an
+`"unconfirmed"` left behind by a skipped step is not, and Step 4 fails it. Stage 1 owns the
+mechanical crosswalk test and needs to know which years are actually established.
+
+- [ ] **Step 4: Verify the summary's shape**
 
 Run:
 
@@ -1029,6 +1043,11 @@ assert f["titles_available"]["disclosure_code"] is None
 a = f["alignment_srcqcew007"]
 assert len(a["national_agglvl"]) == 1 and len(a["state_agglvl"]) == 1, \
     "more than one aggregation level per geography level — resolve before Stage 2"
+v = a["naics_vintage_by_year"]
+assert set(v) == {str(y) for y in range(2017, 2025)}, "every window year must appear"
+assert not (any(x == "unconfirmed" for x in v.values()) and not a["notes"].strip()), \
+    "an unconfirmed NAICS vintage needs a notes entry saying why it was inconclusive"
+print("NAICS vintage by year:", v)
 print("SRC-QCEW-007 aligned:", a["aligned"])
 PY
 ```
@@ -1038,7 +1057,7 @@ Expected: four non-empty code lists print with titles (`disclosure_code` titles 
 one aggregation level appears at either geography level, that is a **finding that must be
 written up**, not a bug — record the codes and set `aligned: false` with an explanatory `notes`.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add scripts/audit/qcew_codes.py
