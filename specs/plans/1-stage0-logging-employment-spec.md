@@ -627,9 +627,13 @@ approximation."*
   - `bulk_member_names` — mapping year → the ZIP member matched for 113310.
   - `column_parity` — `{"slice_only": [...], "bulk_only": [...], "identical": bool,
     "slice_header_disagreement": {...}, "bulk_header_disagreement": {...}}`. The first three
-    keys are the interface Tasks 3 and 4 read. **`identical` compares column NAMES only** — it
-    is a set difference over headers, never a cell comparison, so `false` means the two routes
-    name their columns differently, not that their values disagree. The two `*_disagreement`
+    keys are the interface Tasks 3 and 4 read. **All three compare column NAMES only, never
+    cell values** — so `identical: false` means the routes describe their columns differently,
+    not that their data disagrees. Note the two comparisons differ in kind: `slice_only` and
+    `bulk_only` are set differences, while `identical` is `slice_header == bulk_header`, an
+    *ordered* list equality. Empty `slice_only` and `bulk_only` therefore do NOT imply
+    `identical` — the same names in a different order, or a duplicated name, leave both set
+    differences empty while `identical` is `false`. The two `*_disagreement`
     maps are empty when every served window quarter (slice) and every fetched year (bulk) share
     one header; a non-empty map is a finding about schema drift, recorded rather than
     normalised away. They are nested inside `column_parity` deliberately: Task 13's exit gate
@@ -844,6 +848,9 @@ assert isinstance(f["earliest_year_served"], int), "no slice year served — inv
 assert f["slice_probe"], "probe table is empty"
 assert f["bulk_years_fetched"], "D5 requires the bulk route to be exercised"
 assert f["bulk_member_names"], "no 113310 member found in any bulk ZIP"
+for k in ("slice_only", "bulk_only", "identical",
+          "slice_header_disagreement", "bulk_header_disagreement"):
+    assert k in f["column_parity"], f"column_parity is missing {k!r}"
 print("years served:", f["earliest_year_served"], "-", f["latest_year_served"])
 print("bulk required:", f["bulk_years_required"], "fetched:", f["bulk_years_fetched"])
 print("column parity identical:", f["column_parity"]["identical"])
