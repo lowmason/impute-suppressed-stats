@@ -35,6 +35,8 @@ def test_observed_detail_sentence_reports_one_clause_when_titles_agree():
     )
     # The count and the geography names are read out of the input, never typed.
     assert "computed from the 2 agglvl codes" in sentence
+    # The lead is shared by both branches, so it must name no outcome of its own.
+    assert sentence.startswith("Scope of the fetched-title comparison,")
     # Frame described, not its ownership cardinality: "both ownerships" was a typed claim that a
     # third own_code would have falsified.
     assert "before the own_code filter" in sentence
@@ -53,6 +55,10 @@ def test_observed_detail_sentence_reports_disagreement_when_clauses_differ():
     assert "all of them strip to one detail clause" not in sentence
     assert "'NAICS 6-digit -- by ownership sector' at codes 18 (National)" in sentence
     assert "'NAICS 4-digit -- by ownership sector' at codes 14 (National)" in sentence
+    # The lead is shared with the agreement branch, so it must not presuppose one: the first
+    # draft read "Scope of that agreement ... so the clause is not uniform", contradicting
+    # itself, and asserting only on the body let that through.
+    assert "agreement" not in sentence
 
 
 def test_observed_detail_sentence_handles_a_code_with_no_fetched_title():
