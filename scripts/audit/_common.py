@@ -20,12 +20,16 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import httpx
 
-AUDIT_ROOT = Path("data/raw/audit")
-FINDINGS_DIR = Path("specs/findings")
+# Resolved from this file's location, not the process CWD — a script launched from inside
+# scripts/audit/ (e.g. `cd scripts/audit && uv run foo.py`) must still write to the repo-root
+# data/ and specs/ trees, not a nested copy relative to wherever it happened to be launched.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+AUDIT_ROOT = _REPO_ROOT / "data" / "raw" / "audit"
+FINDINGS_DIR = _REPO_ROOT / "specs" / "findings"
 WINDOW_START = "2017-01"
 WINDOW_END = "2024-12"
 WINDOW_YEARS = tuple(range(2017, 2025))
@@ -82,6 +86,43 @@ def build_client() -> httpx.Client:
     )
 
 
+_T = TypeVar("_T")
+
+
+def _is_retryable_status(exc: httpx.HTTPStatusError) -> bool:
+    """5xx is transient by definition. 429 (rate limiting) is the one 4xx that is too — the
+    archetypal case is a multi-year boundary walk against data.bls.gov. Every other 4xx is a
+    finding, not a transient, and fails fast."""
+    code = exc.response.status_code
+    return code >= 500 or code == 429
+
+
+def _retry(
+    attempt: Callable[[], _T],
+    *,
+    retries: int,
+    backoff: float,
+    sleep: Callable[[float], None],
+) -> _T:
+    """Shared backoff policy: call `attempt`, retrying a retryable status or a transport error
+    with exponential backoff. Used by both `request` and `download_extract` so the streamed
+    route cannot drift from the non-streamed one."""
+    last: Exception | None = None
+    for attempt_no in range(retries + 1):
+        try:
+            return attempt()
+        except httpx.HTTPStatusError as exc:
+            if not _is_retryable_status(exc):
+                raise
+            last = exc
+        except httpx.TransportError as exc:
+            last = exc
+        if attempt_no < retries:
+            sleep(backoff * 2**attempt_no)
+    assert last is not None
+    raise last
+
+
 def request(
     client: httpx.Client,
     url: str,
@@ -91,27 +132,24 @@ def request(
     backoff: float = 2.0,
     sleep: Callable[[float], None] = time.sleep,
 ) -> httpx.Response:
-    """4xx fails fast (it is a finding, not a transient); 5xx and transport errors back off."""
-    last: Exception | None = None
-    for attempt in range(retries + 1):
-        try:
-            resp = client.get(url, params=params)
-            resp.raise_for_status()
-            return resp
-        except httpx.HTTPStatusError as exc:
-            if exc.response.status_code < 500:
-                raise
-            last = exc
-        except httpx.TransportError as exc:
-            last = exc
-        if attempt < retries:
-            sleep(backoff * 2**attempt)
-    assert last is not None
-    raise last
+    """4xx fails fast (a finding, not a transient) — except 429, which is rate limiting and
+    backs off like 5xx and transport errors."""
+
+    def _attempt() -> httpx.Response:
+        resp = client.get(url, params=params)
+        resp.raise_for_status()
+        return resp
+
+    return _retry(_attempt, retries=retries, backoff=backoff, sleep=sleep)
 
 
 def probe(client: httpx.Client, url: str, *, params: dict | None = None) -> tuple[int, int]:
-    """Status and byte count without raising — a 404 is the answer the boundary walk wants."""
+    """Status and byte count without raising — a 404 is the answer the boundary walk wants.
+
+    Returns the sentinel `(0, 0)` on a transport error (DNS failure, connection refused,
+    timeout: no response at all). Callers must distinguish that from a real status: `(0, 0)`
+    means "network failed"; any other first element means "endpoint answered", including a
+    4xx/5xx, which is itself the finding the boundary walk is looking for."""
     try:
         resp = client.get(url, params=params)
     except httpx.TransportError:
@@ -139,6 +177,17 @@ def assert_no_secrets(text: str) -> None:
             raise RuntimeError(f"{name} value leaked into an audit artifact")
 
 
+def assert_no_secrets_bytes(data: bytes) -> None:
+    """Byte-wise sibling of `assert_no_secrets` for response bodies already held in memory.
+    Checks the encoded key values against the raw bytes rather than decoding the buffer, so
+    non-UTF-8 extract content — expected, since these are third-party source bytes — can never
+    raise here."""
+    for name in SECRET_ENV_VARS:
+        value = os.environ.get(name, "").strip()
+        if value and value.encode("utf-8") in data:
+            raise RuntimeError(f"{name} value leaked into an audit artifact")
+
+
 def _write_sidecar(dest: Path, digest: str) -> None:
     (dest.parent / f"{dest.name}.sha256").write_text(f"{digest}  {dest.name}\n")
 
@@ -148,6 +197,7 @@ def record_extract(
 ) -> ExtractRecord:
     """Write `content` verbatim under data/raw/audit/<source>/<rel_path> with a hash sidecar."""
     assert_no_secrets(url)
+    assert_no_secrets_bytes(content)
     dest = AUDIT_ROOT / source / rel_path
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(content)
@@ -159,22 +209,48 @@ def record_extract(
 def download_extract(
     client: httpx.Client, source: str, url: str, rel_path: str
 ) -> ExtractRecord:
-    """Stream a large file to disk, hashing as it goes (QCEW bulk ZIPs are 300-500 MB)."""
+    """Stream a large file to disk, hashing as it goes (QCEW bulk ZIPs are 300-500 MB).
+
+    Streams to a `.part` sibling of `dest` and `os.replace`s it into place only once the
+    transfer is complete and the sidecar is written — a failed or interrupted stream must
+    never leave a truncated file at `dest`; its absence, not a missing sidecar, is the
+    signal that the download did not finish. Retries with the same backoff policy as
+    `request` (5xx and transport errors back off, 429 counts as transient, any other 4xx
+    fails fast). The retry/backoff values match `request`'s defaults but are not parameters
+    here: this signature is frozen for the twelve tasks that call it.
+
+    Note: each retry restarts the transfer from byte zero — no `Range`/resume support. That is
+    a deliberate scope boundary, not an oversight; partial-content resume is a bigger change
+    than the truncated-artifact bug this fixes.
+    """
     assert_no_secrets(url)
     dest = AUDIT_ROOT / source / rel_path
     dest.parent.mkdir(parents=True, exist_ok=True)
-    digest = hashlib.sha256()
-    size = 0
-    with client.stream("GET", url) as resp:
-        resp.raise_for_status()
-        status = resp.status_code
-        with dest.open("wb") as fh:
-            for chunk in resp.iter_bytes(1 << 20):
-                fh.write(chunk)
-                digest.update(chunk)
-                size += len(chunk)
-    hexdigest = digest.hexdigest()
+    tmp_dest = dest.parent / f"{dest.name}.part"
+
+    def _attempt() -> tuple[int, str, int]:
+        digest = hashlib.sha256()
+        size = 0
+        with client.stream("GET", url) as resp:
+            resp.raise_for_status()
+            status = resp.status_code
+            with tmp_dest.open("wb") as fh:
+                for chunk in resp.iter_bytes(1 << 20):
+                    fh.write(chunk)
+                    digest.update(chunk)
+                    size += len(chunk)
+        return status, digest.hexdigest(), size
+
+    try:
+        # Matches request()'s defaults (retries=3, backoff=2.0); time.sleep is looked up here,
+        # at call time, rather than bound as a default parameter, so tests can monkeypatch it.
+        status, hexdigest, size = _retry(_attempt, retries=3, backoff=2.0, sleep=time.sleep)
+    except Exception:
+        tmp_dest.unlink(missing_ok=True)
+        raise
+
     _write_sidecar(dest, hexdigest)
+    os.replace(tmp_dest, dest)
     return ExtractRecord(source, url, str(dest), hexdigest, size, _utcnow(), status)
 
 
@@ -183,15 +259,26 @@ def validate_summary(payload: dict[str, Any]) -> None:
     for key in ("source", "generated_utc", "coverage_span", "access", "extracts", "findings"):
         if key not in payload:
             raise ValueError(f"summary missing top-level key {key!r}")
-    missing = [k for k in COVERAGE_KEYS if k not in payload["coverage_span"]]
+    coverage_span = payload["coverage_span"]
+    if not isinstance(coverage_span, dict):
+        raise ValueError("coverage_span must be a dict")
+    missing = [k for k in COVERAGE_KEYS if k not in coverage_span]
     if missing:
         raise ValueError(f"coverage_span missing {missing}")
+    if coverage_span["window_start"] != WINDOW_START:
+        raise ValueError(f"coverage_span.window_start must be {WINDOW_START!r}")
+    if coverage_span["window_end"] != WINDOW_END:
+        raise ValueError(f"coverage_span.window_end must be {WINDOW_END!r}")
     access = payload["access"]
+    if not isinstance(access, dict):
+        raise ValueError("access must be a dict")
     if access.get("status") not in ACCESS_STATUSES:
         raise ValueError(f"access.status must be one of {ACCESS_STATUSES}")
     if access["status"] != "verified" and not access.get("reason"):
         raise ValueError("access.reason is required unless access.status == 'verified'")
     for rec in payload["extracts"]:
+        if not isinstance(rec, dict):
+            raise ValueError("extract record must be a dict")
         for key in ("source", "url", "path", "sha256", "bytes", "retrieved_utc", "http_status"):
             if key not in rec:
                 raise ValueError(f"extract record missing {key!r}")
