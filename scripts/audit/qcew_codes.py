@@ -66,7 +66,7 @@ def _agglvl_detail(title: str) -> str:
 
 def _same_industry_detail(
     nat_agglvl: list[str], st_agglvl: list[str], agglvl_titles: dict[str, str]
-) -> bool:
+) -> tuple[bool, str]:
     """SRC-QCEW-007: true only when exactly one agglvl_code is observed at each geography
     level, and their titles agree once the leading geography clause is stripped -- i.e. both
     describe the same NAICS-digit detail and the same by-ownership breakout. This defends
@@ -78,14 +78,41 @@ def _same_industry_detail(
     different geographies, their agreement is close to expected. Whether that is so on any
     given run is computed rather than asserted here: a docstring cannot re-check itself, so
     `_observed_detail_sentence` groups the codes actually observed by their stripped clause and
-    records what it finds in `notes`."""
+    records what it finds in `notes`.
+
+    Returns the verdict *and* a rendered clause naming the branch that produced it, because
+    `notes` has to state the outcome rather than assert one. The three False branches are not
+    interchangeable -- a cardinality failure, a title missing from the fetched file, and two
+    clauses that genuinely differ are three different findings, and only the third one is about
+    the clauses at all -- so a single "identical/different" rendering would let a run report a
+    clause comparison it never performed."""
     if len(nat_agglvl) != 1 or len(st_agglvl) != 1:
-        return False
+        return False, (
+            "the clause comparison was not reached: it needs exactly one agglvl code at each "
+            f"geography level, but {len(nat_agglvl)} national and {len(st_agglvl)} state codes "
+            "are observed"
+        )
     nat_title = agglvl_titles.get(nat_agglvl[0])
     st_title = agglvl_titles.get(st_agglvl[0])
-    if nat_title is None or st_title is None:
-        return False
-    return _agglvl_detail(nat_title) == _agglvl_detail(st_title)
+    missing = [
+        code for code, title in ((nat_agglvl[0], nat_title), (st_agglvl[0], st_title))
+        if title is None
+    ]
+    if missing:
+        return False, (
+            "the clause comparison was not reached: the fetched agglvl titles file carries no "
+            f"entry for code(s) {', '.join(missing)}"
+        )
+    nat_detail, st_detail = _agglvl_detail(nat_title), _agglvl_detail(st_title)
+    if nat_detail != st_detail:
+        return False, (
+            "stripping the leading geography clause leaves different detail clauses at the two "
+            f"levels -- national {nat_detail!r} vs state {st_detail!r}"
+        )
+    return True, (
+        "stripping the leading geography clause leaves an identical detail clause at both "
+        f"levels ({nat_detail!r})"
+    )
 
 
 def _agglvl_geography(title: str) -> str:
@@ -107,10 +134,12 @@ def _observed_detail_sentence(agglvl_present: list[dict]) -> str:
     their fetched titles strip to, and states what that grouping shows -- so a future run whose
     codes strip to more than one clause says so instead of repeating today's agreement. Its
     input is `codes_present['agglvl_code']`, which is built on the `c.INDUSTRY_CODE`-filtered
-    frame across *both* ownership codes; the sentence therefore describes every `c.INDUSTRY_CODE`
-    row, not the private-only subset that nat/state_like carry, and says so. The geography names
-    are read out of the fetched titles too, never typed, so they cannot claim a level the data
-    does not contain."""
+    frame *before* the own_code filter is applied; the sentence therefore describes every
+    `c.INDUSTRY_CODE` row at whatever ownership codes are present, not the private-only subset
+    that nat/state_like carry, and names that frame rather than counting its ownership codes --
+    a cardinality would be one more typed claim free to go stale. The geography names are read
+    out of the fetched titles too, never typed, so they cannot claim a level the data does not
+    contain."""
     by_detail: dict[str, list[str]] = {}
     for row in agglvl_present:
         title = row["title"]
@@ -122,7 +151,7 @@ def _observed_detail_sentence(agglvl_present: list[dict]) -> str:
     )
     lead = (
         f"Scope of that agreement, computed from the {len(agglvl_present)} agglvl codes "
-        f"observed on {c.INDUSTRY_CODE} rows (both ownerships): "
+        f"observed on {c.INDUSTRY_CODE} rows before the own_code filter: "
     )
     if len(by_detail) == 1:
         return (
@@ -176,12 +205,15 @@ def _geography_universe_note(
 ) -> str:
     """SRC-QCEW-007 / Sec 3.2 geography-universe evidence for `notes`. Every figure and every
     area code in it is computed from state_like, nat_agglvl and the fetched area_fips titles.
-    The one exception is a single BLS documentation quotation, which this script does not fetch
-    and so cannot re-derive; the sentence carrying it says that about itself inline rather than
-    leaving the reader to assume it was checked this run. States only what the data and BLS's
-    published documentation show -- never which way SRC-QCEW-006's branch should resolve. That
-    verdict is Task 5's, reached test-first against toy panels before the real scan (plan
-    Architecture), not reverse-engineered from this finding."""
+    The exception is the closing US000-composition argument: a BLS documentation quotation, an
+    unquoted premise about which jurisdictions the national universe contains, and the
+    conclusion that needs both. This script fetches none of the three and cannot re-derive any
+    of them, so all three say so about themselves inline -- the premise and the conclusion as
+    explicitly as the quotation, because the conclusion is the part a later task consumes and a
+    marking scoped to the quotation alone would leave it looking checked. States only what the
+    data and BLS's published documentation show -- never which way SRC-QCEW-006's branch should
+    resolve. That verdict is Task 5's, reached test-first against toy panels before the real
+    scan (plan Architecture), not reverse-engineered from this finding."""
     dc_gap = ""
     if not dc_detail["present"]:
         dc_gap = (
@@ -200,13 +232,21 @@ def _geography_universe_note(
         f"predicate above yields exactly {len(state_like_areas)} distinct area codes. "
         f"{_extraneous_area_sentence(extraneous_detail)} "
         f"{_dc_sentence(dc_detail, n_quarters)} "
-        "Hand-transcribed from a BLS page this script does not fetch, so it carries no extract "
-        "hash and cannot be re-derived on a later run: BLS's QCEW Aggregation Level Codes page "
-        "(https://www.bls.gov/cew/classifications/aggregation/agg-level-titles.htm, footnote b) "
-        "states 'National level aggregations exclude Puerto Rico and Virgin Islands from the "
-        f"totals'. Read against the national agglvl code computed above ({nat_label}), that "
-        "makes the US000 national total definitionally 50 states + DC, the same composition as "
-        f"geography_universe: 'states_dc'.{dc_gap}"
+        "The US000 composition argument that follows is hand-authored in all three of its "
+        "parts -- quotation, premise and conclusion. This script fetches none of them, so none "
+        "carries an extract hash and no later run re-checks any of them. Quoted, hand-"
+        "transcribed from BLS's QCEW Aggregation Level Codes page "
+        "(https://www.bls.gov/cew/classifications/aggregation/agg-level-titles.htm, footnote "
+        "b): 'National level aggregations exclude Puerto Rico and Virgin Islands from the "
+        "totals'. Unquoted premise, supplied by hand and carried by neither that quotation nor "
+        "any other source cited here: the jurisdictions QCEW aggregates into a national total "
+        "are "
+        "the 50 states, DC, Puerto Rico and the Virgin Islands, and nothing else. Conclusion, "
+        f"which needs both: read against the national agglvl code computed above ({nat_label}), "
+        "the US000 national total is definitionally 50 states + DC, the same composition as "
+        "geography_universe: 'states_dc'. The exclusion quotation on its own says only what is "
+        "removed, never what remains -- the membership premise is what closes the argument, and "
+        f"it is the part a later task should re-source before relying on this.{dc_gap}"
     )
 
 
@@ -293,9 +333,12 @@ def main() -> None:
     }
 
     # QCEW publishes no per-row NAICS-vintage column, so this is a documentation fact, not a
-    # derivable one. Confirmed by hand (Step 3) against two BLS classification pages, not
-    # against per-row data -- see the sourcing recorded in `notes` below. Both switch years
-    # (2017, 2022) fall on QCEW reference-year boundaries, so the mapping is a clean per-year
+    # derivable one. Hand-authored (Step 3) from two BLS classification pages plus one unquoted
+    # premise -- that QCEW does not retabulate prior reference years onto a new NAICS vintage --
+    # which is what turns each page's "introduced with Q1 <year> data" into a claim about what
+    # vintage the *earlier* years still carry. Quotations and premise alike are labelled
+    # hand-authored in `notes` below; no later run re-checks either. Granting the premise, both
+    # switch years fall on QCEW reference-year boundaries, so the mapping is a clean per-year
     # split with no year left "unconfirmed".
     naics_vintage = {
         "2017": "NAICS 2017", "2018": "NAICS 2017", "2019": "NAICS 2017",
@@ -319,7 +362,9 @@ def main() -> None:
     # opposite case and is genuinely computed: it reads the *fetched* agglvl titles, which no
     # filter in this script constrains, so it can and would return False on a titles-metadata
     # inconsistency between the two geography levels.
-    same_detail = _same_industry_detail(nat_agglvl, st_agglvl, maps["agglvl_code"])
+    same_detail, detail_outcome = _same_industry_detail(
+        nat_agglvl, st_agglvl, maps["agglvl_code"]
+    )
 
     aligned = (
         len(nat_agglvl) == 1
@@ -362,8 +407,8 @@ def main() -> None:
     title_evidence_note = (
         "Title evidence for 'same industry detail': fetched agglvl_code titles give national "
         f"{_agglvl_title_list(nat_agglvl, maps['agglvl_code'])} and state "
-        f"{_agglvl_title_list(st_agglvl, maps['agglvl_code'])}; stripping the leading "
-        "geography clause leaves an identical detail clause at both levels (see "
+        f"{_agglvl_title_list(st_agglvl, maps['agglvl_code'])}; {detail_outcome}, so the "
+        f"same-industry-detail conjunct of aligned above is {same_detail} (see "
         "_same_industry_detail). This defends against a titles-metadata inconsistency between "
         "the two geography levels' fetched titles; it is not independent discriminating power, "
         "because digit-depth and ownership breakout are already pinned upstream by the queried "
@@ -375,23 +420,40 @@ def main() -> None:
         "way that settles only the current vintage, never the per-year history: QCEW publishes "
         "no per-row NAICS-vintage column and the titles file reflects only the current "
         "vintage, so naics_vintage_by_year above cannot be computed from anything this script "
-        "fetches. Hand-authored, and unavoidably so: the two quotations below were transcribed "
-        "by hand from BLS classification pages this script does not fetch, so they carry no "
-        "extract hash and no later run re-checks them. "
+        "fetches. Everything from here to the end of this note is hand-authored -- the "
+        "quotations, the premises drawn on alongside them, and the conclusions that need both, "
+        "equally. This script fetches none of it, so none of it carries an extract hash and no "
+        "later run re-checks any of it. Quoted verbatim from two BLS classification pages: "
         "https://www.bls.gov/cew/classifications/industry/naics-2017.htm: 'This revision will "
         "be introduced by the Bureau of Labor Statistics (BLS) with the release of first "
         "quarter 2017 Quarterly Census of Employment and Wages (QCEW) data.' "
         "https://www.bls.gov/cew/classifications/industry/naics-2022.htm: 'This revision will "
         "be introduced by the Bureau of Labor Statistics (BLS) on September 7, 2022, with the "
         "full data release of first quarter 2022 Quarterly Census of Employment and Wages "
-        "(QCEW) data.' QCEW does not retabulate prior reference years onto a new vintage, so "
-        "the switch is a hard boundary at reference year 2022, giving the clean per-year split "
-        "recorded above. Also hand-checked out-of-band, against the Census NAICS 2012-to-2017 "
-        "and 2017-to-2022 concordance files rather than against anything fetched here: both "
-        f"carry {c.INDUSTRY_CODE} 'Logging' with a link_type of 1:1 and an unchanged title, so "
-        "the industry's definition is stable across the whole window despite the vintage label "
-        "change. (Those files record a link_type, not a change indicator; neither carries a "
-        "change_indicator column at all, so 'no change flag set' would misdescribe them.)"
+        "(QCEW) data.' Unquoted premise, and the load-bearing one: QCEW does not retabulate "
+        "prior reference years onto a new NAICS vintage. The two quotations establish only the "
+        "quarter at which each vintage is introduced; without that premise they say nothing "
+        "about what vintage 2017-2021 data carry today, and the entire per-year "
+        "naics_vintage_by_year mapping rests on it. It is supplied by hand, is carried by "
+        "neither quotation and by no other source cited in this note, and is the single claim "
+        "here a later task should re-source first. Granting it, the switch is a hard boundary "
+        "at reference year 2022, giving the clean per-year split recorded above. Also "
+        "hand-checked out-of-band, against the local classification-codes skill's derived "
+        "NAICS data rather than against anything fetched here, and reported with its two "
+        f"caveats. That skill's concordance CSVs pair {c.INDUSTRY_CODE} to itself with the "
+        "title 'Logging' unchanged in both the 2012-to-2017 and the 2017-to-2022 direction, "
+        f"and its NAICS structure CSVs carry an empty change_indicator on {c.INDUSTRY_CODE} in "
+        "all three of the 2012, 2017 and 2022 vintages, which that skill documents as meaning "
+        "unchanged from the prior vintage at that level. Caveat one: the concordance link_type "
+        "of 1:1 is not a Census column. Census ships four columns -- source code, source title, "
+        "target code, target title -- flags partial flows by cell formatting the parse "
+        "discards, and publishes no allocation weights; link_type is derived by that skill "
+        "from code multiplicities after deduplication. Caveat two, following from the first: "
+        f"1:1 establishes only that {c.INDUSTRY_CODE} neither split nor merged in the "
+        "six-digit code pairing, which is not a statement about the industry's definitional "
+        "content. It is the unchanged title and the empty structure-file change_indicator, not "
+        "the 1:1, that carry the continuity claim, and even they are titles and markers rather "
+        "than a comparison of the two vintages' definitional text."
     )
 
     notes = " ".join([
