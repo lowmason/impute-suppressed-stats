@@ -242,6 +242,73 @@ def test_write_summary_refuses_to_leak_a_non_ascii_key(tmp_path, monkeypatch):
         )
 
 
+def test_write_summary_and_load_summary_round_trip_non_ascii_as_utf8(tmp_path, monkeypatch):
+    """H1: G7's `ensure_ascii=False` means `text` can now carry literal non-ASCII characters,
+    so the encoding `write_summary`'s `dest.write_text(text)` and `load_summary`'s
+    `.read_text()` pick up now matters (previously both were safe by accident: the default
+    `ensure_ascii=True` guaranteed pure-ASCII output, which every locale encoding agrees on).
+    JSON is UTF-8 by definition (RFC 8259). This pins the round-trip contract directly rather
+    than by forcing a non-UTF-8 locale, which does not reproduce on every platform (macOS PEP
+    538 C-locale coercion makes even `LC_ALL=C` yield utf-8 here) and would pass vacuously."""
+    monkeypatch.setattr(_common, "AUDIT_ROOT", tmp_path)
+    note = "café 日本語"  # Latin-1-representable + characters with no cp1252/latin-1 form at all
+    dest = _common.write_summary(
+        "cbp",
+        coverage_span={"published_start": "", "published_end": "", "window_start": "2017-01",
+                       "window_end": "2024-12", "covered": "", "uncovered": ""},
+        access={"route": "r", "status": "verified", "reason": None},
+        extracts=[], findings={"note": note},
+    )
+    raw = dest.read_bytes()
+    decoded = raw.decode("utf-8")  # raises UnicodeDecodeError if the bytes aren't valid UTF-8
+    assert note in decoded
+    assert note.encode("utf-8") in raw  # literal UTF-8 bytes on disk, not a \uXXXX escape
+    assert rb"\u" not in raw  # no field in this payload legitimately escapes
+    loaded = _common.load_summary("cbp")
+    assert loaded["findings"]["note"] == note
+
+
+def test_write_summary_and_load_summary_pass_explicit_utf8_encoding(tmp_path, monkeypatch):
+    """H1: `dest.write_text(text)` (write_summary) and `.read_text()` (load_summary) must pass
+    `encoding="utf-8"` explicitly rather than falling back to `locale.getpreferredencoding`.
+    This machine's locale always resolves to UTF-8 (macOS PEP 538 coercion), so no behavioral
+    round-trip test can fail here even without the fix -- this spies on the keyword arguments
+    `Path.write_text`/`Path.read_text` actually receive instead, the same technique
+    `test_assert_no_secrets_delegates_to_the_bytes_implementation` (G2) uses for the analogous
+    problem: two calls that behave identically on this machine's input while one silently
+    drifts from the documented contract."""
+    monkeypatch.setattr(_common, "AUDIT_ROOT", tmp_path)
+    orig_write_text = Path.write_text
+    orig_read_text = Path.read_text
+    write_calls: list[dict] = []
+    read_calls: list[dict] = []
+
+    def spy_write_text(self, data, *args, **kwargs):
+        write_calls.append(kwargs)
+        return orig_write_text(self, data, *args, **kwargs)
+
+    def spy_read_text(self, *args, **kwargs):
+        read_calls.append(kwargs)
+        return orig_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", spy_write_text)
+    monkeypatch.setattr(Path, "read_text", spy_read_text)
+
+    _common.write_summary(
+        "cbp",
+        coverage_span={"published_start": "", "published_end": "", "window_start": "2017-01",
+                       "window_end": "2024-12", "covered": "", "uncovered": ""},
+        access={"route": "r", "status": "verified", "reason": None},
+        extracts=[], findings={},
+    )
+    _common.load_summary("cbp")
+
+    assert len(write_calls) == 1
+    assert write_calls[0].get("encoding") == "utf-8"
+    assert len(read_calls) == 1
+    assert read_calls[0].get("encoding") == "utf-8"
+
+
 def test_request_fails_fast_on_4xx_and_retries_5xx():
     calls = {"n": 0}
 

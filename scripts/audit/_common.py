@@ -325,9 +325,13 @@ def write_summary(
     assert_no_secrets(text)
     dest = AUDIT_ROOT / source / "summary.json"
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(text)
+    # encoding="utf-8": JSON is UTF-8 by definition (RFC 8259). Without this, both write and
+    # read fall back to locale.getpreferredencoding(False) — harmless while ensure_ascii=True
+    # guaranteed pure-ASCII output, but G7 (above) turned that off, so text can now carry
+    # literal non-ASCII characters and the locale's encoding choice matters.
+    dest.write_text(text, encoding="utf-8")
     return dest
 
 
 def load_summary(source: str) -> dict[str, Any]:
-    return json.loads((AUDIT_ROOT / source / "summary.json").read_text())
+    return json.loads((AUDIT_ROOT / source / "summary.json").read_text(encoding="utf-8"))
