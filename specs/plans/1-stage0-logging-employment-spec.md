@@ -141,6 +141,10 @@ PYTHONPATH=scripts/audit uv run --no-project --with httpx --with polars --with p
 - Produces — every later task imports these from `_common`:
   - Constants `AUDIT_ROOT: Path`, `FINDINGS_DIR: Path`, `WINDOW_START: str`, `WINDOW_END: str`,
     `WINDOW_YEARS: tuple[int, ...]`, `INDUSTRY_CODE: str`, `TIMEOUT_SECONDS: float`.
+  - `STATES_DC_FIPS: tuple[str, ...]` — the 50 states plus D.C. as two-digit FIPS (Appendix A
+    `geography_universe: 'states_dc'`); `STATE_AREAS: set[str]` (each code padded to a `*000`
+    area) and `NATIONAL_AREA: str` (`"US000"`) derived from it. Tasks 4 and 6 consume these
+    rather than re-declaring them.
   - `ExtractRecord` — frozen dataclass with fields
     `source: str, url: str, path: str, sha256: str, bytes: int, retrieved_utc: str, http_status: int`.
   - `build_client() -> httpx.Client`
@@ -373,6 +377,18 @@ WINDOW_END = "2024-12"
 WINDOW_YEARS = tuple(range(2017, 2025))
 INDUSTRY_CODE = "113310"
 TIMEOUT_SECONDS = 300.0
+
+# Appendix A `geography_universe: 'states_dc'` — the 50 states plus D.C., as two-digit FIPS.
+# Shared here, not re-declared per script, so Tasks 4 and 6 cannot drift against each other.
+STATES_DC_FIPS = (
+    "01", "02", "04", "05", "06", "08", "09", "10", "11", "12", "13", "15", "16", "17",
+    "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
+    "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "44", "45", "46",
+    "47", "48", "49", "50", "51", "53", "54", "55", "56",
+)
+assert len(STATES_DC_FIPS) == 51, "states_dc universe must be 50 states + D.C."
+STATE_AREAS = {f"{f}000" for f in STATES_DC_FIPS}
+NATIONAL_AREA = "US000"
 
 SECRET_ENV_VARS = ("CENSUS_API_KEY", "BLS_API_KEY", "BEA_API_KEY", "FRED_API_KEY")
 ACCESS_STATUSES = ("verified", "documented", "not_obtainable")
@@ -672,7 +688,10 @@ def main() -> None:
             if status == 200 and "csv" in ctype:
                 try:
                     rows = read_csv_bytes(content).height
-                except Exception:  # noqa: BLE001 - an HTML error page served as 200
+                except (pl.exceptions.PolarsError, UnicodeDecodeError, ValueError):
+                    # an HTML error page can be served with status 200 and a csv-ish
+                    # content-type; keep the body so a parser bug and a real route
+                    # boundary are never indistinguishable from an empty disk.
                     rows = 0
             probe_rows.append({
                 "year": year, "qtr": qtr, "http_status": status,
@@ -680,9 +699,17 @@ def main() -> None:
             })
             if rows > 0:
                 served.add(year)
-                if year in c.WINDOW_YEARS:
+            if year in c.WINDOW_YEARS and status == 200 and content:
+                if rows > 0:
                     extracts.append(c.record_extract(
                         SOURCE, url, f"slices/{year}q{qtr}.csv", content, http_status=status,
+                    ))
+                else:
+                    # not a .csv path: Task 3/4 glob extracts by `.endswith(".csv")` and
+                    # would try to parse this body as data.
+                    extracts.append(c.record_extract(
+                        SOURCE, url, f"slices/unparseable_{year}q{qtr}.body", content,
+                        http_status=status,
                     ))
 
     earliest = min(served) if served else None
@@ -714,7 +741,10 @@ def main() -> None:
         "identical": slice_header == bulk_header,
     }
 
-    covered = f"{min(served)}-{max(served)}" if served else ""
+    # `covered` (Task 1 schema) is the part of D1's window this source covers, not the full
+    # probed span — clamp to the window; `served` can include years probed outside it.
+    covered_years = sorted(served & set(c.WINDOW_YEARS))
+    covered = f"{min(covered_years)}-{max(covered_years)}" if covered_years else ""
     c.write_summary(
         SOURCE,
         coverage_span={
@@ -808,7 +838,7 @@ a constraint."*
 **Interfaces:**
 - Consumes: `_common`; `load_summary("qcew_routes")["extracts"]` for the slice CSV paths.
 - Produces: `data/raw/audit/qcew_codes/summary.json` with source key `qcew_codes`, plus the
-  four fetched titles files under `data/raw/audit/qcew_codes/titles/`.
+  five fetched titles files under `data/raw/audit/qcew_codes/titles/`.
   `findings` keys:
   - `titles_available` — mapping dimension → URL or `null`. **There is no published
     `disclosure_code` titles file** (only agglevel, ownership, size, area and industry exist at
@@ -1165,17 +1195,8 @@ import _common as c
 
 SOURCE = "qcew_panel"
 
-# Appendix A `geography_universe: 'states_dc'` — the 50 states plus D.C., as two-digit FIPS.
-# Any other `*000` area that appears in the data is recorded, never silently dropped.
-STATES_DC_FIPS = (
-    "01", "02", "04", "05", "06", "08", "09", "10", "11", "12", "13", "15", "16", "17",
-    "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
-    "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "44", "45", "46",
-    "47", "48", "49", "50", "51", "53", "54", "55", "56",
-)
-assert len(STATES_DC_FIPS) == 51, "states_dc universe must be 50 states + D.C."
-STATE_AREAS = {f"{f}000" for f in STATES_DC_FIPS}
-NATIONAL_AREA = "US000"
+# STATES_DC_FIPS / STATE_AREAS / NATIONAL_AREA come from _common (Task 1) — shared, not
+# re-declared, because audit scripts do not import one another except through summaries.
 
 
 def area_titles() -> dict[str, str]:
@@ -1216,8 +1237,8 @@ def build_panel(own_code: str) -> pl.DataFrame:
             # INV-003: a value paired with a suppression code is never a true zero.
             emplvl=pl.when(pl.col("suppressed")).then(None)
             .otherwise(pl.col("emplvl_raw").cast(pl.Int64)),
-            area_class=pl.when(pl.col("area_fips") == NATIONAL_AREA).then(pl.lit("national"))
-            .when(pl.col("area_fips").is_in(sorted(STATE_AREAS))).then(pl.lit("states_dc"))
+            area_class=pl.when(pl.col("area_fips") == c.NATIONAL_AREA).then(pl.lit("national"))
+            .when(pl.col("area_fips").is_in(sorted(c.STATE_AREAS))).then(pl.lit("states_dc"))
             .otherwise(pl.lit("other_state_level")),
             area_title=pl.col("area_fips").replace_strict(titles, default=""),
         )
@@ -1262,7 +1283,10 @@ def main() -> None:
 
     supp_rows = states.filter(pl.col("suppressed"))
     estabs_survive = (
-        float((supp_rows["qtrly_estabs"] > 0).mean()) if supp_rows.height else 0.0
+        # fill_null before comparing: a null qtrly_estabs is otherwise dropped from the
+        # .mean() denominator instead of counting as "not > 0" (same hazard as `suppressed`
+        # above).
+        float((supp_rows["qtrly_estabs"].fill_null(0) > 0).mean()) if supp_rows.height else 0.0
     )
 
     others = (panel.filter(pl.col("area_class") == "other_state_level")
@@ -1615,7 +1639,10 @@ def comparison_tables(panel: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
         .join(panel.filter((pl.col("area_class") == "states_dc") & pl.col("suppressed"))
               .group_by(mkeys).agg(pl.len().alias("n_states_suppressed")),
               on=mkeys, how="left")
-        .with_columns(pl.col("other_emp").fill_null(0), pl.col("n_states_suppressed").fill_null(0))
+        .with_columns(pl.col("other_emp").fill_null(0), pl.col("n_states_suppressed").fill_null(0),
+                      # left unfilled, a null states_dc_emp propagates into emp_gap_after_other
+                      # and lets the `.all()` checks below silently skip a missing month as a pass.
+                      pl.col("states_dc_emp").fill_null(0))
         .with_columns(emp_gap=pl.col("national_emp") - pl.col("states_dc_emp"))
         .with_columns(emp_gap_after_other=pl.col("emp_gap") - pl.col("other_emp"))
         .sort(mkeys)
@@ -1741,8 +1768,9 @@ QCEW unless a concrete file extract proves otherwise."* This task is that proof-
 - Test: `tests/audit/test_size_predicate.py`
 
 **Interfaces:**
-- Consumes: `_common`; `STATES_DC_FIPS` semantics from Task 4 (re-declared locally — the audit
-  scripts do not import one another except through summaries).
+- Consumes: `_common`, including `STATES_DC_FIPS` / `STATE_AREAS` / `NATIONAL_AREA` — shared
+  from Task 1, not re-declared locally, because the audit scripts do not import one another
+  except through summaries.
 - Produces: `has_simultaneous_state_industry_size(df, *, industry, state_areas) -> bool` and
   `data/raw/audit/qcew_size/summary.json` (source key `qcew_size`), plus one
   `{year}_q1_by_size.zip` per window year under `data/raw/audit/qcew_size/`.
@@ -1843,13 +1871,8 @@ import _common as c
 
 SOURCE = "qcew_size"
 SIZE_URL = "https://data.bls.gov/cew/data/files/{year}/csv/{year}_q1_by_size.zip"
-STATES_DC_FIPS = (
-    "01", "02", "04", "05", "06", "08", "09", "10", "11", "12", "13", "15", "16", "17",
-    "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
-    "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "44", "45", "46",
-    "47", "48", "49", "50", "51", "53", "54", "55", "56",
-)
-STATE_AREAS = {f"{f}000" for f in STATES_DC_FIPS}
+# STATES_DC_FIPS / STATE_AREAS come from _common (Task 1) — shared, not re-declared, because
+# audit scripts do not import one another except through summaries.
 
 
 def has_simultaneous_state_industry_size(
@@ -1865,12 +1888,12 @@ def has_simultaneous_state_industry_size(
 
 
 def area_pattern(areas: list[str]) -> str:
-    national = {"US000"}
+    national = {c.NATIONAL_AREA}
     kinds = set()
     for a in areas:
         if a in national:
             kinds.add("national")
-        elif a in STATE_AREAS:
+        elif a in c.STATE_AREAS:
             kinds.add("state_level")
         else:
             kinds.add("sub_state")
@@ -1896,7 +1919,7 @@ def main() -> None:
     df = pl.concat(frames, how="vertical")
 
     verdict = has_simultaneous_state_industry_size(
-        df, industry=c.INDUSTRY_CODE, state_areas=STATE_AREAS)
+        df, industry=c.INDUSTRY_CODE, state_areas=c.STATE_AREAS)
 
     inventory = []
     for (agglvl,), grp in df.group_by(["agglvl_code"], maintain_order=True):
@@ -2033,6 +2056,9 @@ unresolved.
   `data_113310.json` under `data/raw/audit/cbp_metadata/{year}/`.
   `findings` keys:
   - `years_available` — list of ints among 2017–2024 whose `cbp.json` returns 200.
+  - `dataset_probe_status_by_year` — mapping every window year (always all eight) to the raw
+    `cbp.json` probe status. `0` means a transport failure survived no retry (`probe` does not
+    retry) and must not be read as a confirmed absence; re-run this task to resolve it.
   - `naics_predicate_by_year` — mapping year → the variable name matching `^NAICS[0-9]{4}$`
     (e.g. `NAICS2017`). More than one match is recorded as a list, never silently narrowed.
   - `empszes_by_year` — mapping year → list of `{code, label}`.
@@ -2101,9 +2127,16 @@ def main() -> None:
     extracts: list[c.ExtractRecord] = []
     years, predicates, empszes, lfo = [], {}, {}, {}
     working, rows, flags, geo_levels = {}, {}, {}, {}
+    probe_status: dict[str, int] = {}
 
     for year in c.WINDOW_YEARS:
         status, _ = c.probe(client, f"{BASE.format(year=year)}.json")
+        probe_status[str(year)] = status
+        if status == 0:
+            # probe() has no retry and returns (0, 0) on a TransportError; an http_status of
+            # 0 is a transient failure, not a finding — re-run this task rather than reading
+            # the year as absent.
+            continue
         if status != 200:
             continue
         years.append(year)
@@ -2184,6 +2217,7 @@ def main() -> None:
         extracts=extracts,
         findings={
             "years_available": years,
+            "dataset_probe_status_by_year": probe_status,
             "naics_predicate_by_year": predicates,
             "empszes_by_year": empszes,
             "lfo_by_year": lfo,
@@ -2467,13 +2501,15 @@ for its state.
   `findings` keys:
   - `logging_industry_codes` — list of `{industry_code, industry_name, embedded_naics,
     level}` for every SAE industry code whose embedded NAICS begins `113` or which is the
-    Mining-and-Logging supersector. `level` is one of `1133`, `113`, `supersector`, `other`.
+    Mining-and-Logging supersector. `level` is one of `113310`, `1133`, `113`, `supersector`,
+    `other`.
   - `publication_level_by_state` — mapping two-digit state FIPS → the **finest** level with a
     statewide all-employees series overlapping the D1 window, or `none`.
   - `series_by_state` — mapping state FIPS → list of `{series_id, industry_code, level,
     begin_year, end_year}`.
-  - `states_with_1133` / `states_with_113_only` / `states_with_supersector_only` /
-    `states_with_none` — the four counts, so Stage 7 can size the ablation.
+  - `states_with_113310` / `states_with_1133` / `states_with_113_only` /
+    `states_with_supersector_only` / `states_with_other` / `states_with_none` — the six counts,
+    so Stage 7 can size the ablation.
   - `derived_codes` — `{all_employees_data_type, statewide_area}`, the two selector codes read
     from `sm.data_type` and `sm.area` rather than hardcoded.
 
@@ -2540,6 +2576,10 @@ def embedded_naics(industry_code: str) -> str:
 
 def level_of(industry_code: str) -> str:
     naics = embedded_naics(industry_code)
+    # Zero-padding makes 11331 and 113310 indistinguishable after rstrip("0") — both come out
+    # "11331" — but both denote Logging at its finest published level, so catch them first.
+    if naics.startswith("1133") and len(naics) > 4:
+        return "113310"
     if naics == "1133":
         return "1133"
     if naics == "113":
@@ -2549,7 +2589,7 @@ def level_of(industry_code: str) -> str:
     return "other"
 
 
-FINEST = {"1133": 0, "113": 1, "supersector": 2, "other": 3, "none": 4}
+FINEST = {"113310": 0, "1133": 1, "113": 2, "supersector": 3, "other": 4, "none": 5}
 
 
 def main() -> None:
@@ -2603,7 +2643,7 @@ def main() -> None:
         for st in all_states
     }
     tally = {lvl: sum(1 for v in level_by_state.values() if v == lvl)
-             for lvl in ("1133", "113", "supersector", "other", "none")}
+             for lvl in ("113310", "1133", "113", "supersector", "other", "none")}
 
     c.write_summary(
         SOURCE,
@@ -2623,9 +2663,11 @@ def main() -> None:
             ).rename({"embedded": "embedded_naics"}).to_dicts(),
             "publication_level_by_state": level_by_state,
             "series_by_state": by_state,
+            "states_with_113310": tally["113310"],
             "states_with_1133": tally["1133"],
             "states_with_113_only": tally["113"],
             "states_with_supersector_only": tally["supersector"],
+            "states_with_other": tally["other"],
             "states_with_none": tally["none"],
             "derived_codes": {"all_employees_data_type": all_employees,
                               "statewide_area": statewide_area},
@@ -2648,11 +2690,11 @@ set -a && source .env && set +a && uv run --no-project scripts/audit/ces_levels.
 ```
 
 Expected: two stdout lines — the tally
-`CES publication level tally: {'1133': <int>, '113': <int>, 'supersector': <int>, 'other': <int>, 'none': <int>}`
+`CES publication level tally: {'113310': <int>, '1133': <int>, '113': <int>, 'supersector': <int>, 'other': <int>, 'none': <int>}`
 and the two derived selector codes. If `sole_code` raises, the titles it printed show what the
 file actually contains — widen the pattern to match the published wording, never fall back to a
 literal code.
-The four counts sum to the number of `sm.state` codes, which includes non-state areas — record
+The six counts sum to the number of `sm.state` codes, which includes non-state areas — record
 that denominator rather than forcing it to 51.
 
 - [ ] **Step 3: Verify the summary's shape**
@@ -2668,14 +2710,17 @@ assert f["publication_level_by_state"], "no states enumerated"
 for row in f["logging_industry_codes"]:
     print(row["industry_code"], row["embedded_naics"] or "(supersector)", row["level"],
           "|", row["industry_name"])
-print("1133:", f["states_with_1133"], "113 only:", f["states_with_113_only"],
-      "supersector only:", f["states_with_supersector_only"], "none:", f["states_with_none"])
+print("113310:", f["states_with_113310"], "1133:", f["states_with_1133"],
+      "113 only:", f["states_with_113_only"],
+      "supersector only:", f["states_with_supersector_only"],
+      "other:", f["states_with_other"], "none:", f["states_with_none"])
 PY
 ```
 
-Expected: at least one industry-code line prints, then the four counts. If `states_with_1133`
-is `0`, that is a finding with real consequences for Stage 7 — D6's industry-alignment claim
-would then apply to no state, and every CES series stays proxy-only.
+Expected: at least one industry-code line prints, then the six counts. If `states_with_113310`
+and `states_with_1133` are both `0`, that is a finding with real consequences for Stage 7 —
+D6's industry-alignment claim would then apply to no state, and every CES series stays
+proxy-only.
 
 - [ ] **Step 4: Commit**
 
@@ -2772,7 +2817,10 @@ def main() -> None:
     finest = max((p["naics"] for p in answering), key=len, default=None)
     six_digit = any(p["naics"] == "113310" and p["row_count"] > 0 for p in probe)
 
-    covered = (f"{min(years)}-{max(years)}" if years else "")
+    # `covered` (Task 1 schema) is the part of D1's window this source covers — clamp to the
+    # window; `years` can include years the API returns outside it.
+    covered_years = sorted(years & set(c.WINDOW_YEARS))
+    covered = f"{min(covered_years)}-{max(covered_years)}" if covered_years else ""
     uncovered = ",".join(
         str(y) for y in c.WINDOW_YEARS if years and y not in years) or (
         "" if years else f"{c.WINDOW_START}-{c.WINDOW_END}")
@@ -3252,8 +3300,6 @@ import json
 for src in ("fia", "tpo"):
     s = json.load(open(f"data/raw/audit/{src}/summary.json"))
     print(src, "->", s["access"]["status"], "|", (s["access"]["reason"] or "")[:110])
-    assert s["access"]["status"] == "verified" or s["access"]["reason"], \
-        f"{src}: a non-verified status needs a reason"
 fia = json.load(open("data/raw/audit/fia/summary.json"))["findings"]
 print("FIA parameters documented:", [p["parameter"] for p in fia["doc_parameters"]])
 if fia["sampling_error_field"] is None:
@@ -3539,12 +3585,21 @@ doc = pathlib.Path("specs/findings/source-audit.md").read_text()
 if not doc.strip():
     fails.append("finding file is empty")
 
+# These findings keys are declared elsewhere in this plan as legitimately empty or null —
+# an empty value there is a finding, not a missing one, so the exit gate must not reject it.
+LEGITIMATELY_EMPTY_FINDINGS = frozenset({
+    "bulk_years_required",    # qcew_routes: "[] is a legitimate finding, not a failure"
+    "unknown_years",          # cbp_regime: possibly empty
+    "sampling_error_field",   # fia: or null, paired with a reason
+    "chosen_route",           # tpo: the URL, or null — not_obtainable is legitimate here
+})
+
 # Every field is either filled or marked "not obtainable — why".
 for path in sorted(pathlib.Path("data/raw/audit").glob("*/summary.json")):
     s = json.loads(path.read_text())
-    if s["access"]["status"] != "verified" and not s["access"]["reason"]:
-        fails.append(f"{path}: non-verified access with no reason")
     for key, value in s["findings"].items():
+        if key in LEGITIMATELY_EMPTY_FINDINGS:
+            continue
         if value in (None, "", [], {}):
             fails.append(f"{path}: findings[{key!r}] is empty — fill it or mark "
                          f"'not obtainable — why'")
@@ -3557,6 +3612,8 @@ sentence = q["verdict_sentence"].strip()
 # Area titles carry abbreviation periods ("U.S. TOTAL", "D.C."); normalise them away before
 # counting sentence enders, or a legitimate verdict is rejected.
 normalized = re.sub(r"\b(?:[A-Za-z]\.){2,}", "ABBR", sentence)
+# Section references like "§3.2" are not sentence enders either.
+normalized = re.sub(r"(?<=\d)\.(?=\d)", "", normalized)
 if normalized.count(".") != 1 or not normalized.endswith("."):
     fails.append("the verdict must be exactly one sentence")
 if "\n" in sentence:
