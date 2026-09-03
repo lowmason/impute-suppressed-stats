@@ -180,8 +180,11 @@ def assert_no_secrets_bytes(data: bytes) -> None:
     """Sole implementation of the secret-value comparison. Checks each secret env value's
     UTF-8-encoded bytes against the raw bytes rather than decoding the buffer, so non-UTF-8
     extract content — expected, since these are third-party source bytes — can never raise
-    here. `assert_no_secrets` (the text-taking, frozen-signature entry point) delegates here so
-    a hardening change made on one side can never be forgotten on the other."""
+    here for a direct byte caller (e.g. `record_extract`'s `content`). `assert_no_secrets` (the
+    text-taking, frozen-signature entry point) delegates here too, after first encoding its
+    `str` input; that encode step is what `assert_no_secrets`'s own docstring covers, not this
+    one. One comparison implementation either way, so a hardening change made here is never
+    forgotten on the other path."""
     for name in SECRET_ENV_VARS:
         value = os.environ.get(name, "").strip()
         if value and value.encode("utf-8") in data:
