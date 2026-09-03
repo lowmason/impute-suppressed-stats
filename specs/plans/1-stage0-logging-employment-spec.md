@@ -725,7 +725,7 @@ def main() -> None:
     to_fetch = required or [c.WINDOW_YEARS[0]]
 
     members: dict[str, str] = {}
-    bulk_header: list[str] = []
+    bulk_headers: dict[int, list[str]] = {}
     for year in to_fetch:
         url = BULK_URL.format(year=year)
         rec = c.download_extract(client, SOURCE, url, f"bulk/{year}_qtrly_by_industry.zip")
@@ -734,18 +734,44 @@ def main() -> None:
             matches = [n for n in zf.namelist() if c.INDUSTRY_CODE in n]
             if not matches:
                 raise RuntimeError(f"no 113310 member in {rec.path}; inspect namelist()")
+            if len(matches) > 1:
+                raise RuntimeError(f"ambiguous 113310 member in {rec.path}: {matches}")
             members[str(year)] = matches[0]
-            bulk_header = read_csv_bytes(zf.read(matches[0])).columns
+            bulk_headers[year] = read_csv_bytes(zf.read(matches[0])).columns
+
+    # `to_fetch` has more than one year on the normal D5 path (bulk_years_required
+    # non-empty) — not just the single-year fallback this run took. Reassigning one
+    # `bulk_header` per iteration would silently keep only the last year's columns; verify
+    # every fetched year agrees before reducing to one. A disagreement is a bulk-side
+    # schema-drift finding, not a bug, so it is recorded rather than picked around.
+    distinct_bulk_headers = {tuple(h) for h in bulk_headers.values()}
+    bulk_header = bulk_headers[to_fetch[0]]
 
     slice_paths = [e.path for e in extracts if e.path.endswith(".csv")]
-    slice_header = (
-        read_csv_bytes(Path(slice_paths[0]).read_bytes()).columns if slice_paths else []
-    )
+    # Check every served window slice's header, not just the first — a mid-window BLS
+    # schema change would otherwise go undetected. These files are already on disk: no
+    # network cost.
+    slice_headers = {p: read_csv_bytes(Path(p).read_bytes()).columns for p in slice_paths}
+    distinct_slice_headers = {tuple(h) for h in slice_headers.values()}
+    # slice_paths[0] is the earliest window year/quarter the slice route actually served
+    # (extracts accumulate in ascending probe order) — the most defensible single
+    # reference, now backed by the consistency check above rather than an assumption.
+    slice_header = slice_headers[slice_paths[0]] if slice_paths else []
 
     parity = {
         "slice_only": sorted(set(slice_header) - set(bulk_header)),
         "bulk_only": sorted(set(bulk_header) - set(slice_header)),
         "identical": slice_header == bulk_header,
+        "bulk_header_disagreement": (
+            {}
+            if len(distinct_bulk_headers) <= 1
+            else {str(year): header for year, header in sorted(bulk_headers.items())}
+        ),
+        "slice_header_disagreement": (
+            {}
+            if len(distinct_slice_headers) <= 1
+            else {Path(p).name: header for p, header in sorted(slice_headers.items())}
+        ),
     }
 
     # `covered` (Task 1 schema) is the part of D1's window this source covers, not the full
