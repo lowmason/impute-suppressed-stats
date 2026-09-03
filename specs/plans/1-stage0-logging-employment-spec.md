@@ -3553,6 +3553,15 @@ def main() -> None:
         f"**Industry:** {c.INDUSTRY_CODE} (Logging) · **Ownership:** private · "
         "**Geography:** states + D.C.",
         "",
+        # §3.1 requires the invalid supplied code to be recorded alongside the correction,
+        # never silently replaced. These are facts from the source prompt, not fetchable
+        # metadata, so they are literals here rather than derived.
+        "**Classification (§3.1):** the source prompt supplied `1113310`, which is not a "
+        "valid NAICS code. It is recorded, not silently replaced — "
+        "`industry_code_supplied = '1113310'`, `industry_code_used = '113310'`, "
+        "`industry_title = 'Logging'`, "
+        "`classification_status = 'corrected_invalid_supplied_code'`.",
+        "",
         "Extract hashes are recorded in `source-audit-extracts.csv` and re-verified by "
         "`scripts/audit/verify_extracts.py`. Raw bytes live under `data/raw/audit/`, which is "
         "gitignored.",
@@ -3610,6 +3619,9 @@ fails = []
 doc = pathlib.Path("specs/findings/source-audit.md").read_text()
 if not doc.strip():
     fails.append("finding file is empty")
+# §3.1: the invalid supplied code is recorded, never silently replaced.
+if "1113310" not in doc or "corrected_invalid_supplied_code" not in doc:
+    fails.append("the §3.1 classification record is missing from the finding document")
 
 # These findings keys are declared elsewhere in this plan as legitimately empty or null —
 # an empty value there is a finding, not a missing one, so the exit gate must not reject it.
