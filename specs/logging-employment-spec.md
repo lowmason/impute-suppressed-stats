@@ -2151,15 +2151,19 @@ This specification is a synthesis, not an independent source-verification report
 Roadmap: `specs/logging-employment-spec-roadmap.md` — every stage implements
 this spec. Stage stamps below are authoritative (derive-roadmap §5).
 
-### Decisions resolved at roadmap derivation (2026-09-03)
+### Decisions resolved at roadmap derivation (2026-09-03, review-informed)
 
-These resolve §21 rows. Every stage plan copies the ones it needs into its
-Global Constraints verbatim.
+This supersedes the decision block written during the earlier derivation, which
+was made before the three research reviews were in the repository. These rows
+resolve §21 entries. Every stage plan copies the ones it needs into its Global
+Constraints verbatim.
 
-- **D1 Historical period:** pilot `2017-01` → `2024-12` as in Appendix A. Every quarter in the window is final under QCEW's finalize-with-next-year-Q1 rule.
-- **D2 Scope ceiling:** Phases 0–5 are in scope. Phase 6 is an optional, separately routed stage.
-- **D3 Source access:** live fetch from `data.bls.gov` and `api.census.gov`. Credentials come from an untracked repo-root `.env` (keys present: `CENSUS_API_KEY`, `BLS_API_KEY`, `BEA_API_KEY`, `FRED_API_KEY`, `BLS_CONTACT_EMAIL`) loaded with python-dotenv. `.env` MUST be gitignored before the first commit that adds code, and no key value may appear in any manifest (§7.2).
+- **D1 Historical period:** pilot `2017-01` → `2024-12` as in Appendix A. Every quarter in the window is final under QCEW's finalize-with-next-year-Q1 rule. Confirmed against the reviews: the window spans the 2017→2022 QCEW NAICS transition, which Stage 1's crosswalk test must exercise.
+- **D2 Scope ceiling:** Phases 0–5 are in scope. Phase 6 is an optional, separately routed stage. All three reviews stage the work in this order, so the ceiling stands.
+- **D3 Source access:** live fetch from `data.bls.gov` and `api.census.gov`. Credentials come from an untracked repo-root `.env` (keys present: `CENSUS_API_KEY`, `BLS_API_KEY`, `BEA_API_KEY`, `FRED_API_KEY`, `BLS_CONTACT_EMAIL`) loaded with python-dotenv. `.env` MUST be gitignored before the first commit that adds code, and no key value may appear in any manifest (§7.2). Note that `bls.gov` admits scripted clients only when the User-Agent carries a contact address; `BLS_CONTACT_EMAIL` exists for that purpose.
 - **D4 Toolchain:** a single installable package — `src/logging_employment/` laid out per §6.1 — built with hatchling and managed by uv; `requires-python >= 3.14`; author `Lowell Mason <mason.lowell@mac.com>`, MIT license; ruff and black at line length 100, pytest markers `network` and `slow`, interrogate at 100%, python-dotenv in the `dev` dependency group. Tooling is modeled on the owner's `alt-nfp` `pyproject.toml` (supplied 2026-09-03) but NOT its workspace layout. Stage 1's plan verifies that jax/jaxlib, numpyro, highspy, polars, and pyarrow publish 3.14 wheels before locking and records any that do not as an open decision.
+- **D5 QCEW acquisition is dual-route.** The §5.4 seed endpoint serves only the most recent five reference years, so it cannot cover all of D1's window. Stage 1 implements both the Open Data CSV slice route and the downloadable bulk-file route behind one ingest interface, selecting by reference year from the boundary Stage 0 measures. §5.4's instruction not to hard-code a "latest" year applies to both routes.
+- **D6 BEA is out of scope; CES is industry-aligned where published at 1133.** BEA `SAEMP25`/`SAEMP27` were discontinued 2024-09-27, leaving no current detailed state-industry table to bridge, so SRC-OTH-005 is deferred with that reason rather than staged. CES stays in scope: NAICS `1133 → 11331 → 113310` verified against the official structure files for both the 2017 and 2022 vintages, so 113310 is the only six-digit industry under 1133 and a state CES series published at 1133 covers exactly the target industry. §5.2's "never an exact QCEW identity" continues to bind on the statistical concept — CES is an annually QCEW-benchmarked sample estimate, published in thousands and revised — not on industry mismatch. A series published only at 113 or at the Mining-and-Logging supersector is genuinely broader and keeps its proxy-only treatment.
 
 Other §21 rows keep their Appendix A defaults until a stage's plan or finding changes them.
 
