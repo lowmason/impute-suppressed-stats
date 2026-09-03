@@ -36,6 +36,16 @@ SOURCE = "qcew_panel"
 AREA_SUFFIX = "000"
 SUPPRESSION_CODE = "N"
 
+# The panel key. `_conform` enforces it, because every share below divides by a count of
+# these cells and a duplicate would inflate that denominator silently.
+PANEL_KEY = ("area_fips", "year", "month")
+
+# "This cell kept a published establishment count." fill_null before comparing: a null
+# qtrly_estabs is otherwise dropped from a .mean() denominator instead of counting as
+# "not > 0" (the same hazard as `suppressed`). Written once so the three readings of it
+# -- the per-code tally, estabs_survival and the note -- cannot drift apart.
+ESTABS_PRESENT = pl.col("qtrly_estabs").fill_null(0) > 0
+
 # The panel contract Task 5 reads. Enforced on the frame before it is serialized (see
 # `_conform`), so a renamed column or a narrowed integer fails here rather than downstream.
 PANEL_SCHEMA: dict[str, pl.DataType] = {
@@ -95,14 +105,35 @@ def apply_predicates(raw: pl.DataFrame, own_code: str) -> tuple[pl.DataFrame, li
 
 
 def _conform(long: pl.DataFrame) -> pl.DataFrame:
-    """Project onto PANEL_SCHEMA — column order included — and refuse anything else."""
+    """Project onto PANEL_SCHEMA — column order included — and refuse anything else.
+
+    "Anything else" includes a repeated `PANEL_KEY`. Nothing upstream guarantees one row per
+    (area_fips, year, month): the predicates filter on industry, ownership and the area suffix
+    only, so uniqueness rests on the source's shape. A duplicated area-quarter would inflate
+    the suppression share's denominator — a count of rows — while `absent_months_by_area`,
+    which counts distinct months, went on reporting that area as complete, and every derived
+    sentence in the summary would still read as self-consistent. That silent failure lands on
+    the headline number, so it is refused here rather than reported.
+    """
     panel = long.select(*PANEL_SCHEMA)
     if list(panel.schema.items()) != list(PANEL_SCHEMA.items()):
         raise RuntimeError(f"panel schema {dict(panel.schema)} != {PANEL_SCHEMA}")
+    repeated = panel.group_by(PANEL_KEY).len().filter(pl.col("len") > 1).sort(PANEL_KEY)
+    if repeated.height:
+        raise RuntimeError(
+            f"panel key {PANEL_KEY} is not unique: {repeated.height} repeated key(s), "
+            f"first {repeated.head(3).to_dicts()}"
+        )
     return panel
 
 
-def build_panel_with_predicates(own_code: str) -> tuple[pl.DataFrame, list[str]]:
+def build_long(own_code: str) -> tuple[pl.DataFrame, list[str]]:
+    """The monthly frame before `_conform` projects it onto PANEL_SCHEMA.
+
+    Kept separate because `emplvl_raw` — what the source published in the month columns,
+    before INV-003 nulls it out on a suppressed row — exists only here, and
+    `disclosure_code_values` has to measure it to report it.
+    """
     raw = pl.concat([pl.read_csv(p, infer_schema_length=0) for p in slice_paths()],
                     how="vertical")
     titles = area_titles()
@@ -136,11 +167,11 @@ def build_panel_with_predicates(own_code: str) -> tuple[pl.DataFrame, list[str]]
         )
         .sort("area_fips", "year", "month")
     )
-    return _conform(long), recorded
+    return long, recorded
 
 
 def build_panel(own_code: str) -> pl.DataFrame:
-    return build_panel_with_predicates(own_code)[0]
+    return _conform(build_long(own_code)[0])
 
 
 def month_index(year: int, month: int) -> int:
@@ -189,8 +220,15 @@ def _state_runs(states: pl.DataFrame) -> tuple[dict[int, int], int]:
     return hist, gaps
 
 
-def disclosure_code_values(panel: pl.DataFrame) -> list[dict[str, Any]]:
+def disclosure_code_values(long: pl.DataFrame) -> list[dict[str, Any]]:
     """What the published disclosure_code column actually carries on the retained rows.
+
+    Takes the pre-`_conform` frame so `emplvl_raw` is still present: `emplvl_raw_nonzero_rows`
+    counts what the source published in the month columns *before* INV-003 nulls it out, and
+    `emplvl_published_nonzero_rows` counts what survives into the panel. Without the first of
+    those, the note's claim about what a suppressed row publishes would be untestable — and a
+    nonzero employment level published under a suppression code would surface here instead of
+    disappearing into the null-out.
 
     §2.2 row 1 forbids encoding any numerical confidentiality threshold, so the suppression
     flag is the published code and nothing else. Enumerating every observed value — with what
@@ -198,13 +236,16 @@ def disclosure_code_values(panel: pl.DataFrame) -> list[dict[str, Any]]:
     `== 'N'` predicate auditable instead of asserted.
     """
     return (
-        panel.group_by(pl.col("disclosure_code").fill_null("").str.strip_chars())
+        long.group_by(pl.col("disclosure_code").fill_null("").str.strip_chars())
         .agg(
             panel_rows=pl.len(),
             states_dc_rows=(pl.col("area_class") == "states_dc").sum(),
+            emplvl_raw_nonzero_rows=(
+                pl.col("emplvl_raw").cast(pl.Int64, strict=False).fill_null(0) != 0
+            ).sum(),
             emplvl_published_rows=pl.col("emplvl").is_not_null().sum(),
             emplvl_published_nonzero_rows=(pl.col("emplvl") > 0).sum(),
-            qtrly_estabs_positive_rows=(pl.col("qtrly_estabs").fill_null(0) > 0).sum(),
+            qtrly_estabs_positive_rows=ESTABS_PRESENT.sum(),
         )
         .sort("disclosure_code")
         .to_dicts()
@@ -223,29 +264,38 @@ def estabs_survival(supp_rows: pl.DataFrame) -> float | None:
     """
     if not supp_rows.height:
         return None
-    # fill_null before comparing: a null qtrly_estabs is otherwise dropped from the .mean()
-    # denominator instead of counting as "not > 0" (same hazard as `suppressed` above).
-    return float((supp_rows["qtrly_estabs"].fill_null(0) > 0).mean())
+    return float(supp_rows.select(ESTABS_PRESENT).to_series().mean())
 
 
-def cell_coverage(states: pl.DataFrame) -> dict[str, Any]:
+def cell_coverage(states: pl.DataFrame, interior_month_gaps: int) -> dict[str, Any]:
     """How many states_dc monthly cells the shares are actually divided by.
 
     The shares below have a denominator of cells present in the panel, not of a full
     universe x window grid: an area with no published row for a month contributes to neither
     numerator nor denominator. This records the difference so the headline share is readable.
+
+    `interior_month_gaps` is computed by `_state_runs`, in the same traversal that builds the
+    run-length histogram, because it is the evidence that no run in that histogram spans an
+    absence. It is recorded here, next to the rest of the coverage arithmetic, so a consumer
+    reads it as a number rather than parsing it out of the note.
     """
     window_months = len(c.WINDOW_YEARS) * 12
-    present = dict(states.group_by("area_fips").len().sort("area_fips").iter_rows())
+    # Distinct months, not row count: an area's absent-month arithmetic must not depend on
+    # `_conform`'s key check having run, even though it makes the two the same.
+    present = dict(states.group_by("area_fips")
+                   .agg(pl.struct("year", "month").n_unique())
+                   .sort("area_fips").iter_rows())
     absent = {area: window_months - present.get(area, 0)
               for area in sorted(c.STATE_AREAS) if present.get(area, 0) < window_months}
     return {
+        # The share's actual denominator, so a row count by construction.
         "cells_present": states.height,
         "grid_areas": len(c.STATE_AREAS),
         "grid_months": window_months,
         "grid_cells": len(c.STATE_AREAS) * window_months,
         "absent_months_by_area": absent,
         "areas_with_no_rows": sorted(a for a in c.STATE_AREAS if a not in present),
+        "interior_month_gaps": interior_month_gaps,
     }
 
 
@@ -253,9 +303,9 @@ def notes(
     *,
     panel: pl.DataFrame,
     states: pl.DataFrame,
+    supp_rows: pl.DataFrame,
     codes: list[dict[str, Any]],
     coverage: dict[str, Any],
-    interior_gaps: int,
     others: list[dict[str, str]],
     titles_available: dict[str, Any],
 ) -> str:
@@ -265,11 +315,11 @@ def notes(
     code_counts = ", ".join(
         f"{row['disclosure_code']!r} on {row['panel_rows']} monthly rows "
         f"({row['states_dc_rows']} states_dc, {row['qtrly_estabs_positive_rows']} with "
-        f"qtrly_estabs > 0, {row['emplvl_published_nonzero_rows']} with a published "
-        f"employment level above zero)"
+        f"qtrly_estabs > 0, {row['emplvl_raw_nonzero_rows']} with a nonzero employment level "
+        f"in the source month columns, {row['emplvl_published_nonzero_rows']} with one "
+        f"published into the panel)"
         for row in codes
     )
-    supp = states.filter(pl.col("suppressed"))
     other_desc = ", ".join(
         f"{row['area_fips']} ({row['area_title']})" for row in others
     ) or "none"
@@ -288,8 +338,9 @@ def notes(
         f"records the published titles file for this column as "
         f"{titles_available.get('disclosure_code')!r}. Values observed on the retained rows, "
         f"with what each carries: {code_counts}. Employment on a suppressed row is written "
-        f"null rather than the published zero (INV-003), so emplvl_published_rows counts the "
-        f"rows whose employment level survives into the panel at all. "
+        f"null in the panel (INV-003), so of those two counts the source one is taken before "
+        f"that null-out and the panel one after it; the gap between them per code is the "
+        f"measurement, not an assumption about what a suppressed row publishes. "
         f"Denominator. suppression_share_overall, _by_state and _by_month divide by the "
         f"{coverage['cells_present']} states_dc monthly cells present in the panel, not by "
         f"the {coverage['grid_cells']} cells of a {coverage['grid_areas']}-area x "
@@ -302,11 +353,13 @@ def notes(
         f"Run lengths. suppressed_run_lengths counts maximal runs of consecutive suppressed "
         f"months within one states_dc area, where a run ends at an unsuppressed month and "
         f"equally at an absent one. Counted across the states_dc areas over the "
-        f"{len(c.WINDOW_YEARS) * 12}-month window, the number of interior month gaps falling "
-        f"inside an area's own span of published rows is {interior_gaps}. "
+        f"{coverage['grid_months']}-month window, the number of interior month gaps falling "
+        f"inside an area's own span of published rows is "
+        f"{coverage['interior_month_gaps']} (state_month_cell_coverage.interior_month_gaps). "
         f"Establishment survival. estabs_survive_suppression_share is measured over the "
-        f"{supp.height} suppressed states_dc monthly cells, of which "
-        f"{int((supp['qtrly_estabs'].fill_null(0) > 0).sum())} report qtrly_estabs > 0. "
+        f"{supp_rows.height} suppressed states_dc monthly cells, of which "
+        f"{int(supp_rows.select(ESTABS_PRESENT).to_series().sum())} report "
+        f"qtrly_estabs > 0. "
         f"Geography. states_covered counts the distinct states_dc area codes present, "
         f"{states['area_fips'].n_unique()} of the {len(c.STATE_AREAS)} in _common.STATE_AREAS; "
         f"other_state_level_areas enumerates every non-national area ending "
@@ -318,7 +371,8 @@ def notes(
 
 def main() -> None:
     own_code = c.load_summary("qcew_codes")["findings"]["private_own_code"]
-    panel, predicates = build_panel_with_predicates(own_code)
+    long, predicates = build_long(own_code)
+    panel = _conform(long)
 
     states = panel.filter(pl.col("area_class") == "states_dc")
     n_cells = states.height
@@ -338,25 +392,28 @@ def main() -> None:
 
     others = (panel.filter(pl.col("area_class") == "other_state_level")
               .select("area_fips", "area_title").unique().sort("area_fips").to_dicts())
-    codes = disclosure_code_values(panel)
-    coverage = cell_coverage(states)
+    codes = disclosure_code_values(long)
+    coverage = cell_coverage(states, interior_gaps)
 
     window_months = {(y, m) for y in c.WINDOW_YEARS for m in range(1, 13)}
     covered_months = set(panel.select("year", "month").unique().iter_rows())
     uncovered = ", ".join(f"{y}-{m:02d}" for y, m in sorted(window_months - covered_months))
+    # Derived from the months the panel holds, not from its years: QCEW publishes quarter by
+    # quarter, so a run whose last quarter is 2025q2 must not report a December end date.
+    first_month, last_month = min(covered_months), max(covered_months)
 
     buf = io.BytesIO()
     panel.write_parquet(buf)
     rec = c.record_extract(SOURCE, "derived://qcew_routes/slices", "panel.parquet",
                            buf.getvalue())
 
-    first_year, last_year = panel["year"].min(), panel["year"].max()
+    span_start, span_end = (f"{y}-{m:02d}" for y, m in (first_month, last_month))
     c.write_summary(
         SOURCE,
         coverage_span={
-            "published_start": f"{first_year}-01", "published_end": f"{last_year}-12",
+            "published_start": span_start, "published_end": span_end,
             "window_start": c.WINDOW_START, "window_end": c.WINDOW_END,
-            "covered": f"{first_year}-{last_year}", "uncovered": uncovered,
+            "covered": f"{span_start}..{span_end}", "uncovered": uncovered,
         },
         access={"route": "derived from qcew_routes slice extracts", "status": "verified",
                 "reason": None},
@@ -377,8 +434,8 @@ def main() -> None:
             "disclosure_code_values": codes,
             "state_month_cell_coverage": coverage,
             "notes": notes(
-                panel=panel, states=states, codes=codes,
-                coverage=coverage, interior_gaps=interior_gaps, others=others,
+                panel=panel, states=states, supp_rows=supp_rows, codes=codes,
+                coverage=coverage, others=others,
                 titles_available=c.load_summary("qcew_codes")["findings"]["titles_available"],
             ),
         },
