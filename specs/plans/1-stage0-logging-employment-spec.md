@@ -48,6 +48,13 @@ from `specs/logging-employment-spec.md` and its Rollout note; do not paraphrase 
   `.env` MUST be gitignored before the first commit that adds code, and no key value may appear
   in any manifest (§7.2). Note that `bls.gov` admits scripted clients only when the User-Agent
   carries a contact address; `BLS_CONTACT_EMAIL` exists for that purpose.
+  *Stage 0 loads those credentials by shell sourcing* — `set -a && source .env && set +a`, as
+  every run command in this plan does — **not** with python-dotenv. D3 names python-dotenv as
+  the project's credential mechanism and D4 places it in the Stage 1 package's `dev`
+  dependency group; Stage 0 has no package, no `pyproject.toml` and no dependency groups, so
+  it has nowhere to put it. Do not `import dotenv` in an audit script: it is absent from every
+  PEP 723 dependency block here and from the standard test command, so the import would fail
+  at run time.
 - **Dual-route mandate (D5, verbatim):** The §5.4 seed endpoint serves only the most recent
   five reference years, so it cannot cover all of D1's window. Stage 1 implements both the Open
   Data CSV slice route and the downloadable bulk-file route behind one ingest interface,
