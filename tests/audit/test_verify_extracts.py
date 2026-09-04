@@ -18,7 +18,9 @@ version, defect by defect:
 4. the manifest's repo-root-relative `path` column and its LF line endings;
 5. `is_empty`, which must keep accepting `0` and `False` as filled findings;
 6. `check_document(None, ...)` failing E1, E2 and C together, so no criterion whose checks did
-   not run can print PASS.
+   not run can print PASS;
+7. `parse_classification_record` anchored to the `### 3.1` heading and the fence under it, so
+   the four names published again elsewhere in the spec cannot stand in for a §3.1 that moved.
 
 `verify_extracts` is imported bare, like `_common`, per `tests/conftest.py`. Importing it is
 inert: the module's only side effects sit behind `if __name__ == "__main__"`.
@@ -319,8 +321,61 @@ def test_parse_classification_record_reads_all_four_fields_from_the_real_spec():
 
 
 def test_parse_classification_record_raises_when_the_block_is_absent():
+    """The easy case: nothing anywhere in the file. The two tests below cover the cases an
+    unanchored first-match scan would have parsed rather than rejected."""
     with pytest.raises(ValueError, match="§3.1"):
         m.parse_classification_record("# a spec with no classification block\n")
+
+
+# The four names as the spec's §3.1 fence publishes them, reused by the anchoring tests below.
+CLASSIFICATION_ASSIGNMENTS = ("industry_code_supplied = '1113310'\n"
+                              "industry_code_used     = '113310'\n"
+                              "industry_title         = 'Logging'\n"
+                              "classification_status = 'corrected_invalid_supplied_code'\n")
+
+
+def test_parse_classification_record_raises_when_the_names_sit_outside_the_section_31_fence():
+    """The real gap. An unanchored scan takes the first `key = value` match per name from
+    anywhere in the file, so it lands on §3.1 only because §3.1 comes first. Here §3.1 has lost
+    its fence and the names survive in §3.2 and in Appendix A -- which must fail loudly, not be
+    read from the wrong section."""
+    spec = ("## 3. Scope\n\n"
+            "### 3.1 Classification decision\n\n"
+            "The classification block moved.\n\n"
+            "### 3.2 Core estimand\n\n"
+            "```text\n" + CLASSIFICATION_ASSIGNMENTS + "```\n\n"
+            "## Appendix A. Example configuration\n\n"
+            "```yaml\nproject:\n  industry_code_supplied: '1113310'\n"
+            "  industry_code_used: '113310'\n  industry_title: 'Logging'\n```\n")
+    with pytest.raises(ValueError, match="§3.1"):
+        m.parse_classification_record(spec)
+
+
+def test_parse_classification_record_raises_when_one_name_left_the_31_fence():
+    """Field granularity, same defect: a name that moved out of §3.1's fence but still exists
+    later in the file must be reported missing, not picked up from where it moved to."""
+    kept = "".join(line + "\n" for line in CLASSIFICATION_ASSIGNMENTS.splitlines()[:3])
+    spec = ("### 3.1 Classification decision\n\n```text\n" + kept + "```\n\n"
+            "### 3.2 Core estimand\n\n"
+            "```text\nclassification_status = 'corrected_invalid_supplied_code'\n```\n")
+    with pytest.raises(ValueError, match="classification_status"):
+        m.parse_classification_record(spec)
+
+
+def test_parse_classification_record_raises_on_an_unclosed_31_fence():
+    """An unclosed fence is a broken spec, not a block running to the next heading: reading it
+    that way would silently take whatever prose followed as assignments."""
+    spec = ("### 3.1 Classification decision\n\n```text\n" + CLASSIFICATION_ASSIGNMENTS
+            + "\n### 3.2 Core estimand\n")
+    with pytest.raises(ValueError, match="never closed"):
+        m.parse_classification_record(spec)
+
+
+def test_classification_block_returns_only_the_fenced_lines():
+    spec = ("### 3.1 Classification decision\n\nProse before the fence.\n\n"
+            "```text\n" + CLASSIFICATION_ASSIGNMENTS + "```\n\nProse after it.\n\n"
+            "### 3.2 Core estimand\n")
+    assert m.classification_block(spec) == CLASSIFICATION_ASSIGNMENTS.splitlines()
 
 
 def test_parse_appendix_a_sources_reads_the_real_spec_block():

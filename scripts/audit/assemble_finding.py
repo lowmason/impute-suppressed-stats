@@ -41,7 +41,10 @@ summaries rather than assumed:
 
 5. **The §3.1 classification record was written as literals.** All four fields are published in
    the spec's own §3.1 block, so they are parsed from it (`verify_extracts.parse_classification
-   _record`) rather than retyped into a tracked document that no test would contradict.
+   _record`) rather than retyped into a tracked document that no test would contradict. That
+   parser anchors on the `### 3.1` heading and the fence under it: three of the four names are
+   published again in Appendix A, so a first-match scan of the whole file would read a moved
+   §3.1 from the wrong section rather than failing.
 
 6. **The header stamped the wall-clock run date**, which made the tracked document change
    whenever it was regenerated, whether or not any evidence had. The header now reports the
@@ -183,7 +186,9 @@ def render_document(
         f"`{classification['industry_code_supplied']}`, which is not a valid NAICS code. It is "
         "recorded, not silently replaced -- "
         + ", ".join(f"`{key} = '{value}'`" for key, value in classification.items())
-        + ". These four values are read from the spec's own §3.1 block, not retyped here.",
+        + ". These four values are read from the fenced block under the spec's own `### 3.1` "
+        "heading -- anchored there, not first-match across the file -- and are not retyped "
+        "here.",
         "",
         "Every value below is rendered from `data/raw/audit/<source>/summary.json`. Extract "
         "hashes are recorded in `source-audit-extracts.csv` and re-verified, in both "

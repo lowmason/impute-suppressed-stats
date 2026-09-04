@@ -334,24 +334,54 @@ def check_gitignore(gitignore_text: str | None) -> list[Failure]:
     return []
 
 
+def classification_block(spec_text: str) -> list[str]:
+    """The lines inside the fenced block under the spec's own `### 3.1` heading.
+
+    Anchored, not merely first-match. An unanchored scan of the whole file lands on §3.1 only
+    because §3.1 happens to come first: three of the four names are published again in
+    Appendix A's example configuration, and a renamed or moved §3.1 whose names survived
+    elsewhere would be read from there without complaint. So the scan starts at the `### 3.1`
+    heading, stops at the next heading of the same level or higher -- a §3.1 that lost its
+    fence cannot borrow §3.2's -- and reads only what the fence encloses.
+
+    Raises when the heading is absent, when the section carries no fence, and when a fence
+    opens inside the section and never closes.
+    """
+    lines = spec_text.splitlines()
+    start = next((i for i, line in enumerate(lines) if re.match(r"###\s+3\.1(\s|$)", line)), None)
+    if start is None:
+        raise ValueError("the spec has no §3.1 heading (`### 3.1 ...`) to anchor the "
+                         "classification block to")
+    end = next((i for i in range(start + 1, len(lines)) if re.match(r"#{1,3}\s", lines[i])),
+               len(lines))
+    fences = [i for i in range(start + 1, end) if lines[i].lstrip().startswith("```")]
+    if not fences:
+        raise ValueError("the spec's §3.1 section carries no fenced classification block")
+    if len(fences) < 2:
+        raise ValueError("the spec's §3.1 fenced classification block is never closed")
+    return lines[fences[0] + 1:fences[1]]
+
+
 def parse_classification_record(spec_text: str) -> dict[str, str]:
-    """The four §3.1 classification fields, read from the spec's own fenced block rather than
-    retyped. Raises when the block is absent, so a spec edit fails loudly here instead of
-    quietly dropping the record from the finding document."""
+    """The four §3.1 classification fields, read from the fenced block under the spec's own
+    `### 3.1` heading rather than retyped. Raises when that heading or its fence is absent, or
+    when the fence does not carry all four names, so a spec edit fails loudly here instead of
+    quietly dropping the record from the finding document or reading it from somewhere else
+    (see `classification_block`)."""
+    wanted = ("industry_code_supplied", "industry_code_used", "industry_title",
+              "classification_status")
     record: dict[str, str] = {}
-    for line in spec_text.splitlines():
+    for line in classification_block(spec_text):
         stripped = line.strip()
-        if "=" not in stripped or stripped.startswith("#"):
+        if "=" not in stripped:
             continue
         key, _, value = stripped.partition("=")
         key, value = key.strip(), value.strip()
-        if key in ("industry_code_supplied", "industry_code_used", "industry_title",
-                   "classification_status") and key not in record:
+        if key in wanted and key not in record:
             record[key] = value.strip("'\"")
-    missing = [k for k in ("industry_code_supplied", "industry_code_used", "industry_title",
-                           "classification_status") if k not in record]
+    missing = [k for k in wanted if k not in record]
     if missing:
-        raise ValueError(f"the spec's §3.1 classification block is missing {missing}")
+        raise ValueError(f"the spec's §3.1 fenced classification block is missing {missing}")
     return record
 
 
