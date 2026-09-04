@@ -5381,7 +5381,9 @@ reproduce a reliable raw TPO URL, and Appendix A already ships `tpo.enabled: fal
   - `doc_parameters` — the `/fullreport` parameter names found in the API documentation page,
     each with the one-line description shown there.
   - `probe` — `{url, params_sent, http_status, bytes, content_type, has_sampling_error}` for
-    one minimal `/fullreport` call.
+    one minimal `/fullreport` call. The implementation also stamps each probe record with
+    `classify_probe`'s `outcome`, so a reader never has to classify a bare `http_status` (or a
+    `0` transport-failure sentinel) themselves.
   - `sampling_error_field` — the response field carrying sampling error or a confidence
     interval, or `null`. `SRC-FOR-002` requires FIA rows to retain it "when available", so a
     `null` here must be paired with a reason.
@@ -5409,14 +5411,48 @@ reproduce a reliable raw TPO URL, and Appendix A already ships `tpo.enabled: fal
     `Evalidator/evalidator.jsp`, `research/programs/fia`). `datamart_probes` records three
     bounded, spaced retry attempts per DataMart URL and the elapsed span, kept separate from
     the `/fullreport` verdict per the plan's three-outcome distinction: a transport failure
-    (`_common.probe`'s `(0, 0)`) is not a 404, and neither is a `200`.
+    (`_common.probe`'s `(0, 0)`) is not a 404, and neither is a `200`. `other_routes_probed`
+    uses `probe_url` rather than `_common.probe` so the 403 body `Evalidator/evalidator.jsp`
+    answers with is retained (see `raw_retention_rule`) — that body is the evidence of *how*
+    the route is closed, and `_common.probe` discards bodies by construction.
+  - `snum_estimate_attributes` — added by the implementation. The parsed
+    `/fullreport/parameters/snum` catalog: how many estimate attributes `/fullreport` can
+    return at all, which of them sit in *harvest*-removals estimate groups (kept distinct from
+    FIA's "other removals" and combined "removals" groups, since only the first is a
+    harvest-origin measure), each such group's attribute count / lowest attribute number /
+    `EVAL_TYP`, and the full list of harvest-removals attribute numbers. This is what turns
+    FIA's verdict from a reachability claim into an evidenced capability claim: whether the
+    endpoint answers and whether it can return the measure §2.2 asks for are different
+    questions, and one successful call answers only the first.
+  - `measure_proved_by_probe` — added by the implementation: which measure the successful
+    `/fullreport` call actually returned, read from the response's own
+    `metadata.numEstDesc`/`metadata.estMeta` rather than inferred from the parameters sent, and
+    quoted in `access.reason`. `null` when the response names no measure.
+  - `industry_concept_scan` — added by the implementation: word-boundary hit counts for
+    industry-classification terms (`NAICS`, `SIC`, `industry`, `establishment`, `employment`)
+    and for FIA's own organising concepts (`species`, `land use`, `product`) across every FIA
+    page this run fetched and hashed, named per page. `coverage_span.uncovered`'s
+    industry-concept sentence is interpolated from these counts; the reading drawn *from* the
+    zeros is delimited by the `INFERENCE MARKER, OPENING`/`CLOSING` convention rather than
+    stated as a further measurement.
+  - `raw_retention_rule` — added by the implementation, and present in **both** summaries.
+    States this script's non-200 retention rule inside the artifact the rule shaped, with
+    counters (`extracts_recorded`, `extracts_with_non_200_status`,
+    `non_200_statuses_recorded`) derived from the run. This script writes and registers a
+    fetched body whenever the endpoint answered at all, whatever the status, stamped with the
+    status it carried — because on an access-verdict probe the non-200 body *is* the evidence
+    (a 404 page, a 403 page and an empty 200 are three different verdicts). Every other Stage 0
+    audit script gates `record_extract` on `status == 200`; that divergence is deliberate and
+    is why the rule is restated in the artifacts rather than only in a commit message.
   `tpo` `findings` keys:
   - `route_probes` — list of `{url, http_status, bytes, content_type, machine_readable}` for
     each candidate route. Each entry also carries an `origin` key added by the implementation
     (`brief` vs. `discovered (...)`), so a reader can see which probed URLs came from this
     section's three original candidates and which were found by following links from them —
     none of the three itself serves machine-readable data; the working route sits two hops
-    further.
+    further — and an `outcome` key from `classify_probe`, so `not_found` (the third brief
+    candidate 404s, and its body is retained) is never read as `transport_failure`.
+  - `raw_retention_rule` — added by the implementation; see the `fia` entry above.
   - `harvest_origin_available` — bool. §8.4 `SRC-FOR-001` requires harvest origin and mill
     receipts to occupy distinct fields; this records whether the origin measure is reachable.
   - `chosen_route` — the URL that yields machine-readable state-year data, or `null`.
@@ -5447,15 +5483,31 @@ verdict, but only when it is earned by the probes recorded here -- never inherit
 prior review's inability to find a URL, and never from Appendix A already shipping
 `tpo.enabled: false` / `fia.enabled: false`.
 
-This run found both sources reachable. FIA's `/fullreport` returns real, machine-readable
-estimates (with sampling error) once called with the parameters its own doc page marks
-required -- the brief's illustrative call omitted all four and got back a 200-status
-EVALIDator *error* page, not a report. TPO's harvest-origin data is not at any of the brief's
-three candidate URLs, but two hops from the first of them (`research.fs.usda.gov/programs/nrum`
--> its own "data downloads" page -> a public Box folder) sits a real, county-level, per-state
-production table, fetchable once you use Box's undocumented legacy download redirect instead
-of its modern (session-gated) share URL. See `main()` for the full probe sequence and
-`tests/audit/test_forest_sources.py` for what is pinned about each parsing step.
+This run found both sources reachable. FIA's `/fullreport` returns a real, machine-readable
+estimate (with sampling error) once called with the parameters its own doc page marks required
+-- the brief's illustrative call omitted all four and got back a 200-status EVALIDator *error*
+page, not a report. Which estimate it returns is not incidental and is never left implicit
+here: the response names its own measure in `metadata.numEstDesc`/`metadata.estMeta`, and the
+access verdict quotes that name, because "the endpoint answers" and "the endpoint answers with
+the harvest-origin measure SS2.2 requires" are two different claims. Whether FIA publishes a
+harvest-origin measure *at all* is settled separately, by enumerating the estimate attributes
+its own `/fullreport/parameters/snum` catalog lists. TPO's harvest-origin data is not at any of
+the brief's three candidate URLs, but two hops from the first of them
+(`research.fs.usda.gov/programs/nrum` -> its own "data downloads" page -> a public Box folder)
+sits a real, county-level, per-state production table, fetchable once you use Box's
+undocumented legacy download redirect instead of its modern (session-gated) share URL. See
+`main()` for the full probe sequence and `tests/audit/test_forest_sources.py` for what is
+pinned about each parsing step.
+
+Raw-retention rule, specific to this script (ruling D-B). Every other Stage 0 audit script
+records a fetched body only when the status is 200. This one records a body whenever the
+endpoint answered at all, whatever the status, and stamps each extract with the status it
+actually carried -- because on an access-verdict probe the non-200 body IS the evidence: a 404
+page, a 403 page and an empty 200 are three different verdicts, and only the retained bytes
+tell them apart. A transport failure yields no body and so registers no extract; its evidence
+is the probe record's `outcome` field instead. `compose_retention_rule` restates this inside
+both written summaries, with counts derived from the run, so a reader of the artifacts (not
+just of this file, or of a commit message) sees the rule and its scope.
 """
 
 from __future__ import annotations
@@ -5478,6 +5530,11 @@ SOURCE_TPO = "tpo"
 FIA_DOC = "https://apps.fs.usda.gov/fiadb-api/"
 FIA_FULLREPORT = "https://apps.fs.usda.gov/fiadb-api/fullreport"
 FIA_WC_PARAMETERS = "https://apps.fs.usda.gov/fiadb-api/fullreport/parameters/wc"
+# `snum*` is the required parameter that selects WHICH estimate attribute /fullreport returns,
+# and this is its catalog. Probed so the verdict can say whether FIA publishes a harvest-origin
+# (removals) attribute at all -- a capability question the successful /fullreport call, which
+# returned one area attribute, cannot answer by itself.
+FIA_SNUM_PARAMETERS = "https://apps.fs.usda.gov/fiadb-api/fullreport/parameters/snum"
 # The brief's own illustrative probe: outputFormat only, none of the doc page's four
 # required parameters (wc*, snum*, rselected*, cselected*). Kept and probed so the finding
 # that it returns a 200-status *error* page is recorded, not just asserted in this docstring.
@@ -5584,6 +5641,37 @@ def probe_url(client: httpx.Client, url: str, *, params: dict | None = None) -> 
         "bytes": len(resp.content),
         "content_type": resp.headers.get("content-type", ""),
         "body": resp.content,
+    }
+
+
+def answered_with_body(res: dict) -> bool:
+    """Ruling D-B's retention gate: keep the bytes whenever the endpoint answered, whatever the
+    status. A transport failure (`http_status == 0`) produced no response at all and so has no
+    body to keep; its evidence is the probe record's `outcome` field instead."""
+    return res["http_status"] != 0 and bool(res["body"])
+
+
+def retain_body(extracts: list, source: str, res: dict, rel_path: str) -> None:
+    """Append `res`'s body to `extracts` stamped with the status it actually carried -- never
+    coerced to 200, which would erase the very distinction the retained non-200 body exists to
+    record."""
+    if answered_with_body(res):
+        extracts.append(c.record_extract(
+            source, res["url"], rel_path, res["body"], http_status=res["http_status"]))
+
+
+def probe_record(res: dict, origin: str) -> dict:
+    """One `route_probes` entry. Carries `classify_probe`'s outcome alongside the raw status so
+    a reader is never left to classify a bare `http_status: 0` themselves -- the three-outcome
+    distinction is the point of recording these at all."""
+    return {
+        "url": res["url"],
+        "http_status": res["http_status"],
+        "bytes": res["bytes"],
+        "content_type": res["content_type"],
+        "machine_readable": is_machine_readable(res["content_type"]),
+        "outcome": classify_probe(res["http_status"], res["bytes"]),
+        "origin": origin,
     }
 
 
@@ -5710,6 +5798,135 @@ def parse_wc_evaluation_index(html: str) -> dict:
         "year_min": min(years) if years else None,
         "year_max": max(years) if years else None,
         "row_count": row_count,
+    }
+
+
+# The `snum` catalog's own ESTIMATE_GRP_DESCR wording. FIA separates three removals concepts:
+# "Annual harvest removals *" (trees removed by harvesting), "Annual other removals *"
+# (removals from land-use change and similar), and the combined "Annual removals *". SS2.2
+# asks for harvest origin, so only the first is a harvest-origin measure -- a bare `removals`
+# predicate would count all three and overstate what the catalog offers.
+HARVEST_REMOVALS_GROUP_PATTERN = re.compile(r"(?i)\bharvest removals\b")
+REMOVALS_GROUP_PATTERN = re.compile(r"(?i)\bremovals\b")
+# The parameter tables on this API render 11 columns per row; a split that yields any other
+# count is markup, not a data row.
+SNUM_ROW_CELL_COUNT = 11
+
+
+def parse_snum_estimate_attributes(html: str) -> dict:
+    """Enumerate `/fullreport/parameters/snum`: every estimate attribute the API can return,
+    and specifically which of them are harvest-removals attributes (ruling D-A).
+
+    Same malformed markup as `/fullreport/parameters/wc` -- rows open with `<th scope=row ...>`
+    and the tbody emits no `<tr>` opener -- so rows are recovered by splitting on `</tr>`, not
+    by matching a pair. Column order is the page's own: ATTRIBUTE_NBR, ATTRIBUTE_DESCR,
+    CONDTREESEED, LAND_BASIS, ESTIMATE_GRP_DESCR, EVAL_TYP, ... . The returned payload is
+    deliberately a summary rather than all rows: per matching group a count and the lowest
+    attribute number (the handle Stage 7 would use to request one), plus the full list of
+    harvest-removals attribute numbers so membership of any *other* attribute number in that
+    set is checkable rather than asserted."""
+    body_match = re.search(r"<tbody>(.*?)</tbody>", html, re.DOTALL)
+    empty = {
+        "row_count": 0, "harvest_removals_groups": [], "harvest_removals_attribute_count": 0,
+        "harvest_removals_attribute_nbrs": [], "non_harvest_removals_groups": [],
+        "eval_typs_present": [],
+    }
+    if not body_match:
+        return empty
+    rows = []
+    for row in body_match.group(1).split("</tr>"):
+        cells = re.findall(r"<t[hd][^>]*>([^<]*)</t[hd]>", row)
+        if len(cells) != SNUM_ROW_CELL_COUNT:
+            continue
+        rows.append([cell.strip() for cell in cells])
+    if not rows:
+        return empty
+
+    groups: dict[str, dict] = {}
+    harvest_nbrs: list[str] = []
+    non_harvest_removals: set[str] = set()
+    for nbr, _descr, _cts, _basis, group, eval_typ, *_rest in rows:
+        if HARVEST_REMOVALS_GROUP_PATTERN.search(group):
+            entry = groups.setdefault(
+                group, {"estimate_group": group, "attribute_count": 0,
+                        "lowest_attribute_nbr": nbr, "eval_typs": set()})
+            entry["attribute_count"] += 1
+            entry["eval_typs"].add(eval_typ)
+            if _as_int(nbr) < _as_int(entry["lowest_attribute_nbr"]):
+                entry["lowest_attribute_nbr"] = nbr
+            harvest_nbrs.append(nbr)
+        elif REMOVALS_GROUP_PATTERN.search(group):
+            non_harvest_removals.add(group)
+    return {
+        "row_count": len(rows),
+        "harvest_removals_groups": [
+            {"estimate_group": g["estimate_group"], "attribute_count": g["attribute_count"],
+             "lowest_attribute_nbr": g["lowest_attribute_nbr"],
+             "eval_typs": sorted(g["eval_typs"])}
+            for g in sorted(groups.values(), key=lambda g: g["estimate_group"])
+        ],
+        "harvest_removals_attribute_count": len(harvest_nbrs),
+        "harvest_removals_attribute_nbrs": sorted(harvest_nbrs, key=_as_int),
+        "non_harvest_removals_groups": sorted(non_harvest_removals),
+        "eval_typs_present": sorted({r[5] for r in rows}),
+    }
+
+
+def _as_int(text: str) -> int:
+    """Attribute numbers sort numerically, not lexically (`79` before `574161`). A
+    non-numeric cell sorts last rather than raising: the page changing shape is a finding for
+    the row count to expose, not a crash inside a sort key."""
+    stripped = str(text).strip()
+    return int(stripped) if stripped.isdigit() else 10**12
+
+
+# Word-boundary, not substring: "SIC" occurs inside "BASIC" and "PHYSIOGRAPHIC", both of which
+# appear in the real /fullreport response body, and a substring scan would report a nonzero
+# industry-classification hit count off them alone.
+INDUSTRY_CLASSIFICATION_TERMS = {
+    "NAICS": r"(?i)\bNAICS\b",
+    "SIC": r"\bSIC\b",
+    "industry": r"(?i)\bindustr(?:y|ies)\b",
+    "establishment": r"(?i)\bestablishment",
+    "employment": r"(?i)\bemploy",
+}
+# The concepts FIA's own pages do organise by -- scanned alongside the terms above so the
+# comparison is a measured contrast rather than a bare absence.
+FIA_TAXONOMY_TERMS = {
+    "species": r"(?i)\bspecies\b",
+    "land use": r"(?i)\bland use\b",
+    "product": r"(?i)\bproduct",
+}
+
+
+def count_term_hits(pages: dict[str, str], patterns: dict[str, str]) -> dict[str, int]:
+    """Total word-boundary hits per term across the named page texts. The same machinery as
+    `tpo_mentions_on_fia_doc_page`, generalised: a zero here is a measured zero over named,
+    hashed extracts, which is what lets a "this source has no X concept" sentence be
+    interpolated rather than typed. Every requested term gets an entry, including the zeros --
+    an omitted key would read as "not checked"."""
+    return {
+        term: sum(len(re.findall(pattern, text)) for text in pages.values())
+        for term, pattern in patterns.items()
+    }
+
+
+def proved_estimate_measure(metadata: dict) -> dict | None:
+    """Which measure the successful `/fullreport` call actually returned, read from the
+    response's own metadata rather than inferred from the request. `numEstDesc` echoes the
+    zero-padded `snum` attribute number and its title; `estMeta` describes what that attribute
+    estimates. Returns `None` when the response names neither -- the honest answer when the
+    measure cannot be established, not a guess from the parameters sent."""
+    num_est_desc = str(metadata.get("numEstDesc") or "").strip()
+    est_meta = re.sub(r"<[^>]+>", " ", str(metadata.get("estMeta") or ""))
+    est_meta = html_module.unescape(re.sub(r"\s+", " ", est_meta)).strip()
+    if not num_est_desc and not est_meta:
+        return None
+    leading = num_est_desc.split(" ", 1)[0] if num_est_desc else ""
+    return {
+        "num_est_desc": num_est_desc,
+        "est_meta": est_meta,
+        "attribute_nbr": leading.lstrip("0") if leading.isdigit() else "",
     }
 
 
@@ -5872,19 +6089,327 @@ def distinguishes_harvest_origin_from_mill_receipts(sheet_names: list[str]) -> b
     return has_origin and has_receipts
 
 
+# --- pure helpers: verdict and prose composition ----------------------------------------------
+#
+# Everything below composes a sentence that gets persisted into a summary. They are pure
+# functions taking already-measured values precisely so each branch can be tested directly:
+# a verdict sentence is a claim about how much a check proves, which is exactly as unverified
+# as a claim about data and inherits credibility from the measured material beside it.
+
+
+def compose_retention_rule(extract_statuses: list[int]) -> dict:
+    """Ruling D-B: this script's raw-retention rule, restated inside the artifact that the rule
+    shaped, with its counters derived from the run rather than typed."""
+    return {
+        "rule": (
+            "This script writes and registers a fetched body whenever the endpoint answered at "
+            "all, whatever the HTTP status, and each extract's own http_status records which "
+            "status it carried. On an access-verdict probe the non-200 body IS the evidence: a "
+            "404 page, a 403 page and an empty 200 are three different verdicts and only the "
+            "retained bytes tell them apart. A transport failure produces no body and so "
+            "registers no extract; its evidence is the probe record's outcome field instead. "
+            "Reader's caution: this rule is this script's, and the absence of a non-200 extract "
+            "under another source in this audit is not evidence that no non-200 response "
+            "occurred there."
+        ),
+        "extracts_recorded": len(extract_statuses),
+        "extracts_with_non_200_status": sum(1 for s in extract_statuses if s != 200),
+        "non_200_statuses_recorded": sorted({s for s in extract_statuses if s != 200}),
+    }
+
+
+def compose_fia_access(
+    *,
+    route: str,
+    doc_params_parsed: bool,
+    real_probe_parsed: bool,
+    measure_proved: dict | None,
+    snum_index: dict,
+) -> dict:
+    """The FIA access verdict and the sentence that justifies it.
+
+    Two things are kept apart that the first implementation ran together. Retrieval was proved
+    for exactly one estimate attribute -- the one `snum` selected -- and the response names it,
+    so the reason quotes that name instead of leaving "returns real data" to be read as
+    "returns the measure this project needs". Whether a harvest-origin measure exists at all is
+    a separate question, answered by the `snum` catalog, and `verified` is withheld unless that
+    catalog was read AND lists harvest-removals attributes: a capability nothing this run could
+    read is not a capability this run verified.
+
+    Each branch is a complete, independent sentence. In particular the `documented` branch
+    names which of `doc_params_parsed` / `real_probe_parsed` actually held, rather than
+    asserting both outcomes in one string that only one failure mode makes true."""
+    if not (doc_params_parsed and real_probe_parsed):
+        clauses = [
+            "the /fiadb-api/ documentation page's parameter table parsed"
+            if doc_params_parsed else
+            "the /fiadb-api/ documentation page's parameter table did not parse",
+            "the real-parameter /fullreport probe returned a report with both estimates and "
+            "metadata" if real_probe_parsed else
+            "the real-parameter /fullreport probe did not return a report with both estimates "
+            "and metadata",
+        ]
+        return {"route": route, "status": "documented", "reason": (
+            "Not verified this run: " + "; ".join(clauses)
+            + ". See findings.doc_parameters and findings.probe."
+        )}
+
+    measured = (
+        f"the request sent snum={measure_proved['attribute_nbr']} and the response's own "
+        f'metadata names what came back as "{measure_proved["num_est_desc"]}" -- '
+        f'"{measure_proved["est_meta"]}"'
+        if measure_proved else
+        "the response carried no numEstDesc/estMeta metadata naming the measure it returned, "
+        "so which attribute was retrieved is not established by the response itself"
+    )
+    row_count = snum_index["row_count"]
+    harvest_count = snum_index["harvest_removals_attribute_count"]
+
+    if row_count == 0:
+        return {"route": route, "status": "documented", "reason": (
+            f"The /fullreport route answered with real machine-readable data for one measure "
+            f"({measured}), but the /fullreport/parameters/snum attribute catalog could not be "
+            "read this run, so whether FIA publishes a harvest-origin (removals) estimate "
+            "attribute at all is unestablished here. See findings.probe and "
+            "findings.snum_estimate_attributes."
+        )}
+    if harvest_count == 0:
+        return {"route": route, "status": "documented", "reason": (
+            f"The /fullreport route answered with real machine-readable data for one measure "
+            f"({measured}), but the /fullreport/parameters/snum catalog fetched this run "
+            f"enumerates {row_count} estimate attributes and none of them is a harvest-removals "
+            "attribute, so the harvest-origin measure SS2.2 asks for is not obtainable from "
+            "this endpoint on the evidence gathered here. See "
+            "findings.snum_estimate_attributes."
+        )}
+
+    groups = "; ".join(
+        f"{g['estimate_group']} ({g['attribute_count']} attribute(s), lowest attribute number "
+        f"{g['lowest_attribute_nbr']}, EVAL_TYP {'/'.join(g['eval_typs'])})"
+        for g in snum_index["harvest_removals_groups"]
+    )
+    non_harvest = ", ".join(snum_index["non_harvest_removals_groups"]) or "none"
+    proved_is_harvest = (
+        measure_proved is not None
+        and measure_proved["attribute_nbr"] in snum_index["harvest_removals_attribute_nbrs"]
+    )
+    gap = (
+        "That attribute number is itself one of those harvest-removals attributes, so a "
+        "harvest-removals report is what this run requested and received."
+        if proved_is_harvest else
+        "That attribute number is not one of those harvest-removals attributes: what this run "
+        "proved end to end is retrieval of the one measure named above, while the "
+        "harvest-removals capability rests on the fetched catalog listing those attributes and "
+        "not on a harvest-removals report having been requested and returned."
+    )
+    return {"route": route, "status": "verified", "reason": (
+        f"Verified for retrieval, with the retrieved measure named: {measured}. The "
+        f"/fullreport/parameters/snum catalog fetched this run enumerates {row_count} estimate "
+        f"attributes, of which {harvest_count} sit in harvest-removals estimate groups -- "
+        f"{groups} -- which that same catalog keeps distinct from its non-harvest removals "
+        f"groups ({non_harvest}). {gap} See findings.snum_estimate_attributes."
+    )}
+
+
+def compose_fia_uncovered(
+    *, industry_scan: dict, dc_has_evaluation: bool, wc_row_count: int
+) -> str:
+    """`coverage_span.uncovered` for FIA. The industry-concept claim is interpolated from a
+    zero-hit term scan over this run's own extracts (the same derivation
+    `tpo_mentions_on_fia_doc_page` uses), and the reading drawn from those zeros -- that FIA
+    carries no industry concept to join on at all -- is delimited by the
+    `INFERENCE MARKER, OPENING`/`CLOSING` pair `qcew_identity.absent_state_months_note`
+    established, so the marking's scope ends where the reader can see it end. The D.C. clause
+    is itself measured and therefore sits outside the marker."""
+    industry = ", ".join(
+        f"{term}={count}"
+        for term, count in sorted(industry_scan["industry_classification_terms"].items())
+    )
+    taxonomy = ", ".join(
+        f"{term}={count}"
+        for term, count in sorted(industry_scan["fia_taxonomy_terms"].items())
+    )
+    pages = industry_scan["pages_scanned"]
+    text = (
+        "no monthly resolution: SRC-FOR-004 forbids interpolating to months. Also measured, "
+        f"over the {len(pages)} FIA page(s) this run fetched and hashed "
+        f"({', '.join(pages)}): word-boundary hits for industry-classification terms are "
+        f"{industry}, while hits for the concepts those same pages do use are {taxonomy}. "
+        "INFERENCE MARKER, OPENING: what follows to the closing marker is a reading of those "
+        "counts, not a further measurement; it is supplied by hand, carries no extract hash and "
+        "is re-checked by no later run. Zero industry-term hits across those pages is read here "
+        "as FIA carrying no industry concept to join on at all, so a Logging (113310) slice "
+        "cannot be selected out of FIA the way it is out of QCEW or CBP and Stage 7 would need "
+        "its own crosswalk from FIA's species/product/land-use taxonomy instead; the competing "
+        "reading -- that an industry concept exists elsewhere in the API and merely goes "
+        "unmentioned on the pages this script happens to fetch -- is not excluded by a zero "
+        "count over those pages. INFERENCE MARKER, CLOSING."
+    )
+    if not dc_has_evaluation:
+        text += (
+            " Also measured: no FIA evaluation unit for the District of Columbia -- absent from "
+            f"the {wc_row_count}-row evaluation index fetched this run (states_dc's 51st member "
+            "has no forest inventory)."
+        )
+    return text
+
+
+def compose_cadence_claim(
+    box_navigation: dict, *, window_years: tuple[int, ...], window_start_year: int
+) -> str:
+    """`coverage_span.covered` for TPO. Every clause is computed from `box_navigation` -- what
+    THIS run's own probes found -- rather than typed from the investigation that shaped this
+    script. That investigation happened to land on 2021/Ohio and observed a page-capped listing
+    (20 rendered vs a filesCount of 37); a run's deterministic selection can land on a
+    different year entirely, so a claim written against the investigation's year would be false
+    about the year actually checked."""
+    year_folders = sorted(int(y) for y in box_navigation.get("year_subfolders_found", []))
+    pre_window = [y for y in year_folders if y < window_start_year]
+    window_found = box_navigation.get("window_year_subfolders_found", [])
+    fully_annual = (
+        sorted(int(y) for y in window_found) == list(window_years) if window_found else False
+    )
+    if fully_annual:
+        claim = (
+            "a per-state-year subfolder exists in the NRUM Data Box share for every D1 window "
+            f"year (verified this run: {window_found}); this directly contradicts a blanket "
+            "'TPO is biennial, not annual' claim for the D1 window specifically, though whether "
+            "every individual state resurveys annually (as opposed to the release/folder "
+            "cadence being annual) was not checked"
+        )
+    elif window_found:
+        claim = (
+            f"per-state-year subfolders found for D1 window years {window_found} out of "
+            f"{list(window_years)} (verified this run) -- window coverage by folder is "
+            "incomplete, not annual throughout"
+        )
+    else:
+        claim = "no D1 window year subfolder was found this run"
+    if pre_window and all(y % 2 == 1 for y in pre_window):
+        claim += (
+            f"; pre-{window_start_year} subfolders found only for odd years back to "
+            f"{min(pre_window)} (biennial cadence, verified this run)"
+        )
+    elif pre_window:
+        claim += (
+            f"; pre-{window_start_year} subfolders found for years {pre_window} (not strictly "
+            "biennial, verified this run)"
+        )
+    return claim
+
+
+def compose_pagination_note(box_navigation: dict) -> str:
+    """Whether Box's rendered listing for the probed year matched that folder's own
+    `filesCount`. Three real outcomes, not two: fewer rendered than claimed is a page cap,
+    equal is a match, and MORE rendered than claimed is neither -- the two counts simply
+    disagree, and calling that an exact match (as an `else` after `listed < claimed` does)
+    states an outcome that did not happen. The shared opening clause names both numbers and no
+    outcome, so it is true in every branch it prefixes."""
+    listed = box_navigation.get("files_listed_this_page")
+    claimed = box_navigation.get("filescount_per_box_metadata")
+    year = box_navigation.get("probed_year")
+    if listed is None or claimed is None:
+        return (
+            "the per-year rendered-item-count vs. filesCount comparison was not performed this "
+            "run (year folder listing unavailable)"
+        )
+    if listed == claimed:
+        return (
+            f"for the probed year ({year}), Box's rendered item list returned {listed} files, "
+            f"matching that folder's filesCount metadata ({claimed}) exactly -- no truncation "
+            "observed for this specific year, though only the one year named here was checked "
+            "and a different year could still be page-capped"
+        )
+    opening = (
+        f"for the probed year ({year}), Box's rendered item list returned {listed} files while "
+        f"that folder's own filesCount metadata claims {claimed}"
+    )
+    if listed < claimed:
+        return opening + " -- fewer rendered than claimed, i.e. page-capped for at least this year"
+    return opening + (
+        " -- more rendered than claimed, so the two counts disagree in the opposite direction "
+        "and neither can be taken as this folder's file count without checking which one Box "
+        "means"
+    )
+
+
+def compose_tpo_access(
+    *, route: str, harvest_origin_available: bool, box_navigation: dict, probes: list[dict]
+) -> dict:
+    """The TPO access verdict and the sentence that justifies it.
+
+    `not_obtainable` branches on what actually stopped the run, because the three states are
+    different evidence: no share link in the fetched page (the folder route was never entered),
+    the folder entered but nothing in it matching, and a probed URL that never answered at all.
+    The last is what `classify_probe`'s docstring calls the weakest possible basis for
+    `not_obtainable`, and the sentence says so rather than letting a network failure read as a
+    finding about the source."""
+    transport_failed = [p["url"] for p in probes if p.get("outcome") == "transport_failure"]
+    if harvest_origin_available:
+        sheets = box_navigation.get("sample_file_sheet_names", [])
+        origin = [s for s in sheets if HARVEST_ORIGIN_SHEET_PATTERN.search(s)]
+        receipts = [s for s in sheets if MILL_RECEIPT_SHEET_PATTERN.search(s)]
+        return {"route": route, "status": "verified", "reason": (
+            "Reachable and machine-readable, but only via an undocumented Box legacy-download "
+            "redirect found by reading the share page's own JS bundle, not via the modern share "
+            "URL (a 200 HTML app shell) or its embedded authenticated_download_url (401 without "
+            "a browser session); per-state coverage per year is not exhaustively verified (see "
+            f"coverage_span). Measured in the one workbook fetched this run "
+            f"({box_navigation.get('sample_file')}, from the "
+            f"{box_navigation.get('probed_year')} subfolder): its {len(sheets)} sheet names are "
+            f"{sheets}, of which {origin} match this script's harvest-origin sheet-name pattern "
+            f"and {receipts} match its mill-receipt pattern. INFERENCE MARKER, OPENING: what "
+            "follows to the closing marker is a reading of those sheet names, not a further "
+            "measurement; it is supplied by hand, carries no extract hash and is re-checked by "
+            "no later run. Sheets named that way are read here as meaning the workbook carries "
+            "harvest volumes attributed to the county of harvest in fields distinct from its "
+            "mill-receipt fields, which is what SRC-FOR-001 requires -- rather than the names "
+            "being labels whose cells were never opened and compared, which is what actually "
+            "happened: no cell values were read, and only this one state-year workbook was "
+            "inspected, so whether every state-year workbook in the share shares this sheet "
+            "structure was not checked either. INFERENCE MARKER, CLOSING."
+        )}
+
+    share_url = box_navigation.get("share_url_discovered")
+    clauses = [
+        "no Box share link matching the discovery pattern was present in the fetched NRUM "
+        "data-downloads page markup, so the folder route was never entered"
+        if share_url is None else
+        f"the Box share read out of that page this run ({share_url}) was entered, but no file "
+        "fetched from it was both machine-readable by content type and carrying sheets matching "
+        "the harvest-origin and mill-receipt patterns on inspection"
+    ]
+    if transport_failed:
+        clauses.append(
+            f"{len(transport_failed)} probed URL(s) returned no response at all "
+            f"(transport_failure: {transport_failed}), so for those URLs this verdict rests on "
+            "the absence of any answer rather than on an answer showing the data is absent -- "
+            "the weakest basis this script records for not_obtainable, and one a re-run could "
+            "overturn without anything at the source having changed"
+        )
+    return {"route": route, "status": "not_obtainable", "reason": (
+        "Not obtained this run: " + "; ".join(clauses)
+        + ". See findings.route_probes and findings.box_navigation."
+    )}
+
+
 # --- main -------------------------------------------------------------------------------------
 
 
 def run_fia(client: httpx.Client) -> None:
-    extracts = []
+    extracts: list = []
+    # Page texts scanned for classification terms further down. Keyed by the extract filename
+    # each was written to, so the scan's own record names hashed artifacts a reader can re-grep,
+    # not "some pages".
+    scanned_pages: dict[str, str] = {}
 
     doc = probe_url(client, FIA_DOC)
     doc_params: list[dict] = []
     tpo_mentions_on_doc_page = None
+    retain_body(extracts, SOURCE_FIA, doc, "fiadb_api_doc.html")
     if doc["http_status"] == 200:
-        extracts.append(c.record_extract(
-            SOURCE_FIA, FIA_DOC, "fiadb_api_doc.html", doc["body"], http_status=200))
         doc_text = doc["body"].decode("utf-8", "replace")
+        scanned_pages["fiadb_api_doc.html"] = doc_text
         doc_params = parse_fia_doc_parameters(doc_text)
         # Checked here, in scope of this run's own fetch, rather than transcribed from the
         # dispatch's claim that the doc page never mentions TPO.
@@ -5892,30 +6417,42 @@ def run_fia(client: httpx.Client) -> None:
 
     wc_index = {"states": [], "year_min": None, "year_max": None, "row_count": 0}
     wc_resp = probe_url(client, FIA_WC_PARAMETERS)
+    retain_body(extracts, SOURCE_FIA, wc_resp, "wc_evaluation_index.html")
     if wc_resp["http_status"] == 200:
-        extracts.append(c.record_extract(
-            SOURCE_FIA, FIA_WC_PARAMETERS, "wc_evaluation_index.html", wc_resp["body"],
-            http_status=200))
-        wc_index = parse_wc_evaluation_index(wc_resp["body"].decode("utf-8", "replace"))
+        wc_text = wc_resp["body"].decode("utf-8", "replace")
+        scanned_pages["wc_evaluation_index.html"] = wc_text
+        wc_index = parse_wc_evaluation_index(wc_text)
+
+    # Ruling D-A: enumerate the estimate attributes /fullreport can return, so the verdict can
+    # say whether a harvest-origin measure exists rather than only that the endpoint answers.
+    # Seeded with the parser's own empty-result shape (not a hand-written literal that could
+    # drift from it) so a non-200 snum page still leaves every key present and zeroed.
+    snum_index = parse_snum_estimate_attributes("")
+    snum_resp = probe_url(client, FIA_SNUM_PARAMETERS)
+    retain_body(extracts, SOURCE_FIA, snum_resp, "snum_estimate_attributes.html")
+    if snum_resp["http_status"] == 200:
+        snum_text = snum_resp["body"].decode("utf-8", "replace")
+        scanned_pages["snum_estimate_attributes.html"] = snum_text
+        snum_index = parse_snum_estimate_attributes(snum_text)
 
     naive_probe = probe_url(client, FIA_FULLREPORT, params=FIA_NAIVE_PARAMS)
     naive_is_error_page = (
         naive_probe["http_status"] == 200
         and b"Error Type" in naive_probe["body"]
     )
-    if naive_probe["http_status"] == 200 and naive_probe["body"]:
-        extracts.append(c.record_extract(
-            SOURCE_FIA, FIA_FULLREPORT, "fullreport_naive_probe.html", naive_probe["body"],
-            http_status=200))
+    retain_body(extracts, SOURCE_FIA, naive_probe, "fullreport_naive_probe.html")
+    if naive_probe["http_status"] == 200:
+        scanned_pages["fullreport_naive_probe.html"] = naive_probe["body"].decode(
+            "utf-8", "replace")
 
     real_probe = probe_url(client, FIA_FULLREPORT, params=FIA_REAL_PARAMS)
     estimates: list[dict] = []
     metadata: dict = {}
     real_probe_parsed = False
+    retain_body(extracts, SOURCE_FIA, real_probe, "fullreport_real_probe.json")
     if real_probe["http_status"] == 200 and real_probe["body"]:
-        extracts.append(c.record_extract(
-            SOURCE_FIA, FIA_FULLREPORT, "fullreport_real_probe.json", real_probe["body"],
-            http_status=200))
+        scanned_pages["fullreport_real_probe.json"] = real_probe["body"].decode(
+            "utf-8", "replace")
         try:
             parsed = json.loads(real_probe["body"])
             estimates = parsed.get("estimates", [])
@@ -5926,6 +6463,7 @@ def run_fia(client: httpx.Client) -> None:
 
     se_field = sampling_error_field(estimates)
     ev_field = evaluation_vintage_field(metadata)
+    measure_proved = proved_estimate_measure(metadata)
 
     datamart_probes = [
         probe_with_retries(
@@ -5933,15 +6471,22 @@ def run_fia(client: httpx.Client) -> None:
             wait_seconds=FIA_DATAMART_WAIT_SECONDS)
         for url in FIA_DATAMART_CANDIDATES
     ]
+    # `probe_url`, not `_common.probe`: these two routes answer with a real status, and one of
+    # them answers 403 with a body that is itself the evidence of *how* it is closed (ruling
+    # D-B). `_common.probe` discards bodies by construction, so it cannot retain that.
     other_route_probes = []
-    for url in FIA_OTHER_ROUTES:
-        status, nbytes = c.probe(client, url)
-        other_route_probes.append({
-            "url": url, "http_status": status, "bytes": nbytes,
-            "outcome": classify_probe(status, nbytes),
-        })
+    for i, url in enumerate(FIA_OTHER_ROUTES):
+        res = probe_url(client, url)
+        retain_body(extracts, SOURCE_FIA, res, f"other_route_{i}.bin")
+        other_route_probes.append(probe_record(res, "dispatch lead table"))
 
-    fia_verified = real_probe_parsed and bool(doc_params)
+    industry_scan = {
+        "pages_scanned": sorted(scanned_pages),
+        "bytes_scanned": sum(len(t) for t in scanned_pages.values()),
+        "industry_classification_terms": count_term_hits(
+            scanned_pages, INDUSTRY_CLASSIFICATION_TERMS),
+        "fia_taxonomy_terms": count_term_hits(scanned_pages, FIA_TAXONOMY_TERMS),
+    }
     # Derived from this run's own fetched evaluation index, not transcribed from the dispatch
     # (which never made this claim) or from memory of the QCEW states_dc finding (a different
     # source, established in an earlier task): does FIA even have a state-level evaluation
@@ -5953,8 +6498,8 @@ def run_fia(client: httpx.Client) -> None:
         coverage_span={
             # Derived from the fetched /fullreport/parameters/wc evaluation index (this run),
             # not typed: the program-wide span across every state/territory FIA evaluates --
-            # not scoped to Logging, since FIA has no NAICS/industry concept at all (it is
-            # species/product/land-use based; see findings.fia_has_no_industry_concept).
+            # not scoped to Logging, for the reason `uncovered` states and
+            # findings.industry_concept_scan measures.
             "published_start": str(wc_index["year_min"]) if wc_index["year_min"] else "",
             "published_end": str(wc_index["year_max"]) if wc_index["year_max"] else "",
             "window_start": c.WINDOW_START, "window_end": c.WINDOW_END,
@@ -5962,39 +6507,35 @@ def run_fia(client: httpx.Client) -> None:
                 "inventory evaluation cycles overlapping D1's reference years, not calendar "
                 "months or a Logging-specific series"
             ),
-            "uncovered": (
-                "no monthly resolution: SRC-FOR-004 forbids interpolating to months; no "
-                "NAICS/industry concept -- FIA reports by species group, product, and land "
-                "use, not by industry code" + (
-                    ""
-                    if dc_has_fia_evaluation else
-                    "; no FIA evaluation unit for the District of Columbia -- absent from "
-                    f"the {wc_index['row_count']}-row evaluation index fetched this run "
-                    "(states_dc's 51st member has no forest inventory)"
-                )
+            "uncovered": compose_fia_uncovered(
+                industry_scan=industry_scan,
+                dc_has_evaluation=dc_has_fia_evaluation,
+                wc_row_count=wc_index["row_count"],
             ),
         },
-        access={
-            "route": FIA_FULLREPORT,
-            "status": "verified" if fia_verified else "documented",
-            "reason": (
-                None if fia_verified else
-                "documentation page reachable and its parameter table parsed, but the "
-                "real-parameter /fullreport probe did not return a parsable report with "
-                "estimates and metadata; see findings.probe"
-            ),
-        },
+        access=compose_fia_access(
+            route=FIA_FULLREPORT,
+            doc_params_parsed=bool(doc_params),
+            real_probe_parsed=real_probe_parsed,
+            measure_proved=measure_proved,
+            snum_index=snum_index,
+        ),
         extracts=extracts,
         findings={
             "doc_parameters": doc_params,
             "tpo_mentions_on_fia_doc_page": tpo_mentions_on_doc_page,
             "evaluation_vintage_index": wc_index,
+            "snum_estimate_attributes": snum_index,
+            "measure_proved_by_probe": measure_proved,
+            "industry_concept_scan": industry_scan,
+            "raw_retention_rule": compose_retention_rule([e.http_status for e in extracts]),
             "probe_naive_missing_required_params": {
                 "url": FIA_FULLREPORT,
                 "params_sent": FIA_NAIVE_PARAMS,
                 "http_status": naive_probe["http_status"],
                 "bytes": naive_probe["bytes"],
                 "content_type": naive_probe["content_type"],
+                "outcome": classify_probe(naive_probe["http_status"], naive_probe["bytes"]),
                 "is_evalidator_error_page": naive_is_error_page,
                 "note": (
                     "the brief's illustrative probe -- omits every parameter the doc page "
@@ -6009,6 +6550,7 @@ def run_fia(client: httpx.Client) -> None:
                 "http_status": real_probe["http_status"],
                 "bytes": real_probe["bytes"],
                 "content_type": real_probe["content_type"],
+                "outcome": classify_probe(real_probe["http_status"], real_probe["bytes"]),
                 "has_sampling_error": se_field is not None,
                 "parsed_as_report_with_estimates_and_metadata": real_probe_parsed,
             },
@@ -6027,32 +6569,20 @@ def run_tpo(client: httpx.Client) -> None:
 
     for url in TPO_CANDIDATES:
         res = probe_url(client, url)
-        machine = is_machine_readable(res["content_type"])
-        if res["http_status"] == 200 and res["body"]:
-            extracts.append(c.record_extract(
-                SOURCE_TPO, url, f"candidate_{TPO_CANDIDATES.index(url)}.bin", res["body"],
-                http_status=200))
-        probes.append({
-            "url": url, "http_status": res["http_status"], "bytes": res["bytes"],
-            "content_type": res["content_type"], "machine_readable": machine,
-            "origin": "brief",
-        })
+        # Retained whatever the status (ruling D-B): one of these three candidates 404s, and
+        # its 4 KB body is what distinguishes "this API path is not published" from "published
+        # but empty" -- a distinction a discarded body cannot support.
+        retain_body(extracts, SOURCE_TPO, res, f"candidate_{TPO_CANDIDATES.index(url)}.bin")
+        probes.append(probe_record(res, "brief"))
 
     nrum_downloads_url = TPO_DISCOVERED_ROUTES[1]
     nrum_downloads_body = b""
     for i, url in enumerate(TPO_DISCOVERED_ROUTES):
         res = probe_url(client, url)
-        machine = is_machine_readable(res["content_type"])
         if url == nrum_downloads_url:
             nrum_downloads_body = res["body"]
-        if res["http_status"] == 200 and res["body"]:
-            extracts.append(c.record_extract(
-                SOURCE_TPO, url, f"discovered_{i}.bin", res["body"], http_status=200))
-        probes.append({
-            "url": url, "http_status": res["http_status"], "bytes": res["bytes"],
-            "content_type": res["content_type"], "machine_readable": machine,
-            "origin": "discovered (linked from a brief candidate page)",
-        })
+        retain_body(extracts, SOURCE_TPO, res, f"discovered_{i}.bin")
+        probes.append(probe_record(res, "discovered (linked from a brief candidate page)"))
 
     # Not hardcoded: read from the NRUM data-downloads page this run actually fetched above.
     box_share_url = discover_box_share_url(nrum_downloads_body.decode("utf-8", "replace"))
@@ -6060,19 +6590,12 @@ def run_tpo(client: httpx.Client) -> None:
     chosen: str | None = None
     harvest_origin_available = False
     box_navigation: dict = {"share_url_discovered": box_share_url}
-    box_base = {"http_status": 0, "bytes": 0, "content_type": "", "body": b""}
+    box_base = {"url": "", "http_status": 0, "bytes": 0, "content_type": "", "body": b""}
     if box_share_url is not None:
         box_base = probe_url(client, box_share_url)
-        if box_base["http_status"] == 200 and box_base["body"]:
-            extracts.append(c.record_extract(
-                SOURCE_TPO, box_share_url, "box_nrum_data_folder.html", box_base["body"],
-                http_status=200))
-        probes.append({
-            "url": box_share_url, "http_status": box_base["http_status"],
-            "bytes": box_base["bytes"], "content_type": box_base["content_type"],
-            "machine_readable": is_machine_readable(box_base["content_type"]),
-            "origin": "discovered (linked from the NRUM data-downloads page)",
-        })
+        retain_body(extracts, SOURCE_TPO, box_base, "box_nrum_data_folder.html")
+        probes.append(probe_record(
+            box_base, "discovered (linked from the NRUM data-downloads page)"))
     if box_base["http_status"] == 200 and box_base["body"]:
         try:
             root_folder = box_shared_folder_items(box_base["body"].decode("utf-8", "replace"))
@@ -6093,16 +6616,10 @@ def run_tpo(client: httpx.Client) -> None:
         if target is not None:
             year_folder_url = f"{box_share_url}/folder/{target['id']}"
             year_resp = probe_url(client, year_folder_url)
-            if year_resp["http_status"] == 200 and year_resp["body"]:
-                extracts.append(c.record_extract(
-                    SOURCE_TPO, year_folder_url, f"box_{target['name']}_folder.html",
-                    year_resp["body"], http_status=200))
-            probes.append({
-                "url": year_folder_url, "http_status": year_resp["http_status"],
-                "bytes": year_resp["bytes"], "content_type": year_resp["content_type"],
-                "machine_readable": is_machine_readable(year_resp["content_type"]),
-                "origin": f"discovered (Box subfolder for {target['name']})",
-            })
+            retain_body(
+                extracts, SOURCE_TPO, year_resp, f"box_{target['name']}_folder.html")
+            probes.append(probe_record(
+                year_resp, f"discovered (Box subfolder for {target['name']})"))
             box_navigation["probed_year"] = target["name"]
             if year_resp["http_status"] == 200 and year_resp["body"]:
                 try:
@@ -6119,102 +6636,40 @@ def run_tpo(client: httpx.Client) -> None:
                     shared_name = box_share_url.rsplit("/s/", 1)[1]
                     file_url = box_legacy_download_url(shared_name, chosen_file["id"])
                     file_resp = probe_url(client, file_url)
-                    if file_resp["http_status"] == 200 and file_resp["body"]:
-                        rec = c.record_extract(
-                            SOURCE_TPO, file_url,
-                            f"tpo_sample_{target['name']}_{chosen_file['name']}",
-                            file_resp["body"], http_status=200)
-                        extracts.append(rec)
-                        machine = is_machine_readable(file_resp["content_type"])
-                        probes.append({
-                            "url": file_url, "http_status": file_resp["http_status"],
-                            "bytes": file_resp["bytes"],
-                            "content_type": file_resp["content_type"],
-                            "machine_readable": machine,
-                            "origin": (
-                                f"discovered (Box legacy download of {chosen_file['name']})"
-                            ),
-                        })
-                        if machine:
-                            try:
-                                inspected = inspect_xlsx(file_resp["body"])
-                                harvest_origin_available = (
-                                    distinguishes_harvest_origin_from_mill_receipts(
-                                        inspected["sheet_names"]))
-                                box_navigation["sample_file"] = chosen_file["name"]
-                                box_navigation["sample_file_sheet_names"] = (
-                                    inspected["sheet_names"])
-                                box_navigation["sample_file_first_sheet_headers"] = (
-                                    inspected["first_sheet_headers"])
-                                if chosen is None:
-                                    chosen = file_url
-                            except (zipfile.BadZipFile, KeyError) as exc:
-                                box_navigation["sample_file_inspection_error"] = str(exc)
+                    retain_body(
+                        extracts, SOURCE_TPO, file_resp,
+                        f"tpo_sample_{target['name']}_{chosen_file['name']}")
+                    probes.append(probe_record(
+                        file_resp,
+                        f"discovered (Box legacy download of {chosen_file['name']})"))
+                    if answered_with_body(file_resp) and is_machine_readable(
+                            file_resp["content_type"]):
+                        try:
+                            inspected = inspect_xlsx(file_resp["body"])
+                            harvest_origin_available = (
+                                distinguishes_harvest_origin_from_mill_receipts(
+                                    inspected["sheet_names"]))
+                            box_navigation["sample_file"] = chosen_file["name"]
+                            box_navigation["sample_file_sheet_names"] = (
+                                inspected["sheet_names"])
+                            box_navigation["sample_file_first_sheet_headers"] = (
+                                inspected["first_sheet_headers"])
+                            if chosen is None:
+                                chosen = file_url
+                        except (zipfile.BadZipFile, KeyError) as exc:
+                            box_navigation["sample_file_inspection_error"] = str(exc)
 
-    # Every clause below is computed from box_navigation -- what THIS run's own probes found --
-    # rather than typed from the investigation that shaped this script. That investigation
-    # happened to land on 2021/Ohio and observed a page-capped listing (20 rendered vs a
-    # filesCount of 37); this run's deterministic selection (`select_latest_window_year_folder`)
-    # instead landed on 2024/Alabama, where the rendered count matched filesCount exactly. A
-    # hardcoded claim written against the investigation's year would have been false about the
-    # year this run actually checked -- so every number below is read back from box_navigation.
+    # Both sentences below are composed by pure functions from box_navigation -- what THIS run's
+    # own probes found -- rather than typed from the investigation that shaped this script.
+    # That investigation happened to land on 2021/Ohio and observed a page-capped listing (20
+    # rendered vs a filesCount of 37), while a run's deterministic selection
+    # (`select_latest_window_year_folder`) can land on a different year entirely, so a hardcoded
+    # claim written against the investigation's year would be false about the year actually
+    # checked. Composing them out of line is also what makes each branch directly testable.
     year_folders_int = sorted(int(y) for y in box_navigation.get("year_subfolders_found", []))
-    pre_window_years = [y for y in year_folders_int if y < int(c.WINDOW_START[:4])]
-    pre_window_all_odd = bool(pre_window_years) and all(y % 2 == 1 for y in pre_window_years)
-    window_years_found = box_navigation.get("window_year_subfolders_found", [])
-    window_fully_annual = (
-        sorted(int(y) for y in window_years_found) == list(WINDOW_YEARS)
-        if window_years_found else False
-    )
-
-    if window_fully_annual:
-        cadence_claim = (
-            "a per-state-year subfolder exists in the NRUM Data Box share for every D1 "
-            f"window year (verified this run: {window_years_found}); this directly "
-            "contradicts a blanket 'TPO is biennial, not annual' claim for the D1 window "
-            "specifically, though whether every individual state resurveys annually (as "
-            "opposed to the release/folder cadence being annual) was not checked"
-        )
-    elif window_years_found:
-        cadence_claim = (
-            f"per-state-year subfolders found for D1 window years {window_years_found} "
-            f"out of {list(WINDOW_YEARS)} (verified this run) -- window coverage by folder "
-            "is incomplete, not annual throughout"
-        )
-    else:
-        cadence_claim = "no D1 window year subfolder was found this run"
-    if pre_window_all_odd:
-        cadence_claim += (
-            f"; pre-{c.WINDOW_START[:4]} subfolders found only for odd years back to "
-            f"{min(pre_window_years)} (biennial cadence, verified this run)"
-        )
-    elif pre_window_years:
-        cadence_claim += (
-            f"; pre-{c.WINDOW_START[:4]} subfolders found for years {pre_window_years} "
-            "(not strictly biennial, verified this run)"
-        )
-
-    listed = box_navigation.get("files_listed_this_page")
-    claimed = box_navigation.get("filescount_per_box_metadata")
-    probed_year = box_navigation.get("probed_year")
-    if listed is None or claimed is None:
-        pagination_note = (
-            "the per-year rendered-item-count vs. filesCount comparison was not performed "
-            "this run (year folder listing unavailable)"
-        )
-    elif listed < claimed:
-        pagination_note = (
-            f"for the probed year ({probed_year}), Box's rendered item list returned "
-            f"{listed} files while that folder's own filesCount metadata claims {claimed} "
-            "-- confirmed page-capped for at least this year"
-        )
-    else:
-        pagination_note = (
-            f"for the probed year ({probed_year}), Box's rendered item list returned "
-            f"{listed} files, matching that folder's filesCount metadata ({claimed}) exactly "
-            "-- no truncation observed for this specific year, though only one of the eight "
-            "window years was checked and a different year could still be page-capped"
-        )
+    cadence_claim = compose_cadence_claim(
+        box_navigation, window_years=WINDOW_YEARS, window_start_year=int(c.WINDOW_START[:4]))
+    pagination_note = compose_pagination_note(box_navigation)
 
     c.write_summary(
         SOURCE_TPO,
@@ -6231,32 +6686,23 @@ def run_tpo(client: httpx.Client) -> None:
                 "every window year, out of scope for an access verdict"
             ),
         },
-        access={
-            "route": (
+        access=compose_tpo_access(
+            route=(
                 f"{nrum_downloads_url} -> {box_share_url} -> "
                 f"{box_share_url}/folder/<year-subfolder-id> -> "
                 f"{BOX_LEGACY_DOWNLOAD_BASE}?rm=box_download_shared_file&...&file_id=f_<id>"
             ),
-            "status": "verified" if harvest_origin_available else "not_obtainable",
-            "reason": (
-                (
-                    "reachable and machine-readable, but only via an undocumented Box "
-                    "legacy-download redirect discovered by reading the share page's JS "
-                    "bundle, not the modern share URL (200 HTML app shell) or its embedded "
-                    "authenticated_download_url (401 without a browser session); per-state "
-                    "coverage per year is not exhaustively verified (see coverage_span)"
-                ) if harvest_origin_available else
-                "no probed route -- including the Box folder discovered this run -- yielded "
-                "a machine-readable file whose sheets distinguish harvest origin from mill "
-                "receipts; see findings.route_probes and findings.box_navigation"
-            ),
-        },
+            harvest_origin_available=harvest_origin_available,
+            box_navigation=box_navigation,
+            probes=probes,
+        ),
         extracts=extracts,
         findings={
             "route_probes": probes,
             "harvest_origin_available": harvest_origin_available,
             "chosen_route": chosen,
             "box_navigation": box_navigation,
+            "raw_retention_rule": compose_retention_rule([e.http_status for e in extracts]),
         },
     )
 
@@ -6267,10 +6713,17 @@ def main() -> None:
     run_tpo(client)
     fia_summary = c.load_summary(SOURCE_FIA)
     tpo_summary = c.load_summary(SOURCE_TPO)
+    snum = fia_summary["findings"]["snum_estimate_attributes"]
+    measure = fia_summary["findings"]["measure_proved_by_probe"] or {}
     print(
         "FIA:", fia_summary["access"]["status"],
         "| sampling error field:", fia_summary["findings"]["sampling_error_field"],
         "| evaluation vintage field:", fia_summary["findings"]["evaluation_vintage_field"],
+    )
+    print(
+        "FIA measure proved:", measure.get("num_est_desc"),
+        "| snum attributes catalogued:", snum["row_count"],
+        "| of them harvest-removals:", snum["harvest_removals_attribute_count"],
     )
     print(
         "TPO:", tpo_summary["access"]["status"],
