@@ -130,9 +130,18 @@ def near_miss_states(
 
 def broader_code_note(excluded: list[dict], near_miss: list[dict]) -> str:
     """Computed sentence for `findings.notes`, stating what the precise title match excluded
-    and, where relevant, which states that kept out of a coarser classification — so a future
-    run against a renamed or retired code describes itself instead of repeating this run's
-    'Mining, Logging and Construction' finding. The level a looser match would have assigned
+    and, where relevant, which sm.state codes that kept out of a coarser classification — so a
+    future run against a renamed or retired code describes itself instead of repeating this
+    run's 'Mining, Logging and Construction' finding.
+
+    "sm.state codes", not "States", in the composed sentence: the codes come from the fetched
+    sm.state file, whose universe is wider than D1's `states_dc` — it also carries 00 (All
+    States), 72 (Puerto Rico), 78 (Virgin Islands) and 99 (All MSAs), as `main`'s
+    `denominator_note` records a few hundred characters earlier in the same `notes` string.
+    Calling all of them states contradicted that sentence and promoted a territory to
+    statehood in a tracked deliverable. This function is handed no name map, so the codes are
+    rendered bare rather than with their fetched titles; `non_state_codes` in the same summary
+    is where a reader resolves the non-state ones. The level a looser match would have assigned
     is derived from `level_of` on each excluded code, never typed as 'supersector' — a future
     excluded code that embeds e.g. NAICS 1131 would resolve to 'other', not 'supersector', and
     this sentence must say so instead of repeating today's wording."""
@@ -157,7 +166,7 @@ def broader_code_note(excluded: list[dict], near_miss: list[dict]) -> str:
     return (
         "Excluded from the target industry codes because their titles merely mention "
         f"'logging' without being embedded-NAICS-113-prefixed or exactly titled 'Mining and "
-        f"Logging': {codes}. States {states} publish a D1-window-overlapping statewide "
+        f"Logging': {codes}. sm.state codes {states} publish a D1-window-overlapping statewide "
         "all-employees series only at one of these excluded codes — an unanchored substring "
         f"match on 'logging' would have promoted them from 'none' to {level_phrase!r}, which "
         "is not what the fetched sm.industry file actually supports for them."
