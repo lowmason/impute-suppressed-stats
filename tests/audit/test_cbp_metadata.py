@@ -48,10 +48,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import httpx
-
 import _common
 import cbp_metadata as m
+import httpx
 
 MISSING_KEY_PREFIX = (
     b'<html style="font-size: 14px;">\n\n<head>\n    <title>Missing Key</title>\n'
@@ -543,6 +542,18 @@ def test_common_module_is_importable_alongside_cbp_metadata():
     ever breaks, every other test in this file would fail for an unrelated reason and be
     confusing to debug."""
     assert _common.INDUSTRY_CODE == "113310"
+
+
+def test_classify_data_body_is_case_insensitive_on_the_content_type():
+    """Media types are case-insensitive (RFC 9110 8.3.1), and Census could legally answer
+    `application/JSON`. The check was `"json" not in content_type`, so that spelling fell to
+    the HTML branch, where a real tabular answer -- carrying no `<title>` -- came back
+    `non_json_error`: a successful pull read as a source failure. `forest_sources`'s
+    `is_machine_readable` already lowercased; this did not."""
+    for spelling in ("application/JSON", "APPLICATION/JSON;CHARSET=UTF-8", "Application/Json"):
+        status, payload = m.classify_data_body(spelling, TABULAR_BODY)
+        assert status == "ok", spelling
+        assert payload[0][0] == "NAME"
 
 
 # --- manifest hygiene: cfe0c1f's two orphan-file failure modes ----------------------------------

@@ -147,7 +147,7 @@ def classify_data_body(content_type: str, body: bytes) -> tuple[str, list | None
                                     parses to something other than a non-empty list of lists
                                     (e.g. a dict, an empty list, a list of scalars).
     """
-    if "json" not in content_type:
+    if "json" not in content_type.lower():
         title = html_title(body)
         if title == "invalid key":
             return "invalid_key", None

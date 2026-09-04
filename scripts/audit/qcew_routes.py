@@ -27,6 +27,64 @@ def read_csv_bytes(content: bytes) -> pl.DataFrame:
     return pl.read_csv(io.BytesIO(content), infer_schema_length=0)
 
 
+def column_parity(
+    slice_headers: dict[str, list[str]],
+    bulk_headers: dict[int, list[str]],
+    *,
+    reference_bulk_year: int,
+) -> dict:
+    """The `column_parity` finding, over every header this run actually read.
+
+    Both sides must reduce to one header to be compared at all, and neither reduction is safe
+    on its own. `to_fetch` carries more than one year on the normal D5 path (bulk_years_required
+    non-empty), not just the single-year fallback this run took, and the slice side spans every
+    served window quarter. So each side's agreement is checked before it is reduced, and a
+    disagreement is recorded as the bulk- or slice-side schema-drift finding it is rather than
+    picked around.
+
+    `identical` is therefore conjoined with BOTH sides' agreement, not left as the bare
+    `slice_header == bulk_header`. `identical` claims the slice header and the bulk header are
+    the same columns; if either side is not uniform there is no "the" header on that side and
+    the claim is not well-formed, so `False` is the honest answer in both directions. Reduced
+    to one year and one quarter, the bare comparison could read true on a run where
+    `bulk_header_disagreement` or `slice_header_disagreement` beside it was non-empty.
+
+    Conjoined rather than renamed to `identical_to_first_bulk_year`, because this key is read by
+    the exit gate and rendered into the shipped finding document: a rename would force the
+    artifact to be regenerated in order to say exactly what it already says. The conjunction
+    does not -- the shipped run has both disagreement dicts empty, so its `identical` is
+    unchanged (verified by recomputing this function over that run's own extracts).
+
+    `slice_only` and `bulk_only` are left as set differences against the two reference headers.
+    They describe which columns one route carries and the other does not, which is what Stage 1
+    reads them for, with both disagreement dicts beside them.
+    """
+    distinct_bulk_headers = {tuple(h) for h in bulk_headers.values()}
+    bulk_header = bulk_headers[reference_bulk_year]
+    distinct_slice_headers = {tuple(h) for h in slice_headers.values()}
+    # The first key is the earliest window year/quarter the slice route actually served
+    # (extracts accumulate in ascending probe order) — the most defensible single reference,
+    # backed by the consistency check above rather than by an assumption.
+    slice_header = next(iter(slice_headers.values()), [])
+    return {
+        "slice_only": sorted(set(slice_header) - set(bulk_header)),
+        "bulk_only": sorted(set(bulk_header) - set(slice_header)),
+        "identical": (slice_header == bulk_header
+                      and len(distinct_bulk_headers) <= 1
+                      and len(distinct_slice_headers) <= 1),
+        "bulk_header_disagreement": (
+            {}
+            if len(distinct_bulk_headers) <= 1
+            else {str(year): header for year, header in sorted(bulk_headers.items())}
+        ),
+        "slice_header_disagreement": (
+            {}
+            if len(distinct_slice_headers) <= 1
+            else {Path(p).name: header for p, header in sorted(slice_headers.items())}
+        ),
+    }
+
+
 def main() -> None:
     client = c.build_client()
     probe_rows: list[dict] = []
@@ -98,40 +156,13 @@ def main() -> None:
             members[str(year)] = matches[0]
             bulk_headers[year] = read_csv_bytes(zf.read(matches[0])).columns
 
-    # `to_fetch` has more than one year on the normal D5 path (bulk_years_required
-    # non-empty) — not just the single-year fallback this run took. Reassigning one
-    # `bulk_header` per iteration would silently keep only the last year's columns; verify
-    # every fetched year agrees before reducing to one. A disagreement is a bulk-side
-    # schema-drift finding, not a bug, so it is recorded rather than picked around.
-    distinct_bulk_headers = {tuple(h) for h in bulk_headers.values()}
-    bulk_header = bulk_headers[to_fetch[0]]
-
     slice_paths = [e.path for e in extracts if e.path.endswith(".csv")]
     # Check every served window slice's header, not just the first — a mid-window BLS
     # schema change would otherwise go undetected. These files are already on disk: no
     # network cost.
     slice_headers = {p: read_csv_bytes(Path(p).read_bytes()).columns for p in slice_paths}
-    distinct_slice_headers = {tuple(h) for h in slice_headers.values()}
-    # slice_paths[0] is the earliest window year/quarter the slice route actually served
-    # (extracts accumulate in ascending probe order) — the most defensible single
-    # reference, now backed by the consistency check above rather than an assumption.
-    slice_header = slice_headers[slice_paths[0]] if slice_paths else []
 
-    parity = {
-        "slice_only": sorted(set(slice_header) - set(bulk_header)),
-        "bulk_only": sorted(set(bulk_header) - set(slice_header)),
-        "identical": slice_header == bulk_header,
-        "bulk_header_disagreement": (
-            {}
-            if len(distinct_bulk_headers) <= 1
-            else {str(year): header for year, header in sorted(bulk_headers.items())}
-        ),
-        "slice_header_disagreement": (
-            {}
-            if len(distinct_slice_headers) <= 1
-            else {Path(p).name: header for p, header in sorted(slice_headers.items())}
-        ),
-    }
+    parity = column_parity(slice_headers, bulk_headers, reference_bulk_year=to_fetch[0])
 
     # `covered` (Task 1 schema) is the part of D1's window this source covers, not the full
     # probed span — clamp to the window; `served` can include years probed outside it.

@@ -1,6 +1,9 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = ["httpx>=0.27", "polars>=1.0"]
+# # httpx is required at run time even though this script makes no HTTP call of its own:
+# # `import _common as c` imports httpx at module scope. Dropping it from this list
+# # breaks `uv run --no-project`. Not a stale dependency -- do not "clean it up".
 # ///
 """Test the QCEW state/national universe and return the SRC-QCEW-006 branch verdict.
 

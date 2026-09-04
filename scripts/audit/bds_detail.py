@@ -121,7 +121,7 @@ def classify_probe_body(status: int, content_type: str, body: bytes) -> tuple[st
         return "transport_failure", None
     if status == 204:
         return "no_content", None
-    if "json" not in content_type:
+    if "json" not in content_type.lower():
         title = html_title(body)
         if title == "invalid key":
             return "invalid_key", None

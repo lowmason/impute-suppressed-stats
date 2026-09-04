@@ -15,6 +15,6 @@ from pathlib import Path
 
 _AUDIT_SCRIPTS = Path(__file__).resolve().parent.parent / "scripts" / "audit"
 if str(_AUDIT_SCRIPTS) not in sys.path:
-    # append, not insert(0, ...): this directory will eventually hold twelve scripts, and one
+    # append, not insert(0, ...): this directory holds every Stage 0 audit script, and one
     # named after a stdlib module must not shadow it suite-wide.
     sys.path.append(str(_AUDIT_SCRIPTS))

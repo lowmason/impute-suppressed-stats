@@ -384,3 +384,13 @@ def test_compose_retention_rule_states_why_the_204_body_is_retained():
     tells a reader."""
     rule = m.compose_retention_rule([200, 204])
     assert "recorded observation" in rule["rule"]
+
+
+def test_classify_probe_body_is_case_insensitive_on_the_content_type():
+    """Same fix as `cbp_metadata.classify_data_body`, made in both places: media types are
+    case-insensitive (RFC 9110 8.3.1), so `application/JSON` must not fall to the HTML-error
+    branch and be classified `non_json_error` by its absent `<title>`."""
+    for spelling in ("application/JSON", "APPLICATION/JSON;CHARSET=UTF-8", "Application/Json"):
+        outcome, payload = m.classify_probe_body(200, spelling, TABULAR_BODY)
+        assert outcome == "ok", spelling
+        assert payload is not None

@@ -580,7 +580,11 @@ def main() -> None:
     observed_any_emp_n_f = any(
         v.get("emp_n_f_in_response") for v in flag_evidence_by_year.values() if v
     )
-    latest_year = str(max(years_available))
+    # Guarded like `published_start`/`published_end` sixteen lines below, which already write
+    # `"" if not years_available`. An unguarded `max([])` raises ValueError, so on a run where
+    # no window year returned a dataset document this script would die here rather than write
+    # the summary that records exactly that -- the outcome the empty case exists to report.
+    latest_year = str(max(years_available)) if years_available else ""
     latest_defs = var_defs_by_year.get(latest_year) or {}
     emp_n_f_def = latest_defs.get("EMP_N_F")
     caveat = emp_n_f_caveat(

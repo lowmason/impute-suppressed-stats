@@ -13,8 +13,8 @@ Secret-guard scope: the plan's Global Constraints name `record_extract` and `wri
 the no-leaked-key guard, not `download_extract`. `record_extract` scans both `url` and the
 fully-buffered `content`; `download_extract` scans only `url` — its body is streamed to disk in
 fixed-size chunks and never fully buffered, and a correct substring scan across chunk boundaries
-would need a rolling buffer. That's a deliberate boundary for the twelve consumers of this
-module to know about, not an oversight.
+would need a rolling buffer. That's a deliberate boundary for every consumer of this module
+to know about, not an oversight.
 """
 
 from __future__ import annotations
@@ -59,6 +59,21 @@ SECRET_ENV_VARS = ("CENSUS_API_KEY", "BLS_API_KEY", "BEA_API_KEY", "FRED_API_KEY
 ACCESS_STATUSES = ("verified", "documented", "not_obtainable")
 COVERAGE_KEYS = ("published_start", "published_end", "window_start", "window_end",
                  "covered", "uncovered")
+# `window_start`/`window_end` are D1's window, identical in every summary. `published_start`
+# and `published_end` are NOT uniform, and a reader who takes them as always-measured, or as
+# always denominated in years, will be wrong. Across the twelve shipped summaries they carry:
+#   - the source's own publication bounds, derived from what the run actually fetched. This is
+#     the intended reading, and the one most sources use (`qcew_routes` -- the years the slice
+#     route served -- plus `bds`, `ces`, `susb`, `fia`, `tpo`, `cbp_metadata`, `cbp_regime`,
+#     `qcew_identity`, `qcew_panel`).
+#   - D1's window restated, where the source publishes nothing year-indexed to measure:
+#     `qcew_codes`, whose titles files are not year-indexed at all, and `qcew_size`.
+#   - a resolution that varies with the source: bare years ("2017"), quarters ("2017-Q1",
+#     `qcew_size`), or months ("2017-01", `qcew_panel`). There is no declared format.
+# Documented rather than reconciled: each value is prescribed by its own task brief, and
+# changing one would mean re-fetching that source. So the exit gate and Stage 1 should read
+# `published_*` as "the bound this source's brief asked for, in whatever unit it asked for",
+# and use `covered` / `uncovered` -- measured everywhere -- for what a source actually spans.
 
 
 @dataclass(frozen=True)
@@ -151,12 +166,25 @@ def request(
 
 
 def probe(client: httpx.Client, url: str, *, params: dict | None = None) -> tuple[int, int]:
-    """Status and byte count without raising — a 404 is the answer the boundary walk wants.
+    """Status and byte count, without raising on any HTTP status — a 404 is the answer the
+    boundary walk wants.
 
-    Returns the sentinel `(0, 0)` on a transport error (DNS failure, connection refused,
-    timeout: no response at all). Callers must distinguish that from a real status: `(0, 0)`
-    means "network failed"; any other first element means "endpoint answered", including a
-    4xx/5xx, which is itself the finding the boundary walk is looking for."""
+    "Without raising" is about statuses, and about one exception family, not about every
+    failure. `httpx.TransportError` is caught and reported as the sentinel `(0, 0)` (DNS
+    failure, connection refused, timeout: no response at all). Its siblings under
+    `httpx.RequestError` are not caught: `DecodingError` and `TooManyRedirects` are not
+    `TransportError` subclasses and propagate to the caller. That is deliberate. Widening the
+    catch would report a response that did arrive but could not be decoded as `(0, 0)` — as no
+    response at all — collapsing two findings a boundary walk exists to tell apart.
+
+    Callers must likewise distinguish the sentinel from a real status: `(0, 0)` means "network
+    failed"; any other first element means "endpoint answered", including a 4xx/5xx, which is
+    itself the finding the boundary walk is looking for.
+
+    The body is read only to measure it, and is then discarded — nothing is written, and
+    nothing but the length is returned. A caller treating a 200 here as evidence must re-fetch
+    the URL and record the bytes (`record_extract` / `download_extract`); a `(200, n)` from
+    this function vouches for no artifact on disk."""
     try:
         resp = client.get(url, params=params)
     except httpx.TransportError:
@@ -227,7 +255,7 @@ def download_extract(
     signal that the download did not finish. Retries with the same backoff policy as
     `request` (5xx and transport errors back off, 429 counts as transient, any other 4xx
     fails fast). The retry/backoff values match `request`'s defaults but are not parameters
-    here: this signature is frozen for the twelve tasks that call it.
+    here: this signature is frozen across its call sites.
 
     Note: each retry restarts the transfer from byte zero — no `Range`/resume support. That is
     a deliberate scope boundary, not an oversight; partial-content resume is a bigger change

@@ -868,8 +868,11 @@ def compose_fia_uncovered(
     fetched index omits D.C. and when no index was read at all."""
     industry_counts = industry_scan["industry_classification_terms"]
     taxonomy_counts = industry_scan["fia_taxonomy_terms"]
-    industry = ", ".join(f"{t}={c}" for t, c in sorted(industry_counts.items()))
-    taxonomy = ", ".join(f"{t}={c}" for t, c in sorted(taxonomy_counts.items()))
+    # `count`, not `c`: a generator variable named `c` here shadows `import _common as c`
+    # for the width of the comprehension. Harmless while nothing in it touches _common,
+    # and a live trap the moment something does.
+    industry = ", ".join(f"{t}={count}" for t, count in sorted(industry_counts.items()))
+    taxonomy = ", ".join(f"{t}={count}" for t, count in sorted(taxonomy_counts.items()))
     industry_total = sum(industry_counts.values())
     pages = industry_scan["pages_scanned"]
     text = "no monthly resolution: SRC-FOR-004 forbids interpolating to months. "

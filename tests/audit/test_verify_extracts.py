@@ -677,6 +677,16 @@ def test_check_document_fails_e1_e2_and_c_together_when_the_document_is_absent()
     assert {f.criterion for f in failures} == {"E1", "E2", "C"}
 
 
+def test_check_document_fails_the_same_three_criteria_when_the_document_is_empty():
+    """The twin of the case above, and the second defect the criterion report caught. An empty
+    file used to early-return E1 alone, skipping the `REQUIRED_DOC_TEXT` and Appendix A checks
+    that are criterion C's only source of failures -- so `PASS C` was printed for a deliverable
+    with no §1.2 or §21 sections in it. Whitespace-only counts as empty."""
+    failures = m.check_document("   \n", {"industry_code_used": "113310"}, {"qcew": True})
+    assert {f.criterion for f in failures} == {"E1", "E2", "C"}
+    assert all("empty" in f.detail for f in failures)
+
+
 def test_check_document_reports_a_missing_classification_value():
     doc = "# findings\ncannot be implemented without\nGeography universe\nTPO/FIA coverage\n" \
           "Optional state sources\n`qcew`\n"
