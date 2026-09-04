@@ -232,6 +232,41 @@ def test_regime_by_year_non_unknown_years_each_name_their_own_year_in_their_evid
         )
 
 
+# --- _year_set_problems (Finding 2, fix round 4) ----------------------------------------------
+
+
+def test_year_set_problems_flags_years_present_in_both_sets():
+    """Fix round 4: the module-level assert this guards previously checked only coverage (the
+    union of the two sets plus 2017 equals the window), never disjointness. A year present in
+    both YEARS_WITH_WRONG_PRODUCT_RECORD_LAYOUT and YEARS_WITH_NO_RECORD_LAYOUT_AT_ALL would
+    still satisfy that coverage check, yet would let `_no_year_specific_doc_evidence` render its
+    wrong-product clause for a year the no-layout clause simultaneously claims has no file at
+    all -- reproducing round 3's exact self-contradiction ("no file at all for 2020" beside
+    "2020 has one") past a guard written to prevent it. This calls the extracted check function
+    directly with a deliberately overlapping pair (2020 in both) rather than the shipped
+    constants, since the shipped constants are disjoint and could never exercise this branch."""
+    problems = m._year_set_problems((2018, 2020), (2019, 2020, 2021, 2022, 2023))
+    assert problems
+    assert any("2020" in p and "both" in p for p in problems)
+
+
+def test_year_set_problems_flags_incomplete_coverage():
+    """The other property the assert must keep checking: the two sets plus 2017 must still cover
+    every window year but 2024, or `_no_year_specific_doc_evidence` could be called for a year
+    neither set nor the 2017 special-case accounts for."""
+    problems = m._year_set_problems((2018,), (2019, 2021, 2022, 2023))
+    assert problems
+    assert not any("both" in p for p in problems)
+
+
+def test_year_set_problems_empty_for_the_shipped_year_sets():
+    """The actual shipped constants satisfy both properties -- this is what lets the
+    module-level assert pass at import time."""
+    assert m._year_set_problems(
+        m.YEARS_WITH_WRONG_PRODUCT_RECORD_LAYOUT, m.YEARS_WITH_NO_RECORD_LAYOUT_AT_ALL
+    ) == []
+
+
 def test_no_year_specific_doc_evidence_2020_reports_a_wrong_product_file_not_no_file_at_all():
     """Finding 1 (fix round 3): 2020 is one of the two window years (2018, 2020) that DOES have
     a year-labeled record-layout file archived at the Census record-layouts index -- just of the
