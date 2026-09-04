@@ -175,25 +175,61 @@ def validate_regime_entry(year: str, entry: dict, fetched_ok_urls: set[str]) -> 
             )
 
 
+def _and_join(years: "list[int]") -> str:
+    """"2018 and 2020" / "2019, 2021, 2022 and 2023" -- an Oxford-comma-free English list, used
+    only so the two year-sets below can be rendered into prose without a hand-typed string that
+    could drift from the sets themselves."""
+    items = [str(y) for y in years]
+    if len(items) <= 1:
+        return items[0] if items else ""
+    return ", ".join(items[:-1]) + f" and {items[-1]}"
+
+
+# The out-of-band manual verification `_no_year_specific_doc_evidence`'s docstring describes
+# (live GETs against the Census record-layouts naming pattern for every window year, outside
+# this script's own `DOC_URLS` fetch list, not re-run by `main()`), kept as data rather than a
+# year literal buried in an `if` -- so the branch below and the docstring's own three-way
+# distinction (2017: right-product file; 2018/2020: wrong-product file; 2019/2021/2022/2023: no
+# file at all) can never silently drift apart. 2017 is in neither set: it has its own
+# right-product entry in `REGIME_BY_YEAR`, never rendered through this function.
+YEARS_WITH_WRONG_PRODUCT_RECORD_LAYOUT = (2018, 2020)
+YEARS_WITH_NO_RECORD_LAYOUT_AT_ALL = (2019, 2021, 2022, 2023)
+assert (
+    set(YEARS_WITH_WRONG_PRODUCT_RECORD_LAYOUT) | set(YEARS_WITH_NO_RECORD_LAYOUT_AT_ALL) | {2017}
+    == {y for y in c.WINDOW_YEARS if y != 2024}
+), "these two sets plus 2017 must partition every window year _no_year_specific_doc_evidence " \
+   "could ever be called for (every year but 2017 and 2024)"
+
+
 def _no_year_specific_doc_evidence(year: int) -> str:
     """2019, 2020, 2021, 2022 and 2023 share the same documented basis -- not a copy-pasted claim, but
-    the honest state of the evidence: no year-labeled record layout exists for any of them. Two
-    distinct kinds of check back this, named separately so neither is overstated as the other:
-    (a) this script's own `DOC_URLS` fetch list, which carries only one year-specific record
-    layout (2017's, at `LAYOUT_2017_URL`) -- verifiable directly from `documentation_fetched`
-    every run; and (b) additional manual verification performed while authoring this entry
-    (live GETs against the Census record-layouts naming pattern for every window year, outside
-    this script's own fetch list, not re-run by `main()`), which found that 2018 and 2020 also
-    have a year-labeled file but of the wrong product (the state ALL-NAICS-totals layout, not
-    the state-by-NAICS layout this task's own extracts use, so neither corroborates a NAICS-level
-    regime for its own year), and that 2019/2021/2022/2023 have no year-labeled file of either
-    product at all. (b) is not something a future re-run of this script re-verifies -- if Census
-    later archives a 2019-2023 file, this entry would not know until a human checks again. Each
-    entry still names its own year, so this is a per-year rendering rather than one static string
-    assigned to all five -- but the rendered entries are otherwise byte-identical templates, not
-    pairwise distinct prose; only the year-naming is checked (see
+    the honest state of the evidence: no year-labeled record layout of the right product exists
+    for any of them. Two distinct kinds of check back this, named separately so neither is
+    overstated as the other: (a) this script's own `DOC_URLS` fetch list, which carries only one
+    year-specific record layout (2017's, at `LAYOUT_2017_URL`) -- verifiable directly from
+    `documentation_fetched` every run; and (b) additional manual verification performed while
+    authoring this entry (live GETs against the Census record-layouts naming pattern for every
+    window year, outside this script's own fetch list, not re-run by `main()`), which found that
+    2018 and 2020 (`YEARS_WITH_WRONG_PRODUCT_RECORD_LAYOUT`) also have a year-labeled file but of
+    the wrong product (the state ALL-NAICS-totals layout, not the state-by-NAICS layout this
+    task's own extracts use, so neither corroborates a NAICS-level regime for its own year), and
+    that 2019/2021/2022/2023 (`YEARS_WITH_NO_RECORD_LAYOUT_AT_ALL`) have no year-labeled file of
+    either product at all. (b) is not something a future re-run of this script re-verifies -- if
+    Census later archives a 2019-2023 file, this entry would not know until a human checks again.
+    Each entry still names its own year, so this is a per-year rendering rather than one static
+    string assigned to all five -- but the rendered entries are otherwise byte-identical
+    templates for the four years in `YEARS_WITH_NO_RECORD_LAYOUT_AT_ALL`, not pairwise distinct
+    prose; only the year-naming is checked (see
     `test_regime_by_year_non_unknown_years_each_name_their_own_year_in_their_evidence`), and that
     check does not claim more than that.
+
+    Fix round 3: this function previously rendered the same "no year-labeled file ... at all:
+    only 2017, 2018 and 2020 have one" clause for every one of its five callers, including 2020
+    itself -- true for 2019/2021/2022/2023, but self-contradictory when read for 2020, which the
+    same sentence lists as one of the years that has a file. The branch below derives which
+    clause applies to `year` from `YEARS_WITH_WRONG_PRODUCT_RECORD_LAYOUT` /
+    `YEARS_WITH_NO_RECORD_LAYOUT_AT_ALL` rather than special-casing `year == 2020` inline, so the
+    two sets stay the single source of truth for both this function's branch and its docstring.
 
     The methodology.html banner's scope (prospective-only vs. also retracting the 2007-2018
     historical statements this entry rests on) is not itself documented -- the banner draws no
@@ -204,17 +240,35 @@ def _no_year_specific_doc_evidence(year: int) -> str:
     marking's scope ends -- the caveat that this entry is weighted less certainly than 2017's or
     2018's sits outside the marker because it follows from the banner's mere existence, not from
     how its scope is read."""
+    wrong_product_years = _and_join(list(YEARS_WITH_WRONG_PRODUCT_RECORD_LAYOUT))
+    no_layout_years = _and_join(list(YEARS_WITH_NO_RECORD_LAYOUT_AT_ALL))
+    if year in YEARS_WITH_WRONG_PRODUCT_RECORD_LAYOUT:
+        other_wrong_product_years = _and_join(
+            [y for y in YEARS_WITH_WRONG_PRODUCT_RECORD_LAYOUT if y != year])
+        layout_clause = (
+            f"a {year}-labeled record-layout file is archived at the Census record-layouts "
+            "index, but it describes the state ALL-NAICS-totals product rather than the "
+            "state-by-NAICS product this task's own extracts use, so it does not corroborate a "
+            f"NAICS-level regime for {year}. The same is true of {other_wrong_product_years}'s "
+            f"year-labeled file; only 2017 has a year-specific file of the right product; and "
+            f"{no_layout_years} have no year-labeled file of either product at all"
+        )
+    else:
+        layout_clause = (
+            f"unlike 2017, no year-labeled record-layout file for {year} is archived at the "
+            f"Census record-layouts index at all: only 2017, {wrong_product_years} have one, "
+            f"and the {wrong_product_years} files describe the state ALL-NAICS-totals product "
+            "rather than the state-by-NAICS product this task's own extracts use, so neither "
+            "would have corroborated a NAICS-level regime for its own year even if it had been "
+            "in scope"
+        )
     return (
         f"No CBP documentation specific to reference year {year} was found among the routes "
         f"this script's own DOC_URLS fetches (see documentation_fetched -- only 2017 has a "
         "year-specific record-layout URL in that list). Additional manual verification while "
         "authoring this entry (live GETs against the Census record-layouts naming pattern for "
-        f"every window year, outside this script's own fetch list) found that, unlike 2017, no "
-        f"year-labeled record-layout file for {year} is archived at the Census record-layouts "
-        "index at all: only 2017, 2018 and 2020 have one, and the 2018/2020 files describe the "
-        "state ALL-NAICS-totals product rather than the state-by-NAICS product this task's own "
-        "extracts use, so neither would have corroborated a NAICS-level regime for its own year "
-        "even if it had been in scope. This entry therefore rests entirely on methodology.html's "
+        f"every window year, outside this script's own fetch list) found that {layout_clause}. "
+        "This entry therefore rests entirely on methodology.html's "
         "continuing statements -- noise "
         "infusion 'since reference year 2007' and EMPFLAG discontinued 'beginning in reference "
         f"year 2018' -- read forward through {year} with no later documented reversal found. "
