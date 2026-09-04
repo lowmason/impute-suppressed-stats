@@ -4652,38 +4652,92 @@ def broader_code_note(excluded: list[dict], near_miss: list[dict]) -> str:
     )
 
 
+def _month_grain(year: str, period: str) -> str:
+    """"2017", "M01" -> "2017-01" — the same "YYYY-MM" shape as c.WINDOW_START/c.WINDOW_END, so
+    the two compare lexicographically as chronologically. SAE periods observed on the live
+    sm.series file are all "M01".."M12" (two digits after the "M"); a differently-shaped period
+    would produce a string that still sorts sanely against "YYYY-MM" as long as it starts with
+    two digits, and would look visibly wrong in `window_coverage_note`'s output otherwise."""
+    return f"{year}-{period[1:]}"
+
+
 def window_coverage_note(series: pl.DataFrame) -> tuple[bool, str]:
     """Whether every D1-window-overlapping qualifying series actually spans the *entire* D1
-    window (2017-01 to 2024-12), rather than merely overlapping part of it — computed from the
-    latest begin_year and earliest end_year across every row in `series`, not assumed from the
-    overlap filter that built `series` in the first place. A state's series can overlap the
-    window by a single year and still leave most of D1 unmeasured; this is what actually backs
-    the `coverage_span.covered` claim, which used to assert full coverage as a typed string."""
+    window (2017-01 through 2024-12) at MONTH grain — reading begin_period/end_period
+    (sm.series columns 11 and 13), not just begin_year/end_year. `qualifying_series` selects on
+    year-level overlap only; a series with begin_year=2017, begin_period='M06' would pass that
+    filter while not actually covering January 2017. This is what actually backs the persisted
+    `coverage_span.covered` claim — a year-grain check here would itself be an unverified claim
+    about how much it proves, wearing the same 'verified' framing as the parts that really are."""
     if series.height == 0:
         return False, "no qualifying series exist to check window coverage against"
-    begin_years = series["begin_year"].cast(pl.Int32)
-    end_years = series["end_year"].cast(pl.Int32)
-    latest_begin, earliest_end = begin_years.max(), end_years.min()
-    fully_covered = (
-        latest_begin <= min(c.WINDOW_YEARS) and earliest_end >= max(c.WINDOW_YEARS)
-    )
+    rows = series.select("series_id", "begin_year", "begin_period", "end_year",
+                         "end_period").to_dicts()
+    for row in rows:
+        row["start_month"] = _month_grain(row["begin_year"], row["begin_period"])
+        row["end_month"] = _month_grain(row["end_year"], row["end_period"])
+    latest_start = max(row["start_month"] for row in rows)
+    earliest_end = min(row["end_month"] for row in rows)
+    fully_covered = latest_start <= c.WINDOW_START and earliest_end >= c.WINDOW_END
     if fully_covered:
         return True, (
-            f"every one of the {series.height} qualifying series begins at or before "
-            f"{min(c.WINDOW_YEARS)} (latest begin_year observed: {latest_begin}) and ends at "
-            f"or after {max(c.WINDOW_YEARS)} (earliest end_year observed: {earliest_end}), so "
-            f"the full D1 window {c.WINDOW_START}-{c.WINDOW_END} is covered wherever a "
-            "qualifying series exists, not merely overlapped"
+            f"every one of the {len(rows)} qualifying series begins at or before "
+            f"{c.WINDOW_START} (latest start observed, at month grain via begin_year/"
+            f"begin_period: {latest_start}) and ends at or after {c.WINDOW_END} (earliest end "
+            f"observed, via end_year/end_period: {earliest_end}), so the full D1 window "
+            f"{c.WINDOW_START}-{c.WINDOW_END} is covered wherever a qualifying series exists, "
+            "verified at month grain, not merely at the year-level overlap qualifying_series "
+            "filters on"
         )
-    partial = series.filter(
-        (pl.col("begin_year").cast(pl.Int32) > min(c.WINDOW_YEARS))
-        | (pl.col("end_year").cast(pl.Int32) < max(c.WINDOW_YEARS))
-    )
-    names = ", ".join(sorted(set(partial["series_id"].to_list())))
+    names = ", ".join(sorted(
+        row["series_id"] for row in rows
+        if row["start_month"] > c.WINDOW_START or row["end_month"] < c.WINDOW_END
+    ))
     return False, (
         f"at least one qualifying series only partially overlaps the D1 window "
-        f"{c.WINDOW_START}-{c.WINDOW_END} rather than fully covering it: {names}"
+        f"{c.WINDOW_START}-{c.WINDOW_END} at month grain (begin_year/begin_period, end_year/"
+        f"end_period), even though it passed qualifying_series' year-level overlap filter: "
+        f"{names}"
     )
+
+
+def select_candidates(industry: pl.DataFrame, supersector: str) -> pl.DataFrame:
+    """The precise candidate selector this task's finding rests on: every SAE industry code
+    whose embedded NAICS begins '113', plus the one code equal to the anchored Mining-and-
+    Logging supersector title match. Extracted out of `main()` so the defect this task found
+    and fixed — an unanchored substring match on the industry title silently admitting the
+    broader '15000000 Mining, Logging and Construction' code alongside the true target,
+    '10000000 Mining and Logging' — has a regression test that runs without a live fetch."""
+    return industry.with_columns(
+        embedded=pl.col("industry_code").map_elements(embedded_naics, return_dtype=pl.Utf8),
+        level=pl.col("industry_code").map_elements(level_of, return_dtype=pl.Utf8),
+    ).filter(
+        pl.col("embedded").str.starts_with("113") | (pl.col("industry_code") == supersector)
+    )
+
+
+def states_dc_level_tally(
+    level_by_state: dict[str, str], states_dc_fips: tuple[str, ...]
+) -> dict[str, int]:
+    """The six-way tally restricted to D1's own states_dc universe. Raises loudly if a
+    states_dc code is missing from `level_by_state` (i.e. absent from the fetched sm.state
+    file this run) instead of silently dropping it out of every bucket: `.get(st) == lvl`
+    would return None for a missing code and match no branch, undercounting without a trace
+    while `denominator_note` kept asserting the full states_dc count."""
+    missing = sorted(set(states_dc_fips) - set(level_by_state))
+    if missing:
+        raise RuntimeError(
+            f"states_dc code(s) {missing} are absent from level_by_state (i.e. from the "
+            "fetched sm.state file this run) — refusing to silently under-count them out of "
+            "states_dc_tally"
+        )
+    tally = {lvl: sum(1 for st in states_dc_fips if level_by_state[st] == lvl)
+             for lvl in ("113310", "1133", "113", "supersector", "other", "none")}
+    assert sum(tally.values()) == len(states_dc_fips), (
+        f"states_dc_tally {tally} sums to {sum(tally.values())}, not "
+        f"len(states_dc_fips)={len(states_dc_fips)}"
+    )
+    return tally
 
 
 def granularity_note(candidate_rows: list[dict]) -> str:
@@ -4739,12 +4793,7 @@ def main() -> None:
     industry = frames["sm.industry"]
     logging_named = industry.filter(pl.col("industry_name").str.contains(LOGGING_NAME_PATTERN))
 
-    candidates = industry.with_columns(
-        embedded=pl.col("industry_code").map_elements(embedded_naics, return_dtype=pl.Utf8),
-        level=pl.col("industry_code").map_elements(level_of, return_dtype=pl.Utf8),
-    ).filter(
-        pl.col("embedded").str.starts_with("113") | (pl.col("industry_code") == supersector)
-    )
+    candidates = select_candidates(industry, supersector)
     candidate_codes = set(candidates["industry_code"].to_list())
 
     excluded = excluded_broader_codes(logging_named.to_dicts(), candidate_codes)
@@ -4784,10 +4833,7 @@ def main() -> None:
     non_state_codes = sorted(set(all_states) - set(c.STATES_DC_FIPS))
     state_names = dict(zip(frames["sm.state"]["state_code"].to_list(),
                            frames["sm.state"]["state_name"].to_list(), strict=True))
-    states_dc_tally = {
-        lvl: sum(1 for st in c.STATES_DC_FIPS if level_by_state.get(st) == lvl)
-        for lvl in ("113310", "1133", "113", "supersector", "other", "none")
-    }
+    states_dc_tally = states_dc_level_tally(level_by_state, c.STATES_DC_FIPS)
 
     states_dc_summary = ", ".join(f"{lvl}: {n}" for lvl, n in states_dc_tally.items())
     denominator_note = (
@@ -4812,8 +4858,8 @@ def main() -> None:
             "window_start": c.WINDOW_START, "window_end": c.WINDOW_END,
             "covered": (
                 f"{c.WINDOW_START}-{c.WINDOW_END} for states with a qualifying series — "
-                f"verified, not assumed, from every qualifying series' own begin/end year: "
-                f"{coverage_note}"
+                f"verified at month grain, not assumed, from every qualifying series' own "
+                f"begin_year/begin_period and end_year/end_period: {coverage_note}"
             ) if fully_covered else (
                 f"partial only — {coverage_note}; do not read "
                 f"'{c.WINDOW_START}-{c.WINDOW_END} for states with a qualifying series' as "
