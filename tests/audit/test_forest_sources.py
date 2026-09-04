@@ -1096,6 +1096,17 @@ PROBES_WITH_TRANSPORT_FAILURE = PROBES_ALL_ANSWERED + [
 ]
 
 
+def _marked_spans(text: str) -> list[str]:
+    """The text between each `INFERENCE MARKER, OPENING` and its `CLOSING`. Asserting on spans
+    rather than on the whole string is what keeps a second marked span from borrowing the
+    first one's disclosure."""
+    spans = []
+    for chunk in text.split("INFERENCE MARKER, OPENING")[1:]:
+        assert "INFERENCE MARKER, CLOSING" in chunk, "an opened marker is never closed"
+        spans.append(chunk.split("INFERENCE MARKER, CLOSING")[0])
+    return spans
+
+
 def _tpo_access(**overrides):
     kwargs = {
         "route": "nrum -> box -> legacy download", "harvest_origin_available": True,
@@ -1112,9 +1123,11 @@ def test_compose_tpo_access_verified_marks_the_sheet_name_reading_as_an_inferenc
     # no-extract-hash disclosure itself rather than borrowing the other's.
     access = _tpo_access()
     assert access["status"] == "verified"
-    assert access["reason"].count("INFERENCE MARKER, OPENING") == 2
-    assert access["reason"].count("INFERENCE MARKER, CLOSING") == 2
-    assert access["reason"].count("carries no extract hash") == 2
+    spans = _marked_spans(access["reason"])
+    assert len(spans) == 2
+    # Each span must disclose its own unbacked status: one pair saying so does not cover the
+    # other, and a reader meeting the second span first would have no disclosure at all.
+    assert all("no extract hash" in span for span in spans)
     assert "the origin/receipt split rests on the sheet names alone" in access["reason"]
 
 
@@ -1213,7 +1226,7 @@ def test_compose_tpo_access_verified_does_not_claim_no_cell_values_were_read():
     # sheet's header row, and box_navigation records 22 cell values from it.
     reason = _tpo_access()["reason"]
     assert "no cell values were read" not in reason
-    assert "no data-row cells were read or compared across sheets" in reason
+    assert "No data-row cells were read or compared across sheets" in reason
 
 
 def test_compose_tpo_access_verified_keeps_the_whose_county_caveat_outside_the_marker():
@@ -1234,9 +1247,10 @@ def test_compose_tpo_access_verified_marks_the_carried_over_route_provenance():
     # shaping investigation -- no probe in `route_probes` produced a 401 this run.
     reason = _tpo_access()["reason"]
     assert "401" in reason
-    opened = reason.index("INFERENCE MARKER, OPENING", reason.index("INFERENCE MARKER, CLOSING"))
-    assert opened < reason.index("401")
-    assert "No probe in this run requested that URL" in reason
+    provenance = _marked_spans(reason)[1]
+    assert "401 without a browser session" in provenance
+    assert "No probe in this run requested that URL" in provenance
+    assert "share page's own JS bundle" in provenance
 
 
 # --- compose_pagination_note ------------------------------------------------------------------
