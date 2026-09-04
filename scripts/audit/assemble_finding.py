@@ -42,9 +42,12 @@ summaries rather than assumed:
 5. **The §3.1 classification record was written as literals.** All four fields are published in
    the spec's own §3.1 block, so they are parsed from it (`verify_extracts.parse_classification
    _record`) rather than retyped into a tracked document that no test would contradict. That
-   parser anchors on the `### 3.1` heading and the fence under it: three of the four names are
-   published again in Appendix A, so a first-match scan of the whole file would read a moved
-   §3.1 from the wrong section rather than failing.
+   parser anchors on the `### 3.1` heading and the fence under it -- not because today's spec
+   presents a competing block. Appendix A republishes three of the names, but as YAML
+   `key: value`, a form the parser's `=` split skips, so on this spec an unanchored scan could
+   not have read Appendix A. The anchoring guards the general case: a §3.1 that moved while
+   `=`-form assignments for these names survived in another fenced block would otherwise be
+   read from that block rather than failing.
 
 6. **The header stamped the wall-clock run date**, which made the tracked document change
    whenever it was regenerated, whether or not any evidence had. The header now reports the
