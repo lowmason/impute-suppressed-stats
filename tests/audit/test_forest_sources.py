@@ -1398,23 +1398,134 @@ def test_compose_cadence_claim_with_no_window_year_found():
     assert claim == "no D1 window year subfolder was found this run"
 
 
-def test_compose_cadence_claim_appends_a_biennial_suffix_for_all_odd_pre_window_years():
+def test_compose_cadence_claim_appends_a_biennial_suffix_for_pre_window_years_two_apart():
+    """Renamed with its predicate. It used to be `..._for_all_odd_pre_window_years`, and the
+    name was the tell: all-odd is not biennial, it merely coincides with it on the real folder
+    set. The suffix now rides on the spacing, so the name and the claim say the same thing."""
     nav = {"year_subfolders_found": ["1997", "1999", "2001", "2017"],
            "window_year_subfolders_found": ["2017"]}
     claim = m.compose_cadence_claim(nav, window_years=WINDOW_YEARS, window_start_year=2017)
     assert "biennial cadence, verified this run" in claim
-    assert "1997" in claim
+    assert "only for odd years back to 1997" in claim
+
+
+def test_compose_cadence_claim_does_not_call_all_odd_quadrennial_years_biennial():
+    """The defect the rename exists for. `["1997", "2001", "2005"]` is every-year-odd and
+    four-yearly; the previous predicate called it "biennial cadence, verified this run" in a
+    sentence that ships in `tpo/summary.json`'s `coverage_span.covered`."""
+    nav = {"year_subfolders_found": ["1997", "2001", "2005", "2017"],
+           "window_year_subfolders_found": ["2017"]}
+    claim = m.compose_cadence_claim(nav, window_years=WINDOW_YEARS, window_start_year=2017)
+    assert "biennial" not in claim.split("; ")[-1].replace("not biennial", "")
+    assert "biennial cadence, verified this run" not in claim
+    assert "[1997, 2001, 2005]" in claim
+    assert "not a uniform two years" in claim
+
+
+def test_compose_cadence_claim_reports_even_spaced_pre_window_years_as_even():
+    """The parity word is read off the data, not typed. A step of two fixes the parity but not
+    which one it is, and the real run happens to be odd -- so an even biennial run must not
+    inherit the word "odd" from it."""
+    nav = {"year_subfolders_found": ["1998", "2000", "2002", "2017"],
+           "window_year_subfolders_found": ["2017"]}
+    claim = m.compose_cadence_claim(nav, window_years=WINDOW_YEARS, window_start_year=2017)
+    assert "only for even years back to 1998" in claim
+    assert "odd" not in claim
+
+
+def test_compose_cadence_claim_calls_a_single_pre_window_folder_no_cadence_at_all():
+    """`all()` over the empty pairwise of a one-element list is True, so a bare `all(b - a == 2
+    ...)` would call one folder a verified biennial cadence. The `len >= 2` guard is what stops
+    that, and this is the test that holds it in place."""
+    nav = {"year_subfolders_found": ["2013", "2017"],
+           "window_year_subfolders_found": ["2017"]}
+    claim = m.compose_cadence_claim(nav, window_years=WINDOW_YEARS, window_start_year=2017)
+    assert "biennial cadence, verified this run" not in claim
+    assert "one folder fixes no cadence in either direction" in claim
+    assert "2013" in claim
 
 
 def test_compose_cadence_claim_does_not_claim_biennial_when_pre_window_years_are_mixed():
     nav = {"year_subfolders_found": ["1998", "1999", "2017"],
            "window_year_subfolders_found": ["2017"]}
     claim = m.compose_cadence_claim(nav, window_years=WINDOW_YEARS, window_start_year=2017)
-    assert "not strictly biennial" in claim
+    assert "not biennial across this range" in claim
     assert "biennial cadence, verified this run" not in claim
 
 
 # --- compose_retention_rule -------------------------------------------------------------------
+
+
+def test_retention_rule_does_not_claim_retained_bytes_tell_an_empty_200_apart():
+    """Whole-branch review, finding 5. The persisted rule read "a 404 page, a 403 page and an
+    empty 200 are three different verdicts and only the retained bytes tell them apart", and
+    that shipped into both `fia/summary.json` and `tpo/summary.json`. `answered_with_body`
+    returns `res["http_status"] != 0 and bool(res["body"])`, so a zero-byte 200 registers no
+    extract at all -- there are no retained bytes to tell it apart with. The behaviour is
+    defensible; the sentence was not."""
+    rule = m.compose_retention_rule([200, 404])["rule"]
+    assert "empty 200 are three different verdicts" not in rule
+    assert "a 404 page and a 403 page are different verdicts" in rule
+
+
+def test_retention_rule_names_the_empty_body_exclusion_as_its_own_case():
+    """Not merely dropped: an empty 200 registering nothing is a real behaviour a reader of the
+    counters needs, and it is a different case from a transport failure."""
+    rule = m.compose_retention_rule([200])["rule"]
+    assert "Two cases register no extract, and they are not the same case." in rule
+    assert "including an empty 200" in rule
+    assert "its probe entry's status and its bytes count of zero" in rule
+    assert "A transport failure produced no response at all" in rule
+
+
+def test_retention_rule_scopes_itself_to_the_routes_probed_for_bytes():
+    """Whole-branch review, finding 6. The `FIA_DATAMART_CANDIDATES` are probed through
+    `c.probe`, which discards bodies by construction, so they can never register an extract --
+    while the rule claimed to cover a fetched body "whenever the endpoint answered at all,
+    whatever the HTTP status". This run's six datamart attempts were all transport failures, so
+    an exception clause covered today's artifact; a re-run that got a 403 or a 200 there would
+    have made the persisted sentence false with no test failing."""
+    rule = m.compose_retention_rule([200])["rule"]
+    assert "Scope: this rule is about the routes probed for bytes." in rule
+    assert "probed status-only" in rule
+    assert "registers no extract whatever it answers" in rule
+    assert "whenever the endpoint answered at all, whatever the HTTP status" not in rule
+
+
+def test_retention_rule_scope_clause_is_route_class_generic_not_fia_specific():
+    """`compose_retention_rule` is shared by `run_fia` and `run_tpo`, and TPO has no datamart
+    routes. Naming FIA's would ship a sentence into `tpo/summary.json` about routes that source
+    does not have -- false by irrelevance, in the artifact, for a wording fix."""
+    rule = m.compose_retention_rule([200])["rule"]
+    for fia_only in ("datamart", "Datamart", "DATAMART", "FIA", "Evalidator"):
+        assert fia_only not in rule
+    assert "recorded in this source's own probe findings" in rule
+
+
+def test_answered_with_body_docstring_names_both_exclusions():
+    """Three sites describe this predicate and only one used to know it: the persisted rule
+    named neither exclusion correctly, this docstring named only the transport failure, and
+    `scannable_text_page`'s already said `retain_body` refuses an empty body. Pinned as a
+    docstring claim, the way findings 1 and 2 of wave 1 are."""
+    doc = " ".join(m.answered_with_body.__doc__.split())
+    assert "Two exclusions" in doc
+    assert "A transport failure (`http_status == 0`) produced no response at all" in doc
+    assert "A zero-byte 200 therefore registers no extract at all" in doc
+    # And the predicate does what all three now say.
+    assert not m.answered_with_body({"http_status": 200, "body": b""})
+    assert not m.answered_with_body({"http_status": 0, "body": b""})
+    assert m.answered_with_body({"http_status": 403, "body": b"forbidden"})
+
+
+def test_module_docstring_scopes_the_retention_rule_and_retracts_the_empty_200_claim():
+    """The same two corrections at the file-level site, so a reader of the source and a reader
+    of the artifact are told the same thing."""
+    doc = " ".join(m.__doc__.split())
+    assert "a 404 page and a 403 page are different verdicts" in doc
+    assert "empty 200 are three different verdicts" not in doc
+    assert "The `FIA_DATAMART_CANDIDATES` are probed status-only" in doc
+    assert "which discards bodies by construction" in doc
+
 
 
 def test_compose_retention_rule_counts_the_retained_non_200_bodies():
@@ -1508,7 +1619,8 @@ def test_docstring_makes_no_claim_about_what_other_audit_scripts_retain():
     stay. Negative pin, so re-adding the sentence beside the corrected text is still caught."""
     doc = " ".join(m.__doc__.split())
     assert "Every other Stage 0 audit script records a fetched body" not in doc
-    assert "records a body whenever the endpoint answered at all, whatever the status" in doc
+    assert ("records a body whenever a route it probes for bytes answers with a non-empty "
+            "one, whatever the status") in doc
 
 
 # --- the scan corpus and the extract set, on a composed run --------------------------------------

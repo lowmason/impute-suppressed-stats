@@ -27,14 +27,28 @@ pinned about each parsing step.
 Raw-retention rule, specific to this script (ruling D-B). The obvious default for a
 body-recording site is to keep the bytes only on a status of 200; what every other Stage 0
 script does is that script's business and is not asserted here, because a claim about other
-files dates the moment one of them changes. This one records a body whenever the endpoint
-answered at all, whatever the status, and stamps each extract with the status it
-actually carried -- because on an access-verdict probe the non-200 body IS the evidence: a 404
-page, a 403 page and an empty 200 are three different verdicts, and only the retained bytes
-tell them apart. A transport failure yields no body and so registers no extract; its evidence
-is the probe record's `outcome` field instead. `compose_retention_rule` restates this inside
-both written summaries, with counts derived from the run, so a reader of the artifacts (not
-just of this file, or of a commit message) sees the rule and its scope.
+files dates the moment one of them changes. This one records a body whenever a route it probes
+for bytes answers with a non-empty one, whatever the status, and stamps each extract with the
+status it actually carried -- because on an access-verdict probe the non-200 body IS the
+evidence: a 404 page and a 403 page are different verdicts, and only the retained bytes tell
+them apart.
+
+Two things register no extract, and they are not the same thing. A transport failure yields no
+response at all, so there is no body to keep; its evidence is the probe record's `outcome`
+field instead. An empty body -- including an empty 200 -- has nothing to keep either, so
+`answered_with_body` refuses it too, and what a reader gets for that response is its probe
+record's status and zero byte count rather than bytes. An earlier version of this paragraph
+claimed an empty 200 was told apart from a 404 or a 403 "by the retained bytes", which the
+mechanism cannot do: there are none.
+
+Scope. The rule covers the routes probed through `probe_url`. The `FIA_DATAMART_CANDIDATES`
+are probed status-only through `_common.probe`, which discards bodies by construction, so a
+datamart route registers no extract whatever it answers -- its evidence is its
+`datamart_probes` entry, which carries every attempt's status and byte count and no body.
+
+`compose_retention_rule` restates all of this inside both written summaries, with counts
+derived from the run, so a reader of the artifacts (not just of this file, or of a commit
+message) sees the rule and its scope.
 """
 
 from __future__ import annotations
@@ -46,6 +60,7 @@ import re
 import time
 import zipfile
 from collections.abc import Callable
+from itertools import pairwise
 
 import httpx
 
@@ -173,8 +188,20 @@ def probe_url(client: httpx.Client, url: str, *, params: dict | None = None) -> 
 
 def answered_with_body(res: dict) -> bool:
     """Ruling D-B's retention gate: keep the bytes whenever the endpoint answered, whatever the
-    status. A transport failure (`http_status == 0`) produced no response at all and so has no
-    body to keep; its evidence is the probe record's `outcome` field instead."""
+    status.
+
+    Two exclusions, both of which this predicate enforces and both of which callers and
+    composed sentences must account for:
+
+    1. A transport failure (`http_status == 0`) produced no response at all and so has no body
+       to keep; its evidence is the probe record's `outcome` field instead.
+    2. An empty body (`not res["body"]`) has nothing to keep either -- including on a status of
+       200. A zero-byte 200 therefore registers no extract at all, and no sentence may claim
+       the retained bytes tell it apart from anything, because there are none. What records
+       such a response is its probe entry's status and its `bytes: 0`.
+
+    This docstring used to name only the first, while `scannable_text_page`'s already named
+    the second; the persisted rule text named neither correctly. All three sites now agree."""
     return res["http_status"] != 0 and bool(res["body"])
 
 
@@ -700,15 +727,29 @@ def distinguishes_harvest_origin_from_mill_receipts(sheet_names: list[str]) -> b
 
 def compose_retention_rule(extract_statuses: list[int]) -> dict:
     """Ruling D-B: this script's raw-retention rule, restated inside the artifact that the rule
-    shaped, with its counters derived from the run rather than typed."""
+    shaped, with its counters derived from the run rather than typed.
+
+    Shared by `run_fia` and `run_tpo`, so the scope clause below is written route-class-generic
+    rather than naming FIA's datamart candidates: a per-source clause would ship a sentence
+    into `tpo/summary.json` about routes TPO does not have. Each summary's own probe findings
+    say which of its routes were probed status-only."""
     return {
         "rule": (
-            "This script writes and registers a fetched body whenever the endpoint answered at "
-            "all, whatever the HTTP status, and each extract's own http_status records which "
-            "status it carried. On an access-verdict probe the non-200 body IS the evidence: a "
-            "404 page, a 403 page and an empty 200 are three different verdicts and only the "
-            "retained bytes tell them apart. A transport failure produces no body and so "
-            "registers no extract; its evidence is the probe record's outcome field instead. "
+            "This script writes and registers a fetched body whenever a route it probes for "
+            "bytes answered with a non-empty body, whatever the HTTP status, and each "
+            "extract's own http_status records which status it carried. On an access-verdict "
+            "probe the non-200 body IS the evidence: a 404 page and a 403 page are different "
+            "verdicts and only the retained bytes tell them apart. Two cases register no "
+            "extract, and they are not the same case. A transport failure produced no response "
+            "at all, so there is no body to keep; its evidence is the probe record's outcome "
+            "field instead. A response whose body is empty -- including an empty 200 -- has "
+            "nothing to keep either, so it registers no extract as well, and what records it "
+            "is its probe entry's status and its bytes count of zero, not retained bytes. "
+            "Scope: this rule is about the routes probed for bytes. Some routes are probed "
+            "status-only, through a helper that discards the body by construction, and a route "
+            "in that class registers no extract whatever it answers; which routes a run probed "
+            "that way is recorded in this source's own probe findings, as entries carrying "
+            "each attempt's status and byte count and no body. "
             "The counters below therefore say which statuses were retained and nothing more: a "
             "retained status 200 means the endpoint answered, not that the body is usable data "
             "-- an application error page can arrive with status 200, and which retained bodies "
@@ -935,7 +976,12 @@ def compose_cadence_claim(
     script. That investigation happened to land on 2021/Ohio and observed a page-capped listing
     (20 rendered vs a filesCount of 37); a run's deterministic selection can land on a
     different year entirely, so a claim written against the investigation's year would be false
-    about the year actually checked."""
+    about the year actually checked.
+
+    The pre-window suffix says "biennial" only where the folder years are actually two apart,
+    pair by pair. It used to say it wherever they were all odd, which agrees with biennial only
+    because the real folder set happens to be contiguous odd years -- an all-odd, quadrennial
+    set would have been called a verified biennial cadence."""
     year_folders = sorted(int(y) for y in box_navigation.get("year_subfolders_found", []))
     pre_window = [y for y in year_folders if y < window_start_year]
     window_found = box_navigation.get("window_year_subfolders_found", [])
@@ -958,15 +1004,28 @@ def compose_cadence_claim(
         )
     else:
         claim = "no D1 window year subfolder was found this run"
-    if pre_window and all(y % 2 == 1 for y in pre_window):
+    # "Biennial" is a claim about the spacing, so the predicate is the spacing: every
+    # consecutive pair two years apart. All-odd was the previous test and is a different
+    # property -- ["1997", "2001", "2005"] is all odd and quadrennial, and would have been
+    # called biennial and "verified this run". `len >= 2` is required because `all()` over the
+    # empty pairwise of a one-element list is True, which would call a single folder a cadence.
+    biennial = len(pre_window) >= 2 and all(b - a == 2 for a, b in pairwise(pre_window))
+    if biennial:
+        # Derived, not typed: a step of two fixes the parity, but which parity is the data's.
+        parity = "odd" if pre_window[0] % 2 else "even"
         claim += (
-            f"; pre-{window_start_year} subfolders found only for odd years back to "
+            f"; pre-{window_start_year} subfolders found only for {parity} years back to "
             f"{min(pre_window)} (biennial cadence, verified this run)"
+        )
+    elif len(pre_window) == 1:
+        claim += (
+            f"; exactly one pre-{window_start_year} subfolder was found, for {pre_window[0]} "
+            "(verified this run) -- one folder fixes no cadence in either direction"
         )
     elif pre_window:
         claim += (
-            f"; pre-{window_start_year} subfolders found for years {pre_window} (not strictly "
-            "biennial, verified this run)"
+            f"; pre-{window_start_year} subfolders found for years {pre_window} (their spacing "
+            "is not a uniform two years, so not biennial across this range, verified this run)"
         )
     return claim
 
@@ -1224,6 +1283,16 @@ def run_fia(client: httpx.Client) -> None:
     ev_field = evaluation_vintage_field(metadata)
     measure_proved = proved_estimate_measure(metadata)
 
+    # Status-only, deliberately: `c.probe` returns `(status, bytes)` and discards the body by
+    # construction, which is the contract `probe_with_retries` is built against. So these
+    # routes are outside the body-retention rule -- they register no extract even when they
+    # answer 403 or 200, and their evidence is the `datamart_probes` entries below, one per
+    # attempt, carrying status and byte count. The rule text `compose_retention_rule` persists
+    # says so in route-class terms rather than claiming to cover every route this script
+    # touches; before that it did claim to, and this class silently fell outside it whenever a
+    # datamart route answered rather than resetting. Retaining these bodies instead would mean
+    # changing `probe_with_retries`' 2-tuple contract, and the retry loop exists here precisely
+    # because these routes usually do not answer at all.
     datamart_probes = [
         probe_with_retries(
             lambda u=url: c.probe(client, u), url=url, attempts=FIA_DATAMART_ATTEMPTS,
