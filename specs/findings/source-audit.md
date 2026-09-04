@@ -66,7 +66,9 @@ asymmetries decide how much the `decline` costs, and both are measured:
 - **The `decline` is about employment, not establishments.** The quarterly *establishment*
   identity closes exactly: `qcew_identity.quarter_table` records `estab_gap = 0` in all 32
   quarters of the window, and `qcew_panel.disclosure_code_values` records that all 1251 monthly
-  rows carrying disclosure code `N` still publish `qtrly_estabs > 0`. The *employment* identity
+  rows carrying disclosure code `N` still publish `qtrly_estabs > 0` -- 1227 of them `states_dc`
+  (`states_dc_rows`), the other 24 Puerto Rico's, the panel's only non-`states_dc` state-level
+  area (`qcew_panel.other_state_level_areas` lists `72000` alone). The *employment* identity
   is what cannot be evaluated: `qcew_identity.evidence` records `clean_months = 0` of
   `months_total = 96`, because every month carries between 9 and 15 suppressed `states_dc`
   cells (`qcew_identity.panel_structure.states_dc_suppressed_per_month`), so no month offers a
@@ -132,9 +134,10 @@ endpoint, so it has nothing to add or subtract.
   mask design is sized against those numbers.
 - **Every suppressed cell still publishes an establishment count.** All 1227 suppressed
   `states_dc` monthly cells report `qtrly_estabs > 0`
-  (`qcew_panel.estabs_survive_suppression_share = 1.0`). That is why the establishment identity
-  is testable while the employment one is not, and it is the strongest structural constraint
-  this audit found.
+  (`qcew_panel.estabs_survive_suppression_share = 1.0`); the same is true of all 1251 rows
+  carrying disclosure code `N`, the 24-row difference being Puerto Rico's area-months, which are
+  outside `states_dc`. That is why the establishment identity is testable while the employment
+  one is not, and it is the strongest structural constraint this audit found.
 - **CES counts have two denominators, and they differ.** `ces.publication_level_by_state` maps
   all 55 codes in the fetched `sm.state` file, and the `ces.states_with_*` counts are over those
   55 -- of which four (`00` All States, `72` Puerto Rico, `78` Virgin Islands, `99` All
