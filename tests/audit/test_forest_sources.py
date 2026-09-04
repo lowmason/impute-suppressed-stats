@@ -33,6 +33,10 @@ inert: the module's only side effects sit behind `if __name__ == "__main__"`.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
+import httpx
 import pytest
 
 import _common
@@ -1505,3 +1509,38 @@ def test_docstring_makes_no_claim_about_what_other_audit_scripts_retain():
     doc = " ".join(m.__doc__.split())
     assert "Every other Stage 0 audit script records a fetched body" not in doc
     assert "records a body whenever the endpoint answered at all, whatever the status" in doc
+
+
+# --- the scan corpus and the extract set, on a composed run --------------------------------------
+
+
+def test_a_composed_fia_run_backs_every_scanned_page_with_a_hashed_extract(tmp_path, monkeypatch):
+    """`compose_fia_uncovered` persists a sentence asserting each page in the scan's corpus
+    "answered with a status-200 body this run and is hashed as an extract". Nothing enforced
+    it. The pairing is held together only by a filename literal duplicated at each of five
+    sites -- `retain_body(extracts, SOURCE_FIA, doc, "fiadb_api_doc.html")` and
+    `scanned_pages["fiadb_api_doc.html"]`, and so on. Rename one without its twin and
+    `pages_scanned` names a file no extract backs, the persisted sentence is false, and before
+    this test no test failed: every composer test hands `compose_fia_uncovered` a built-by-hand
+    `industry_scan` dict, and none of them calls `retain_body` at all.
+
+    Read off the written summary rather than the in-memory lists, so what is pinned is the
+    artifact a reader actually gets.
+
+    Deliberately one-directional. `retain_body` is called on routes the scan gate is never
+    offered (`other_route_*`), so hashed-but-never-scanned is correct and expected -- exactly
+    what `scannable_text_page`'s docstring says. Only the reverse would make the sentence lie.
+    """
+    monkeypatch.setattr(_common, "AUDIT_ROOT", tmp_path)
+    assert _common.AUDIT_ROOT.is_relative_to(tmp_path), "guard: never write into the real root"
+    client = httpx.Client(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, text="<html><body>an answer</body></html>")))
+
+    m.run_fia(client)
+
+    written = json.loads((tmp_path / "fia" / "summary.json").read_text(encoding="utf-8"))
+    hashed = {Path(e["path"]).name for e in written["extracts"]}
+    scanned = set(written["findings"]["industry_concept_scan"]["pages_scanned"])
+    assert scanned, "an empty corpus would make the subset check vacuous"
+    assert scanned <= hashed, (
+        f"pages_scanned names files no extract backs: {sorted(scanned - hashed)}")
