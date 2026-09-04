@@ -48,8 +48,10 @@ Deviations from the brief's illustrative code, established this task, not from m
    exactly what it measures ("EMP_N present and not the string 0"), not the published noise-flag
    distribution, and that cannot be misread as the share of cells carrying CBP's actual per-cell
    noise flag (`EMP_N_F`). (Fix round 2: this field was originally named `noise_flagged_share`,
-   the plan's mandated name at spec lines 4254-4255/4306-4307 -- misleading for the same reason.
-   Renamed on the human's ruling at the execution gate; see the Task 8 deviation note in
+   the plan's mandated name -- both the `flag_evidence_by_year` entry in the plan's Interfaces
+   block for this task and the `noise_flagged_share` line in the plan's illustrative
+   `flag_evidence` function -- misleading for the same reason. Renamed on the human's ruling at
+   the execution gate; see the Task 8 deviation note in
    `specs/plans/1-stage0-logging-employment-spec.md` and `emp_n_f_caveat` below, which states this
    plainly in `findings`, not only in this docstring, so a reader who never opens this file still
    sees it next to the number it qualifies (the exact trap this task's dispatch names: a claim

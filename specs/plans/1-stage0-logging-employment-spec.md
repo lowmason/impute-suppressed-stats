@@ -4263,8 +4263,9 @@ writing "not obtainable — no published disclosure-methodology statement locate
 reference year" into `evidence`.
 
 > **Deviation (recorded on execution, 2026-09-04): `flag_evidence_by_year`'s `noise_flagged_share`
-> field (mandated above at lines 4254-4255, and by this task's own illustrative `flag_evidence`
-> code at lines 4306-4307) is renamed to `emp_n_present_and_nonzero_share`.**
+> field (mandated by the `flag_evidence_by_year` entry in this task's Interfaces block, and by
+> the `noise_flagged_share` line in this task's illustrative `flag_evidence` function) is renamed
+> to `emp_n_present_and_nonzero_share`.**
 >
 > **The computation is unchanged by this rename.** The shipped script still counts rows where
 > `EMP_N` is present and not the string `"0"`, divided by the row total — only the local variable
@@ -4272,8 +4273,9 @@ reference year" into `evidence`.
 > result of this rename.
 >
 > **That computation diverges sharply from the plan's own illustrative
-> `sum(n for v, n in EMP_N.items() if v)` above (lines 4306-4307) — it is not "a different but
-> equivalent-in-practice expression," and this run's own data proves it isn't.** `EMP_N` is the
+> `sum(n for v, n in EMP_N.items() if v)` (the `noise_flagged_share` line in this task's
+> illustrative `flag_evidence` function) — it is not "a different but equivalent-in-practice
+> expression," and this run's own data proves it isn't.** `EMP_N` is the
 > literal string `"0"` for every row in every window year this task observes (e.g. 2017:
 > `{'0': 188}`, 2020: `{'0': 182}`, 2023: `{'0': 188}`). Python treats the non-empty string `"0"`
 > as truthy, so the plan's `if v` counts every row: on this data it evaluates to `1.0` for every
