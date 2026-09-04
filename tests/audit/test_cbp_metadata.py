@@ -277,10 +277,16 @@ def test_zero_pull_cause_empty_attempt_list_is_query_bug_not_vacuously_auth_erro
 
 # --- empszes_pairs_from_rows --------------------------------------------------------------------
 #
-# `/variables/EMPSZES.json` and the full `/variables.json` dump both carry no `values` key for
-# this dataset (confirmed live against 2021) -- the only place the code/label crosswalk shows
-# up is in the data-pull rows themselves, when EMPSZES and EMPSZES_LABEL are both requested as
-# unfiltered output columns (attempts 1-2 of the keyed pull do this; attempt 3 does not).
+# None of the three 2021 metadata documents captured below (`REAL_EMPSZES_DOC`,
+# `REAL_GROUPS_DOC`, `REAL_GROUP_DETAIL_DOC_TRIMMED`) carries a `values` key for EMPSZES, which
+# the `crosswalk_present_in_payload` tests further down pin. That is measured of 2021, not of
+# the dataset: `REAL_2017_EMPSZES_DOC_TRIMMED` about a hundred lines below DOES carry one, and
+# which years and routes a run actually finds one on is recorded per run in
+# `empszes_metadata_crosswalk_probe_by_year`, never generalized from a year checked once (the
+# module docstring's fix round 2, which this comment used to contradict). So for a vintage
+# whose metadata carries none, this function's observation over the data-pull rows is the
+# fallback -- available when EMPSZES and EMPSZES_LABEL are both requested as unfiltered output
+# columns (attempts 1-2 of the keyed pull do this; attempt 3 does not).
 #
 # Fix round 1: this list is an OBSERVATION over the 113310 x state slice, not the official
 # metadata enumeration SRC-CBP-001 asks for -- a size class with zero logging establishments in
