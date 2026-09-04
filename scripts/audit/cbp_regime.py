@@ -183,9 +183,21 @@ def _no_year_specific_doc_evidence(year: int) -> str:
     regime for its own year), and that 2019/2021/2022/2023 have no year-labeled file of either
     product at all. (b) is not something a future re-run of this script re-verifies -- if Census
     later archives a 2019-2023 file, this entry would not know until a human checks again. Each
-    entry still names its own year, so this is a per-year rendering, not a byte-identical string
-    reused across years (see
-    `test_regime_by_year_no_two_non_unknown_years_share_byte_identical_evidence`)."""
+    entry still names its own year, so this is a per-year rendering rather than one static string
+    assigned to all five -- but the rendered entries are otherwise byte-identical templates, not
+    pairwise distinct prose; only the year-naming is checked (see
+    `test_regime_by_year_non_unknown_years_each_name_their_own_year_in_their_evidence`), and that
+    check does not claim more than that.
+
+    The methodology.html banner's scope (prospective-only vs. also retracting the 2007-2018
+    historical statements this entry rests on) is not itself documented -- the banner draws no
+    such distinction. The returned text marks that specific reading inline, between an
+    `INFERENCE MARKER, OPENING` / `INFERENCE MARKER, CLOSING` pair (the convention
+    `qcew_identity.py`'s `absent_state_months_note` established), so a reader can tell exactly
+    which clause is this auditor's reading rather than a fetched fact, and exactly where that
+    marking's scope ends -- the caveat that this entry is weighted less certainly than 2017's or
+    2018's sits outside the marker because it follows from the banner's mere existence, not from
+    how its scope is read."""
     return (
         f"No CBP documentation specific to reference year {year} was found among the routes "
         f"this script's own DOC_URLS fetches (see documentation_fetched -- only 2017 has a "
@@ -202,11 +214,18 @@ def _no_year_specific_doc_evidence(year: int) -> str:
         f"year 2018' -- read forward through {year} with no later documented reversal found. "
         "methodology.html itself carries a banner, current as of its own June 18, 2026 "
         "revision, stating its content 'is no longer current' pending a U.S. Department of "
-        "Commerce administrative order prohibiting the use of noise infusion; that notice "
-        "concerns Census's prospective/current approach following a recent order, not a "
-        "retraction of the dated 2007-2018 historical statements this entry relies on -- but it "
-        f"means {year}'s label carries less independent corroboration than 2017's or 2018's and "
-        "should be weighted accordingly, not read as equally certain."
+        "Commerce administrative order prohibiting the use of noise infusion -- a fact that by "
+        f"itself already means {year}'s label carries less independent corroboration than "
+        "2017's or 2018's and should be weighted accordingly, not read as equally certain, "
+        "regardless of how the banner's own scope is read. INFERENCE MARKER, OPENING: what "
+        "follows to the closing marker is this auditor's own reading of that banner's scope, "
+        "not a distinction the banner's text itself draws -- it carries no extract hash and is "
+        "re-checked by no later run. The banner is read here as concerning Census's "
+        "prospective/current approach following the recent order, not as a retraction of the "
+        "dated 2007-2018 historical statements this entry relies on; a different reading, under "
+        "which the banner casts doubt on those historical statements too, would leave this "
+        f"entry with no documentary basis at all and {year} would have to be unknown instead. "
+        "INFERENCE MARKER, CLOSING."
     )
 
 
