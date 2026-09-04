@@ -2585,32 +2585,34 @@ def frame(rows):
 def test_national_industry_size_is_not_simultaneous_state_detail():
     df = frame([("US000", "113310", "1"), ("US000", "113310", "2")])
     assert not has_simultaneous_state_industry_size(
-        df, industry="113310", state_areas=STATE_AREAS)
+        df, industry="113310", state_areas=STATE_AREAS, all_sizes="0")
 
 
 def test_state_sector_size_is_not_simultaneous_six_digit_detail():
     df = frame([("41000", "11", "1"), ("41000", "113", "2")])
     assert not has_simultaneous_state_industry_size(
-        df, industry="113310", state_areas=STATE_AREAS)
+        df, industry="113310", state_areas=STATE_AREAS, all_sizes="0")
 
 
 def test_state_six_digit_aggregate_size_code_does_not_count():
-    """size_code '0' is the all-sizes aggregate — it carries no size breakdown."""
+    """The aggregate code carries no size breakdown, so it never satisfies the predicate.
+    '0' here is this fixture's aggregate code; the script derives the real one from the
+    fetched titles file and passes it in."""
     df = frame([("41000", "113310", "0")])
     assert not has_simultaneous_state_industry_size(
-        df, industry="113310", state_areas=STATE_AREAS)
+        df, industry="113310", state_areas=STATE_AREAS, all_sizes="0")
 
 
 def test_one_true_row_flips_the_verdict():
     df = frame([("US000", "113310", "1"), ("41000", "113310", "3")])
     assert has_simultaneous_state_industry_size(
-        df, industry="113310", state_areas=STATE_AREAS)
+        df, industry="113310", state_areas=STATE_AREAS, all_sizes="0")
 
 
 def test_county_row_is_not_a_state_row():
     df = frame([("41005", "113310", "3")])
     assert not has_simultaneous_state_industry_size(
-        df, industry="113310", state_areas=STATE_AREAS)
+        df, industry="113310", state_areas=STATE_AREAS, all_sizes="0")
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -2639,6 +2641,7 @@ establishment size simultaneously, and record what the by-size product does carr
 from __future__ import annotations
 
 import io
+import re
 import zipfile
 
 import polars as pl
@@ -2651,15 +2654,39 @@ SIZE_URL = "https://data.bls.gov/cew/data/files/{year}/csv/{year}_q1_by_size.zip
 # audit scripts do not import one another except through summaries.
 
 
+ALL_SIZES_TITLE = re.compile(r"^all\b.*\bsizes?\b", re.IGNORECASE)
+
+
+def all_sizes_code(titles: dict[str, str]) -> str:
+    """The size_code standing for the all-sizes aggregate, DERIVED from the fetched
+    size_code titles file rather than hardcoded.
+
+    Task 9 states the general rule this follows: a code's meaning comes from the titles file
+    the run fetched, never from memory. Hardcoding "0" here would have made this script assert
+    a code-to-meaning mapping it never checked -- and the aggregate code is load-bearing,
+    because it is the one value the simultaneity predicate must exclude. Raises unless exactly
+    one title matches, so an ambiguous or renamed vocabulary fails loudly instead of silently
+    counting the aggregate as a real size class."""
+    hits = sorted(code for code, title in titles.items() if ALL_SIZES_TITLE.match(title or ""))
+    if len(hits) != 1:
+        raise RuntimeError(
+            f"expected exactly one all-sizes title in the fetched size_code titles, got "
+            f"{len(hits)}: {[(h, titles[h]) for h in hits]}"
+        )
+    return hits[0]
+
+
 def has_simultaneous_state_industry_size(
-    df: pl.DataFrame, *, industry: str, state_areas: set[str]
+    df: pl.DataFrame, *, industry: str, state_areas: set[str], all_sizes: str
 ) -> bool:
     """True iff a single row carries a state-level area, the target industry, and a real size
-    class at once. `size_code == '0'` is the all-sizes aggregate and never counts."""
+    class at once. `all_sizes` is the aggregate code -- it carries no size breakdown, so it
+    never counts. Pass the code `all_sizes_code` derived from the fetched titles file; the
+    caller supplies it rather than this function assuming a literal."""
     return df.filter(
         pl.col("area_fips").is_in(sorted(state_areas))
         & (pl.col("industry_code") == industry)
-        & (pl.col("size_code") != "0")
+        & (pl.col("size_code") != all_sizes)
     ).height > 0
 
 
@@ -2694,8 +2721,17 @@ def main() -> None:
         frames.append(read_zip(rec.path).with_columns(pl.lit(year).alias("ref_year")))
     df = pl.concat(frames, how="vertical")
 
+    # The titles file is loaded BEFORE the verdict because the verdict depends on it: the
+    # aggregate size_code the predicate excludes is derived from it, not assumed.
+    tpath = next(e["path"] for e in c.load_summary("qcew_codes")["extracts"]
+                 if e["path"].endswith("titles/size_code.csv"))
+    tdf = pl.read_csv(tpath, infer_schema_length=0)
+    titles = dict(zip(tdf[tdf.columns[0]].to_list(), tdf[tdf.columns[1]].to_list(),
+                      strict=True))
+    all_sizes = all_sizes_code(titles)
+
     verdict = has_simultaneous_state_industry_size(
-        df, industry=c.INDUSTRY_CODE, state_areas=c.STATE_AREAS)
+        df, industry=c.INDUSTRY_CODE, state_areas=c.STATE_AREAS, all_sizes=all_sizes)
 
     inventory = []
     for (agglvl,), grp in df.group_by(["agglvl_code"], maintain_order=True):
@@ -2717,16 +2753,6 @@ def main() -> None:
         f"size codes {sorted(logging_rows['size_code'].unique().to_list())}"
     )
 
-    titles = {}
-    try:
-        tpath = next(e["path"] for e in c.load_summary("qcew_codes")["extracts"]
-                     if e["path"].endswith("titles/size_code.csv"))
-        tdf = pl.read_csv(tpath, infer_schema_length=0)
-        titles = dict(zip(tdf[tdf.columns[0]].to_list(), tdf[tdf.columns[1]].to_list(),
-                          strict=True))
-    except StopIteration:
-        titles = {}
-
     c.write_summary(
         SOURCE,
         coverage_span={
@@ -2742,6 +2768,7 @@ def main() -> None:
             "simultaneous_state_industry_size": verdict,
             "agglvl_inventory": inventory,
             "what_the_file_does_carry": finest,
+            "all_sizes_code": {"code": all_sizes, "title": titles[all_sizes]},
             "size_codes_with_titles": [
                 {"code": s, "title": titles.get(s)}
                 for s in sorted(logging_rows["size_code"].unique().to_list())
