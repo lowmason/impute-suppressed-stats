@@ -32,9 +32,14 @@ from qcew_identity import (
     NO_OTHER_AREA,
     OUTSIDE,
     _clean_month_clause,
+    assert_one_sentence,
+    build_verdict_sentence,
     classify_identity,
     comparison_tables,
     measure_containment,
+    quarterly_estabs,
+    structural_findings,
+    verified_panel_scope,
 )
 
 
@@ -207,7 +212,9 @@ def test_every_reason_is_free_of_sentence_breaks():
     reasons = []
     for q, m in cases:
         reason = classify_identity(q, m)["reason"]
-        assert ". " not in reason
+        # `assert_one_sentence` trips on `count(".") != 1`, so any full stop is fatal --
+        # "U.I." or a decimal would pass a `". " not in` check and still crash the real guard.
+        assert "." not in reason
         assert not reason.endswith(".")
         reasons.append(reason)
     assert len(set(reasons)) == 8, "one case per branch; extend this test when a branch is added"
@@ -318,9 +325,9 @@ def test_a_withheld_value_outside_the_national_total_leaves_months_testable():
     assert months["other_emp"].to_list() == [0, 0, 0]
 
 
-def test_a_withheld_value_inside_the_national_total_makes_months_untestable():
-    """The mirror image: when the area *is* a term in the national total, a withheld value is a
-    missing term and the month must not be scored as if it were zero."""
+def inside_containment_panel():
+    """The mirror image of `outside_containment_panel`: the non-state area's establishments are
+    part of the national total, so it is a term in the identity."""
     rows = []
     for month in (1, 2, 3):
         rows += [
@@ -329,7 +336,13 @@ def test_a_withheld_value_inside_the_national_total_makes_months_untestable():
             ("72000", "Puerto Rico -- Statewide", "other_state_level", 2017, 1, month,
              None, 10, "N", True),
         ]
-    quarters, months, containment = comparison_tables(panel(rows))
+    return panel(rows)
+
+
+def test_a_withheld_value_inside_the_national_total_makes_months_untestable():
+    """When the area *is* a term in the national total, a withheld value is a missing term and
+    the month must not be scored as if it were zero."""
+    quarters, months, containment = comparison_tables(inside_containment_panel())
     assert containment["verdict"] == INSIDE
     assert quarters["estab_gap_after_other"].to_list() == [0]
     out = classify_identity(quarters, months)
@@ -367,3 +380,90 @@ def test_the_suppressed_range_is_taken_over_testable_months_only():
     clause = _clean_month_clause(classify_identity(q, m)["evidence"], m)
     assert "between 5 and 5" in clause
     assert "99" not in clause
+
+
+# --- scope verification: the refusal branch that keeps the verdict sentence honest -------------
+#
+# `verified_panel_scope` is the whole safety property behind the sentence naming an industry and
+# an ownership. Its refusal had never executed -- not in a test, not in a run -- so it was a
+# claim about correctness rather than a demonstration of it. No real panel is needed to fix that.
+
+
+def write_scope_fixture(tmp_path, monkeypatch, predicates, private_own_code="5"):
+    import json
+
+    import _common as c
+
+    monkeypatch.setattr(c, "AUDIT_ROOT", tmp_path)
+    titles = tmp_path / "qcew_codes" / "titles" / "own_code.csv"
+    titles.parent.mkdir(parents=True, exist_ok=True)
+    titles.write_text('"own_code","own_title"\n1,"Federal Government"\n5,"Private"\n')
+
+    def summary(name, extracts, findings):
+        (tmp_path / name).mkdir(parents=True, exist_ok=True)
+        (tmp_path / name / "summary.json").write_text(json.dumps({
+            "source": name, "generated_utc": "x",
+            "coverage_span": dict.fromkeys(c.COVERAGE_KEYS, ""),
+            "access": {"route": "r", "status": "verified", "reason": None},
+            "extracts": extracts, "findings": findings,
+        }))
+
+    summary("qcew_codes",
+            [{"source": "qcew_codes", "url": "u", "path": str(titles), "sha256": "0",
+              "bytes": 1, "retrieved_utc": "x", "http_status": 200}],
+            {"private_own_code": private_own_code})
+    summary("qcew_panel", [], {"filter_predicates": predicates})
+
+
+BOTH_PREDICATES = ["industry_code == '113310'; retained 1 of 1 rows",
+                   "own_code == '5' (qcew_codes.findings.private_own_code); retained 1 of 1 rows"]
+
+
+def test_panel_scope_names_the_fetched_title_when_both_predicates_were_applied(
+    tmp_path, monkeypatch
+):
+    write_scope_fixture(tmp_path, monkeypatch, BOTH_PREDICATES)
+    assert verified_panel_scope() == "industry 113310 and own_code 5 ('Private')"
+
+
+def test_panel_scope_refuses_when_the_industry_filter_was_never_applied(tmp_path, monkeypatch):
+    write_scope_fixture(tmp_path, monkeypatch, [BOTH_PREDICATES[1]])
+    with pytest.raises(ValueError, match="industry scope"):
+        verified_panel_scope()
+
+
+def test_panel_scope_refuses_when_the_ownership_filter_was_never_applied(tmp_path, monkeypatch):
+    write_scope_fixture(tmp_path, monkeypatch, [BOTH_PREDICATES[0]])
+    with pytest.raises(ValueError, match="ownership scope"):
+        verified_panel_scope()
+
+
+def test_panel_scope_refuses_when_the_panel_applied_a_different_ownership_code(
+    tmp_path, monkeypatch
+):
+    """The check keys on the code, not on some own_code predicate merely existing."""
+    write_scope_fixture(tmp_path, monkeypatch,
+                        [BOTH_PREDICATES[0], "own_code == '1'; retained 1 of 1 rows"])
+    with pytest.raises(ValueError, match="ownership scope"):
+        verified_panel_scope()
+
+
+def render(build):
+    frame = build()
+    quarters, months, containment = comparison_tables(frame)
+    result = classify_identity(quarters, months)
+    structural = structural_findings(frame, quarterly_estabs(frame))
+    return build_verdict_sentence(result, structural, containment, months,
+                                  "2017-01 through 2017-03", "industry 113310 and own_code 5")
+
+
+def test_the_sentence_says_after_subtracting_only_when_a_subtraction_was_applied():
+    """The qualifier is true under `inside` and false under `outside`, so it must track the
+    measured containment rather than being stated or omitted unconditionally."""
+    assert "after subtracting" in render(inside_containment_panel)
+    assert "after subtracting" not in render(outside_containment_panel)
+
+
+def test_both_rendered_sentences_are_one_sentence():
+    for build in (inside_containment_panel, outside_containment_panel):
+        assert_one_sentence(render(build))

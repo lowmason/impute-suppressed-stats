@@ -530,31 +530,45 @@ def absent_state_months_note(structural: dict, evidence: dict) -> str:
     )
 
 
-def ownership_scope() -> str:
-    """The ownership this verdict covers, read rather than asserted.
+def verified_panel_scope() -> str:
+    """The industry and ownership this verdict covers, both read and checked rather than asserted.
 
     Naming the scope matters -- a verdict about the national identity is a verdict about one
-    ownership slice of it -- but writing the word into the sentence would state a scope fact this
-    run never checked: a re-run against a panel built on a different ownership filter would print
-    it unchanged. So the code comes from `qcew_codes.findings.private_own_code`, the title from
-    the ownership titles file that task fetched (which carries an extract hash), and the pairing
-    is checked against the predicate the panel actually applied before either is used.
+    industry-and-ownership slice of it -- but writing either into the sentence would state a
+    scope fact this run never checked: a re-run against a panel built on different filters would
+    print them unchanged. So both are checked against the predicates the panel actually applied.
+    Those predicates come from the same `qcew_panel` summary that supplies this script's parquet
+    path, which is what ties the check to the file being read rather than to a same-named file
+    somewhere else. The ownership code comes from `qcew_codes.findings.private_own_code` and its
+    title from the ownership titles file that task fetched, so the title carries an extract hash
+    instead of being spelled out here. `c.INDUSTRY_CODE` is a plan-pinned constant and needs no
+    such lookup, but it still needs the predicate check: the constant says what this plan targets,
+    not what the panel on disk was actually filtered to.
+
+    Refusing is the point. If either predicate is absent the scope cannot be stated truthfully,
+    and a verdict sentence that names an unverified scope is worse than no sentence at all.
     """
+    predicates = c.load_summary("qcew_panel")["findings"]["filter_predicates"]
+
+    def require_applied(prefix: str, what: str) -> None:
+        if not any(p.startswith(prefix) for p in predicates):
+            raise ValueError(
+                f"no qcew_panel filter predicate applied {prefix!r}, so the {what} scope of "
+                f"this verdict cannot be stated"
+            )
+
+    require_applied(f"industry_code == '{c.INDUSTRY_CODE}'", "industry")
+
     codes = c.load_summary("qcew_codes")
     own_code = codes["findings"]["private_own_code"]
+    require_applied(f"own_code == '{own_code}'", "ownership")
+
     titles_path = next(e["path"] for e in codes["extracts"]
                        if e["path"].endswith("titles/own_code.csv"))
     titles = pl.read_csv(titles_path, infer_schema_length=0)
     title = dict(zip(titles[titles.columns[0]].to_list(),
                      titles[titles.columns[1]].to_list(), strict=True))[own_code]
-
-    predicates = c.load_summary("qcew_panel")["findings"]["filter_predicates"]
-    if not any(p.startswith(f"own_code == '{own_code}'") for p in predicates):
-        raise ValueError(
-            f"qcew_codes gives private_own_code {own_code!r}, but no qcew_panel filter predicate "
-            f"applied it; the ownership scope of this verdict cannot be stated"
-        )
-    return f"own_code {own_code} ('{title}')"
+    return f"industry {c.INDUSTRY_CODE} and own_code {own_code} ('{title}')"
 
 
 def geography_reading(result: dict, quarters: pl.DataFrame) -> str:
@@ -603,7 +617,7 @@ def _clean_month_clause(evidence: dict, months: pl.DataFrame) -> str:
 
 def build_verdict_sentence(
     result: dict, structural: dict, containment: dict, months: pl.DataFrame,
-    span: str, ownership: str
+    span: str, scope: str
 ) -> str:
     """One sentence, every figure in it interpolated from this run's tables.
 
@@ -620,7 +634,7 @@ def build_verdict_sentence(
     return (
         f"{result['branch']}: across the {evidence['quarters_total']} quarter(s) and "
         f"{evidence['months_total']} month(s) the panel covers ({span}), the national "
-        f"{c.INDUSTRY_CODE} establishment count for {ownership} equals the states+DC published "
+        f"establishment count for {scope} equals the states+DC published "
         f"sum{subtracted} in {evidence['quarters_closing']} of "
         f"{evidence['quarters_evaluable']} evaluable quarter(s), with "
         f"{evidence['quarters_unevaluable']} unevaluable and "
@@ -663,7 +677,7 @@ def main() -> None:
     structural = structural_findings(panel, quarterly_estabs(panel))
 
     sentence = build_verdict_sentence(result, structural, containment, months,
-                                      _period_label(months), ownership_scope())
+                                      _period_label(months), verified_panel_scope())
     assert_one_sentence(sentence)
 
     c.write_summary(
