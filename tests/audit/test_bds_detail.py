@@ -357,3 +357,25 @@ def test_compose_retention_rule_reserves_the_retained_bytes_claim_for_the_two_20
     claim to those two outcomes, not extend it to the 204 case as well."""
     rule = m.compose_retention_rule([200, 204])
     assert "only the retained bytes tell the two 200 outcomes" in rule["rule"]
+
+
+def test_compose_retention_rule_no_longer_claims_three_verdicts_need_the_retained_bytes():
+    """Fix round 1, item 1 -- negative pin (green-only; the false phrase was already gone by the
+    time this test was added, per the advisor's note that a presence-only assertion doesn't pin
+    a defect that is an overclaim, only its replacement). The pre-fix text asserted "a 204 ...,
+    a 200 auth-rejection HTML page, and a 200 real tabular answer are three different verdicts
+    and only the retained bytes tell them apart" -- false for the 204 leg. This asserts that
+    exact false phrase is gone, so a regression that re-adds it as an extra sentence (leaving
+    the two corrected sentences from the other two tests in place) would still be caught."""
+    rule = m.compose_retention_rule([200, 204])
+    assert "three different verdicts" not in rule["rule"]
+
+
+def test_compose_retention_rule_states_why_the_204_body_is_retained():
+    """Fix round 1, item 1 follow-up (advisor pass): the deleted "a non-200 body IS the
+    evidence" clause was both the false claim and the stated reason a zero-byte 204 body is
+    worth retaining at all. The corrected rule must still say why -- the retained-but-empty
+    body is what turns the 204 into a recorded observation, not just what http_status already
+    tells a reader."""
+    rule = m.compose_retention_rule([200, 204])
+    assert "recorded observation" in rule["rule"]
