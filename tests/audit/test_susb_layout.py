@@ -365,10 +365,12 @@ def test_state_scope_raises_when_geo_col_is_none():
 
 def test_state_scope_raises_on_a_geography_type_mismatch_not_a_silent_empty_frame():
     """The live hazard this pins: if a geography column ever lost its leading zero to numeric
-    inference (STATE "01" -> integer 1), is_in(STATES_DC_FIPS) (strings) would match zero rows
-    and every state-level finding downstream would silently read as an unfounded "False" --
-    the same answer a genuine absence produces. This must raise instead."""
-    df = pl.DataFrame({"STATE": ["00"], "NAICS": ["113310"]})  # only the national row present
+    inference, STATE "01" arrives as the integer 1 -- and pl.lit(1).cast(pl.Utf8) yields "1",
+    not "01", so is_in(STATES_DC_FIPS) (string "01"/"02") still matches zero rows even after
+    state_scope's own cast(pl.Utf8). The cast does not save this case; the raise does. This
+    fixture is genuinely Int64 (not a string column holding "00"), which is what actually
+    exercises the type-mismatch failure mode rather than a same-typed all-national frame."""
+    df = pl.DataFrame({"STATE": [0, 1, 2], "NAICS": ["113310", "11", "11"]})
     try:
         m.state_scope(df, geo_col="STATE", state_fips=("01", "02"))
         raise AssertionError("expected RuntimeError")
@@ -473,10 +475,19 @@ def test_field_description_returns_empty_string_for_an_undocumented_field():
     assert m.field_description(RECORD_LAYOUT_EXCERPT, "NOPE_NOT_A_FIELD") == ""
 
 
-def test_field_description_does_not_match_a_field_name_as_a_substring():
-    """STATE must not match on some other line that merely contains the substring "STATE" --
-    only a line beginning with the field name."""
+def test_field_description_does_not_match_a_field_name_that_is_a_strict_prefix():
+    """"STAT" is a strict prefix of the real field "STATE" -- the trailing \\b in the match
+    pattern must reject it: STATE's own line is "STATE\\tC...", so "STAT" immediately followed
+    by "E" is not a word boundary, and the shorter string must not count as a match."""
     assert m.field_description(RECORD_LAYOUT_EXCERPT, "STAT") == ""
+
+
+def test_field_description_does_not_match_a_field_name_appearing_mid_line():
+    """"Enterprise" appears inside ENTRSIZE's own description line ("ENTRSIZE\\tC\\tEnterprise
+    Employment Size Code"), but not at the START of that line -- a field name that merely
+    occurs somewhere in the document must not be treated as a match; only a line that BEGINS
+    with the field name counts (the ^ anchor, not just \\b)."""
+    assert m.field_description(RECORD_LAYOUT_EXCERPT, "Enterprise") == ""
 
 
 # --- classify_size_concept ------------------------------------------------------------------------

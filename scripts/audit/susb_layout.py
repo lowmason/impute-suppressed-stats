@@ -232,7 +232,14 @@ def describe_layout(
     states + D.C. + the national total) are small enough that a sampling cap would hide data
     rather than summarize it. The brief capped both at 40/10; seeing the actual file made the
     52-item geography column the deciding case (a 10-item cap would have discarded 42 of 52
-    codes under a key literally named "geography_levels") -- see the task report."""
+    codes under a key literally named "geography_levels") -- see the task report.
+
+    Caution for a reader of `industry_code_lengths_at_state`: a length of 4 there is NOT
+    evidence of real 4-digit NAICS industry detail. Confirmed live in
+    `us_state_naics_detailedsizes_2022.txt`'s state-level rows: the only length-4 values are
+    `3133`, `4445`, `4849` -- dash-stripped NAICS SECTOR-RANGE labels (e.g. "31-33" for
+    Manufacturing), not 4-digit subsector codes. This script measures string length, not
+    NAICS-code semantics, and does not distinguish the two."""
     cols = df.columns
     size_col = find_column(cols, r"(?i)size")
     naics_col = find_column(cols, r"(?i)naics")
