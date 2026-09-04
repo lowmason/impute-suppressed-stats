@@ -5,14 +5,17 @@ behaviour on toy panels *before* it is ever pointed at `qcew_panel`. That orderi
 scanning first and reasoning second produces a rationalisation for whichever verdict the data
 suggests.
 
-The first nine tests come from the task brief and pin the three-branch contract. The rest pin
-the two silent failure modes the brief's illustrative code leaves open, both of which would
-corrupt the highest-stakes output in the *safe*-looking direction:
+Three groups, and they were written at different points, which the section comments record:
 
-1. `Series.all()` defaults to `ignore_nulls=True`, so a null comparison cell is skipped and
-   reads as a pass -- an unevaluable quarter would silently become `enforce`.
-2. A reference-side value that was never published must not be summed to `0`, which is
+1. The brief's nine, pinning the three-branch contract.
+2. The two silent failure modes the brief's illustrative code leaves open, both of which would
+   corrupt the highest-stakes output in the *safe*-looking direction: `Series.all()` defaults to
+   `ignore_nulls=True`, so a null comparison cell is skipped and reads as a pass; and a
+   reference-side value that was never published must not be summed to `0`, which is
    indistinguishable from a published zero and manufactures (or hides) a gap.
+3. Containment -- written after the scan, and labelled as such where it starts.
+
+Groups 1 and 2 predate the scan, and `classify_identity` has not changed since they went green.
 
 `qcew_identity` is imported bare, like `_common`, per `tests/conftest.py`. Importing it is
 inert: the module's only side effects sit behind `if __name__ == "__main__"`.
@@ -23,7 +26,15 @@ from __future__ import annotations
 import polars as pl
 import pytest
 
-from qcew_identity import classify_identity
+from qcew_identity import (
+    INDETERMINATE,
+    INSIDE,
+    NO_OTHER_AREA,
+    OUTSIDE,
+    classify_identity,
+    comparison_tables,
+    measure_containment,
+)
 
 
 def quarters(rows):
@@ -183,3 +194,137 @@ def test_every_reason_is_free_of_sentence_breaks():
         reason = classify_identity(q, m)["reason"]
         assert ". " not in reason
         assert not reason.endswith(".")
+
+
+# --- containment: is a non-state area a component of the national total? ----------------------
+#
+# These tests were written *after* the scan, unlike everything above, because the scan is what
+# showed the question needed asking: the brief's `estab_gap - other_estabs` presupposes that a
+# non-state area is inside the national total, and a panel where it is not makes that
+# subtraction manufacture a gap out of an identity that closes. `classify_identity` is
+# unchanged; the fix is upstream of it, so the tests above still pin the rule as committed.
+
+
+def raw_quarters(rows):
+    return pl.DataFrame(
+        rows,
+        schema={"year": pl.Int32, "qtr": pl.Int8, "national_estabs": pl.Int64,
+                "states_dc_estabs": pl.Int64, "other_published": pl.Int64,
+                "estab_gap": pl.Int64},
+        orient="row",
+    )
+
+
+def test_non_state_area_inside_the_national_total_is_subtracted():
+    raw = raw_quarters([(2017, 1, 110, 100, 10, 10), (2017, 2, 105, 100, 5, 5)])
+    out = measure_containment(raw)
+    assert out["verdict"] == INSIDE
+    assert out["subtraction_applied"] is True
+    assert out["quarters_discriminating"] == 2
+
+
+def test_non_state_area_outside_the_national_total_is_not_subtracted():
+    """The national total already equals the state sum, so the area is additional to it."""
+    raw = raw_quarters([(2017, 1, 100, 100, 1, 0), (2017, 2, 100, 100, 2, 0)])
+    out = measure_containment(raw)
+    assert out["verdict"] == OUTSIDE
+    assert out["subtraction_applied"] is False
+    assert out["quarters_gap_is_zero"] == 2
+
+
+def test_mixed_containment_is_indeterminate_and_still_subtracts():
+    """Unsettled containment must not be resolved by fiat; subtracting leaves a non-zero gap
+    for the rule's first gate to decline on."""
+    raw = raw_quarters([(2017, 1, 110, 100, 10, 10), (2017, 2, 100, 100, 5, 0)])
+    out = measure_containment(raw)
+    assert out["verdict"] == INDETERMINATE
+    assert out["subtraction_applied"] is True
+
+
+def test_a_zero_contribution_quarter_cannot_discriminate():
+    """`estab_gap == other == 0` satisfies both readings, so it must not be counted as evidence."""
+    raw = raw_quarters([(2017, 1, 100, 100, 0, 0), (2017, 2, 100, 100, 0, 0)])
+    out = measure_containment(raw)
+    assert out["verdict"] == NO_OTHER_AREA
+    assert out["quarters_discriminating"] == 0
+    assert out["subtraction_applied"] is False
+
+
+def test_an_unpublished_non_state_count_is_counted_not_treated_as_discriminating():
+    raw = raw_quarters([(2017, 1, 100, 100, None, 0), (2017, 2, 110, 100, 10, 10)])
+    out = measure_containment(raw)
+    assert out["quarters_non_state_amount_unpublished"] == 1
+    assert out["quarters_discriminating"] == 1
+    assert out["verdict"] == INSIDE
+
+
+def panel(rows):
+    return pl.DataFrame(
+        rows,
+        schema={"area_fips": pl.String, "area_title": pl.String, "area_class": pl.String,
+                "year": pl.Int32, "qtr": pl.Int8, "month": pl.Int8, "emplvl": pl.Int64,
+                "qtrly_estabs": pl.Int64, "disclosure_code": pl.String,
+                "suppressed": pl.Boolean},
+        orient="row",
+    )
+
+
+def outside_containment_panel():
+    """One state and one non-state area whose establishments are absent from the national total,
+    with the non-state area's employment withheld -- the shape the real panel turns out to have.
+    """
+    rows = []
+    for month in (1, 2, 3):
+        rows += [
+            ("US000", "US TOTAL", "national", 2017, 1, month, 500, 100, "", False),
+            ("01000", "Alabama", "states_dc", 2017, 1, month, 500, 100, "", False),
+            ("72000", "Puerto Rico -- Statewide", "other_state_level", 2017, 1, month,
+             None, 1, "N", True),
+        ]
+    return panel(rows)
+
+
+def test_an_area_outside_the_national_total_does_not_manufacture_a_gap():
+    quarters, _, containment = comparison_tables(outside_containment_panel())
+    assert containment["verdict"] == OUTSIDE
+    assert quarters["other_estabs"].to_list() == [0]
+    assert quarters["estab_gap"].to_list() == quarters["estab_gap_after_other"].to_list() == [0]
+
+
+def test_a_withheld_value_outside_the_national_total_leaves_months_testable():
+    """Suppression in an area that is not part of the national total cannot make the national
+    identity untestable, because that area is not a term in it."""
+    quarters, months, _ = comparison_tables(outside_containment_panel())
+    out = classify_identity(quarters, months)
+    assert out["evidence"]["testable_months"] == 3
+    assert out["evidence"]["untestable_months"] == 0
+    assert months["other_emp"].to_list() == [0, 0, 0]
+
+
+def test_a_withheld_value_inside_the_national_total_makes_months_untestable():
+    """The mirror image: when the area *is* a term in the national total, a withheld value is a
+    missing term and the month must not be scored as if it were zero."""
+    rows = []
+    for month in (1, 2, 3):
+        rows += [
+            ("US000", "US TOTAL", "national", 2017, 1, month, 500, 110, "", False),
+            ("01000", "Alabama", "states_dc", 2017, 1, month, 450, 100, "", False),
+            ("72000", "Puerto Rico -- Statewide", "other_state_level", 2017, 1, month,
+             None, 10, "N", True),
+        ]
+    quarters, months, containment = comparison_tables(panel(rows))
+    assert containment["verdict"] == INSIDE
+    assert quarters["estab_gap_after_other"].to_list() == [0]
+    out = classify_identity(quarters, months)
+    assert out["evidence"]["untestable_months"] == 3
+    assert out["branch"] == "decline"
+    assert "untestable" in out["reason"]
+
+
+def test_qtrly_estabs_disagreeing_within_a_quarter_raises():
+    """The establishment sums assume one quarterly value per area-quarter, so a disagreement
+    fails loudly rather than being silently resolved by picking a row."""
+    rows = [("01000", "Alabama", "states_dc", 2017, 1, month, 10, estabs, "", False)
+            for month, estabs in ((1, 100), (2, 101), (3, 100))]
+    with pytest.raises(ValueError, match="qtrly_estabs varies"):
+        comparison_tables(panel(rows))
