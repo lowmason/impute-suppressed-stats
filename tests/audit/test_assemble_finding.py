@@ -18,7 +18,9 @@ whose failure would put a false or missing value into it:
 5. the Appendix A `enabled` defaults are juxtaposed with the measured access status for every
    source Appendix A ships, including the ones this audit never touched;
 6. `machine_path_disclosure` counts what it names, and is not fooled by `extracts[].path`,
-   which is absolute for every source by construction.
+   which is absolute for every source by construction;
+7. the shipped disclosure paragraph names what each exit criterion's PASS is worth -- including
+   criterion C's, which it previously left out while calling the list closed.
 
 `assemble_finding` is imported bare, like `_common`, per `tests/conftest.py`. Importing it is
 inert: the module's only side effects sit behind `if __name__ == "__main__"`.
@@ -288,3 +290,26 @@ def test_the_shipped_document_has_one_section_per_audited_source():
     document = m.OUT.read_text(encoding="utf-8")
     for name in v.EXPECTED_SOURCES:
         assert f"### `{name}`" in document
+
+
+def test_the_shipped_disclosure_names_criterion_cs_limit_and_not_only_e1s():
+    """Rule 7 in the artifact that reaches a fresh clone. The disclosure named E1's limit and
+    called it "one limit worth naming", which reads as exhaustive to a reader who has only this
+    file; criterion C's PASS rests on four substring matches plus one presence test per
+    Appendix A source name and asserted far more than that. Both limits are named now, and the
+    phrasing that closed the list is gone."""
+    document = m.OUT.read_text(encoding="utf-8")
+    assert "one limit worth naming" not in document
+    assert "four substring matches" in document
+    assert "not that their verdict cells say anything" in document
+
+
+def test_the_shipped_document_names_the_two_fields_e1_passes_by_declared_exemption():
+    """Two of the roadmap-mapped fields are empty and pass E1 because the gate declares them.
+    A reader of this document alone should be told which, rather than reading the PASS line as
+    "every mapped field carries a value"."""
+    document = m.OUT.read_text(encoding="utf-8")
+    for source, key in (("qcew_routes", "bulk_years_required"),
+                        ("cbp_metadata", "lfo_by_year")):
+        assert (source, key) in v.LEGITIMATELY_EMPTY_FINDINGS
+        assert f"`{source}.{key}`" in document
