@@ -20,31 +20,36 @@ during this task (not from memory or the reference repo):
    `<title>` (`html_title`), so a Census maintenance page or rate-limit interstitial is never
    folded into the same "the key is bad" bucket as an actual missing/invalid-key redirect.
 
-2. **CBP's metadata publishes no EMPSZES/LFO code-label crosswalk for this dataset -- measured
-   by probing every keyless route that could plausibly carry one, not assumed from a single
-   endpoint checked once.** The plan's illustrative `value_list` helper reads
-   `payload["values"]["item"]` from `/variables/{VAR}.json` -- a shape used by some other Census
-   APIs, but this dataset's response has no `values` key. `probe_empszes_metadata_crosswalk`
-   checks that endpoint plus two more candidates per year -- `groups.json` (a group index, no
-   per-variable detail) and the group detail document named by EMPSZES's own `group` field
-   (`groups/{group}.json`, which lists every variable in that group, including EMPSZES's own
-   entry, or entries -- confirmed live for 2018, where EMPSZES belongs to two groups at once)
-   -- and records `{url, status, carries_values_crosswalk}` for each in
-   `empszes_metadata_crosswalk_probe_by_year`. Every candidate probed returned no crosswalk for
-   every available year -- the count of candidates checked lives in that finding key each run,
-   not as a number typed here. `empszes_by_year` is therefore populated instead from the data
-   pull's own rows (`EMPSZES`/`EMPSZES_LABEL` are requested as unfiltered output columns in
-   attempts 1-2 below): distinct `(EMPSZES, EMPSZES_LABEL)` pairs actually observed in the
-   113310 x state slice (`empszes_pairs_from_rows`). That is an OBSERVATION over the pulled
-   slice, not
-   SRC-CBP-001's official enumeration -- a size class with zero logging establishments in every
-   state a given year produces no row and is silently absent from it. `empszes_by_year[year]`
-   says this in the data itself (a `scope`/`note` field alongside `pairs`, not only in this
-   docstring), so a downstream reader cannot mistake it for the authoritative list the metadata
-   probe already established does not exist. `LFO` is only ever used as a filter (`="001"`) or
-   omitted, never selected as an output column, so no attempt here can ever yield a full LFO
-   crosswalk from its rows even once a pull succeeds -- `lfo_by_year` stays `null` with that
-   limitation recorded in `notes` per year.
+2. **Whether CBP's metadata publishes an EMPSZES code-label crosswalk varies by vintage --
+   measured every year by probing every keyless route that could plausibly carry one, never
+   assumed uniform from a single endpoint checked once.** The plan's illustrative `value_list`
+   helper reads `payload["values"]["item"]` from `/variables/{VAR}.json`. **2017's real
+   response has exactly that shape -- 44 code/label pairs, `"001": "All establishments"`
+   onward.** Every other available year checked this run carried none;
+   `empszes_metadata_crosswalk_probe_by_year` records which years, not this docstring.
+   A first pass at this task checked only 2021 by hand, found no crosswalk, and generalized
+   that to every vintage; the generalization was wrong, and the fix was to make the check
+   something the script does every year rather than something a person did once.
+   `probe_empszes_metadata_crosswalk` checks `/variables/EMPSZES.json` plus two more
+   candidates per year -- `groups.json` (a group index, no per-variable detail) and every
+   group detail document named by EMPSZES's own `group` field (`groups/{group}.json`, which
+   lists every variable in that group, including EMPSZES's own entry -- confirmed live for
+   2018 that this field can name more than one group at once) -- and records `{url, status,
+   carries_values_crosswalk}` for each in `empszes_metadata_crosswalk_probe_by_year`, plus the
+   actual `{code: label}` dict from whichever candidate carried one
+   (`crosswalk_items_from_payload`). Where the official enumeration exists (2017),
+   `empszes_by_year[year]` carries it directly, tagged `"source":
+   "official_metadata_crosswalk"`. Where it doesn't (2018 onward, confirmed absent this way,
+   not merely unfetched), `empszes_by_year[year]` falls back to an OBSERVATION over the keyed
+   pull's own rows instead: `EMPSZES`/`EMPSZES_LABEL` are requested as unfiltered output
+   columns in attempts 1-2 below, so distinct `(EMPSZES, EMPSZES_LABEL)` pairs actually
+   returned (`empszes_pairs_from_rows`) are tagged `"source": "observed_in_113310_state_slice"`
+   -- an under-count risk a bare list would hide (a size class with zero logging
+   establishments in every state that year produces no row), which is why the source is
+   recorded in the data itself, not only in this docstring. `LFO` is only ever used as a
+   filter (`="001"`) or omitted, never selected as an output column, so no attempt here can
+   ever yield a full LFO crosswalk from its rows even once a pull succeeds -- `lfo_by_year`
+   stays `null` with that limitation recorded in `notes` per year.
 
 3. **A key genuinely present in this repo's `.env` does not authenticate.** Confirmed against
    both this dataset and, as a control ruling out a CBP-specific malformed query, against a
@@ -62,6 +67,16 @@ during this task (not from memory or the reference repo):
    `notes` entry naming which of the two it was (`unavailable_year_reason`) -- a missing key
    and `null` are different facts to a downstream reader, and the dispatch that opened this
    task named that distinction directly.
+
+5. **A run that stops writing the canonical `data_113310.json` on failure also removes any
+   stale one a prior run left behind, at the start of processing each year -- before this
+   run has decided whether it has a real answer.** Making the write conditional on success
+   fixed what a *future* failing run does; it did nothing about what a *past* one already
+   wrote. Without this, a year whose keyed pull fails this run but succeeded (or, before this
+   fix, "succeeded") in some earlier run would keep an old file sitting at the exact filename
+   the plan's Produces block names, unregistered in this run's `extracts` and therefore vouched
+   for by nothing -- worse than absent, because it looks current to anything that opens the
+   path directly instead of going through the manifest.
 """
 
 from __future__ import annotations
@@ -84,9 +99,12 @@ _TITLE_RE = re.compile(rb"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
 # interstitial, a malformed-JSON body) must fall through to "query_bug" instead.
 _AUTH_REJECTION_STATUSES = frozenset({"invalid_key", "missing_key"})
 
-# The scope tag `empszes_by_year[year]["scope"]` carries when populated -- deliberately not the
-# official metadata enumeration; see module docstring point 2.
-EMPSZES_OBSERVED_SCOPE = "observed_in_113310_state_slice"
+# The two values `empszes_by_year[year]["source"]` can carry. Fix round 2: both are real --
+# 2017 genuinely has the official enumeration in metadata; 2018 onward fall back to the
+# row-derived observation. Task 8 needs to tell them apart, so the source is recorded in the
+# data itself, not only in this module's docstring.
+EMPSZES_SOURCE_OFFICIAL = "official_metadata_crosswalk"
+EMPSZES_SOURCE_OBSERVED = "observed_in_113310_state_slice"
 
 
 def html_title(body: bytes) -> str:
@@ -193,24 +211,42 @@ def group_names_from_field(group_field: str | None) -> list[str]:
     return [g.strip() for g in group_field.split(",") if g.strip()]
 
 
-def crosswalk_present_in_payload(payload: dict, variable: str) -> bool:
-    """True if `payload` carries an enumerated `values.item` code list for `variable`, checked
-    at every shape this task's three candidate metadata routes can take: a flat single-variable
+def crosswalk_items_from_payload(payload: dict, variable: str) -> dict[str, str] | None:
+    """The raw `{code: label}` `values.item` dict for `variable` within `payload`, checked at
+    every shape this task's three candidate metadata routes can take: a flat single-variable
     document (`/variables/{variable}.json`, where `payload` itself is the candidate), a
     group-index document with no per-variable detail at all (`/groups.json`, which never
     matches), and a group document listing every variable in that group
     (`/groups/{group}.json`, where `variable`'s own entry sits under `payload["variables"]`).
-    Never raises on a malformed or unexpected shape -- absence is the answer, not a crash."""
+    Returns `None` if no candidate carries one. Never raises on a malformed or unexpected shape
+    -- absence is the answer, not a crash.
+
+    Fix round 2: confirmed live that this is NOT always absent -- 2017's real
+    `/variables/EMPSZES.json` carries 44 code/label pairs (`"001": "All establishments"`, ...);
+    2018 onward do not. The prior round's claim that no candidate ever carries one was true
+    for the single year checked by hand and false as a generalization across vintages; this
+    function existing (and `probe_empszes_metadata_crosswalk` calling it every year rather than
+    once) is what caught that."""
     candidates = [payload]
     variables = payload.get("variables")
     if isinstance(variables, dict):
         entry = variables.get(variable)
         if isinstance(entry, dict):
             candidates.append(entry)
-    return any(
-        isinstance(cand.get("values"), dict) and isinstance(cand["values"].get("item"), dict)
-        for cand in candidates
-    )
+    for cand in candidates:
+        values = cand.get("values")
+        if isinstance(values, dict):
+            items = values.get("item")
+            if isinstance(items, dict):
+                return items
+    return None
+
+
+def crosswalk_present_in_payload(payload: dict, variable: str) -> bool:
+    """True if `payload` carries an enumerated `values.item` code list for `variable` --
+    `crosswalk_items_from_payload(payload, variable) is not None`, as a boolean convenience for
+    the probe record; see that function's docstring for the shapes checked."""
+    return crosswalk_items_from_payload(payload, variable) is not None
 
 
 def unavailable_year_reason(probe_status: int) -> str:
@@ -245,26 +281,36 @@ def fetch_variable_doc(client: httpx.Client, year: int, variable: str, extracts:
 
 def probe_empszes_metadata_crosswalk(
     client: httpx.Client, year: int, empszes_doc: dict, empszes_status: int, extracts: list
-) -> list[dict]:
+) -> tuple[list[dict], dict[str, str] | None]:
     """Probe every keyless metadata route that could plausibly carry an EMPSZES values
-    crosswalk for this vintage, and record what each actually returned -- so "CBP's metadata
-    publishes no EMPSZES value list" is measured this run, not asserted from a single endpoint
-    checked once during development (module docstring point 2). `empszes_doc` is
+    crosswalk for this vintage, and record what each actually returned -- so whether "CBP's
+    metadata publishes an EMPSZES value list" is measured every year this run, not assumed
+    uniform from a single endpoint checked once during development (module docstring point 2;
+    fix round 2 -- 2017 genuinely carries one, 2018 onward do not). `empszes_doc` is
     `/variables/EMPSZES.json`'s already-fetched, already-recorded payload; its own `group`
-    field names the candidate group document."""
+    field names the candidate group document.
+
+    Returns `(probe_records, official_crosswalk)`. `official_crosswalk` is the raw
+    `{code: label}` dict from whichever candidate carried one -- the flat variable document is
+    checked first, matching what has actually been observed (2017 carries it there and nowhere
+    else checked ever has) -- or `None` if no candidate did this year."""
     ez_url = f"{BASE.format(year=year)}/variables/EMPSZES.json"
+    ez_items = crosswalk_items_from_payload(empszes_doc, "EMPSZES")
     probe = [{
         "url": ez_url, "status": empszes_status,
-        "carries_values_crosswalk": crosswalk_present_in_payload(empszes_doc, "EMPSZES"),
+        "carries_values_crosswalk": ez_items is not None,
     }]
+    official = ez_items
 
     groups_url = f"{BASE.format(year=year)}/groups.json"
     gresp = c.request(client, groups_url)
     extracts.append(c.record_extract(SOURCE, groups_url, f"{year}/groups.json", gresp.content))
+    groups_items = crosswalk_items_from_payload(gresp.json(), "EMPSZES")
     probe.append({
         "url": groups_url, "status": gresp.status_code,
-        "carries_values_crosswalk": crosswalk_present_in_payload(gresp.json(), "EMPSZES"),
+        "carries_values_crosswalk": groups_items is not None,
     })
+    official = official or groups_items
 
     # `group` can name more than one group, comma-separated -- confirmed live for 2018
     # ("CB1800ZBP,CB1800CBP": EMPSZES is shared between the ZIP Code Business Patterns and
@@ -275,11 +321,13 @@ def probe_empszes_metadata_crosswalk(
         gdresp = c.request(client, group_url)
         extracts.append(c.record_extract(
             SOURCE, group_url, f"{year}/groups_{group}.json", gdresp.content))
+        group_items = crosswalk_items_from_payload(gdresp.json(), "EMPSZES")
         probe.append({
             "url": group_url, "status": gdresp.status_code,
-            "carries_values_crosswalk": crosswalk_present_in_payload(gdresp.json(), "EMPSZES"),
+            "carries_values_crosswalk": group_items is not None,
         })
-    return probe
+        official = official or group_items
+    return probe, official
 
 
 def main() -> None:
@@ -308,6 +356,16 @@ def main() -> None:
             continue
         years.append(year)
 
+        # Clear any stale canonical data_113310.json this year's own writer might not
+        # overwrite (fix round 2). A writer that only writes the canonical file on a real
+        # success does not unwrite what an earlier, less careful run already wrote at this
+        # path -- if this run's every exit path this year is a failure or an early `continue`,
+        # a pre-fix run's HTML error page would otherwise keep sitting at the canonical name
+        # looking current, with nothing in this run's manifest to contradict it.
+        canonical_path = c.AUDIT_ROOT / SOURCE / f"{year}" / "data_113310.json"
+        canonical_path.unlink(missing_ok=True)
+        (canonical_path.parent / f"{canonical_path.name}.sha256").unlink(missing_ok=True)
+
         meta = c.request(client, f"{BASE.format(year=year)}.json")
         extracts.append(c.record_extract(
             SOURCE, f"{BASE.format(year=year)}.json", f"{year}/dataset.json", meta.content))
@@ -323,18 +381,39 @@ def main() -> None:
         has_empszes = "EMPSZES" in names
         has_lfo = "LFO" in names
 
+        official_crosswalk: dict[str, str] | None = None
         if has_empszes:
             ez_url = f"{BASE.format(year=year)}/variables/EMPSZES.json"
             ez_resp = c.request(client, ez_url)
             extracts.append(c.record_extract(
                 SOURCE, ez_url, f"{year}/empszes.json", ez_resp.content))
-            crosswalk_probe[str(year)] = probe_empszes_metadata_crosswalk(
+            crosswalk_records, official_crosswalk = probe_empszes_metadata_crosswalk(
                 client, year, ez_resp.json(), ez_resp.status_code, extracts)
+            crosswalk_probe[str(year)] = crosswalk_records
         else:
             crosswalk_probe[str(year)] = None
             notes.append(
                 f"{year}: EMPSZES is not a variable for this vintage; no metadata-crosswalk "
                 "probe was run"
+            )
+
+        if official_crosswalk:
+            # The official enumeration exists in metadata for this vintage (confirmed live for
+            # 2017 -- 44 codes) -- use it, and record that it came from metadata rather than
+            # the keyed pull's rows. This also means empszes_by_year can be populated for a
+            # year even when the keyed pull itself fails (this run, for every year) -- the
+            # crosswalk probe is entirely keyless.
+            empszes[str(year)] = {
+                "source": EMPSZES_SOURCE_OFFICIAL,
+                "pairs": [
+                    {"code": code, "label": label}
+                    for code, label in sorted(official_crosswalk.items())
+                ],
+            }
+            notes.append(
+                f"{year}: EMPSZES official crosswalk found in metadata "
+                f"({len(official_crosswalk)} codes) -- see "
+                "empszes_metadata_crosswalk_probe_by_year for which route carried it"
             )
 
         # lfo_by_year is null either way: when LFO isn't a variable at all, and also when it
@@ -372,7 +451,8 @@ def main() -> None:
             working[str(year)] = {"status": reason}
             rows[str(year)] = None
             flags[str(year)] = None
-            empszes[str(year)] = None
+            if not official_crosswalk:
+                empszes[str(year)] = None
             notes.append(f"{year}: {reason} ({matches}); keyed 113310 pull skipped")
             continue
         naics = matches[0]
@@ -420,18 +500,22 @@ def main() -> None:
                 col: sorted({(r[idx[col]] or "") for r in body})
                 for col in ("EMP_F", "EMP_N") if col in idx
             }
-            pairs = empszes_pairs_from_rows(header, body)
-            empszes[str(year)] = None if pairs is None else {
-                "scope": EMPSZES_OBSERVED_SCOPE,
-                "note": (
-                    "NOT the official CBP metadata enumeration -- Census publishes no EMPSZES "
-                    "values crosswalk for this dataset (see "
-                    "empszes_metadata_crosswalk_probe_by_year). A size class with zero "
-                    "logging establishments in every state this year is silently absent from "
-                    "`pairs`."
-                ),
-                "pairs": pairs,
-            }
+            if not official_crosswalk:
+                # Fallback only -- the official crosswalk (set above, if the probe found one)
+                # always wins. This branch only ever populates empszes_by_year for a vintage
+                # where metadata genuinely carries no enumeration (2018 onward, confirmed).
+                pairs = empszes_pairs_from_rows(header, body)
+                empszes[str(year)] = None if pairs is None else {
+                    "source": EMPSZES_SOURCE_OBSERVED,
+                    "note": (
+                        "NOT the official CBP metadata enumeration -- this vintage's metadata "
+                        "carries no EMPSZES values crosswalk (see "
+                        "empszes_metadata_crosswalk_probe_by_year). A size class with zero "
+                        "logging establishments in every state this year is silently absent "
+                        "from `pairs`."
+                    ),
+                    "pairs": pairs,
+                }
             winning_content = dresp.content
             any_keyed_success = True
             break
@@ -441,17 +525,28 @@ def main() -> None:
             working[str(year)] = {"status": cause}
             rows[str(year)] = None
             flags[str(year)] = None
-            empszes[str(year)] = None
+            if not official_crosswalk:
+                empszes[str(year)] = None
             notes.append(
                 f"{year}: keyed 113310 pull failed for all {len(attempts)} attempts -- cause: "
                 f"{cause} (attempt statuses: {attempt_statuses})"
             )
             if cause == "auth_error":
                 distinct = sorted(set(attempt_statuses))
+                # empszes_by_year is the one field the keyed-pull failure does NOT necessarily
+                # null out -- a year with an official metadata crosswalk (2017) keeps it,
+                # because that crosswalk comes from a keyless route this failure never touched.
+                # Naming it here unconditionally would repeat exactly the "persisted prose
+                # contradicts the artifact" bug fix round 1 already found once in this note.
+                empszes_clause = (
+                    "empszes_by_year already carries the official metadata crosswalk found "
+                    "above, unaffected by this" if official_crosswalk else
+                    "empszes_by_year is null for this year too, not measured as zero or empty"
+                )
                 notes.append(
                     f"{year}: every attempt's response matched Census's key-rejection page "
-                    f"({distinct}); rows_113310_by_year, flag_values_by_year and "
-                    "empszes_by_year are null for this year, not measured as zero or empty; "
+                    f"({distinct}); rows_113310_by_year and flag_values_by_year are null for "
+                    f"this year, not measured as zero or empty; {empszes_clause}; "
                     "working_query_by_year carries {'status': 'auth_error'} rather than the "
                     "successful query shape -- re-run this task once CENSUS_API_KEY "
                     "authenticates."
@@ -498,6 +593,14 @@ def main() -> None:
     failure_causes = sorted({
         v["status"] for v in working.values() if isinstance(v, dict) and "status" in v
     })
+    # Derived from empszes, not typed -- access.status = "not_obtainable" would otherwise read
+    # as "nothing usable came out of this run" when a reader only checks this one field, which
+    # is false whenever a keyless official metadata crosswalk was found (2017, this run) even
+    # though the keyed pull itself failed everywhere.
+    official_crosswalk_years = sorted(
+        int(y) for y, v in empszes.items()
+        if isinstance(v, dict) and v.get("source") == EMPSZES_SOURCE_OFFICIAL
+    )
     access_reason = (
         None if access_status == "verified" else
         (
@@ -505,7 +608,9 @@ def main() -> None:
             "groups, geography) returned real JSON for every year in years_available, but "
             "the keyed 113310 data pull did not succeed for any window year this run -- "
             f"causes recorded in working_query_by_year: {failure_causes}; see findings.notes "
-            "per year for detail"
+            "per year for detail. empszes_by_year is nonetheless populated from a keyless "
+            f"official metadata crosswalk (unaffected by the keyed-pull failure) for: "
+            f"{official_crosswalk_years or 'no years this run'}"
         ) if years else
         "no window year returned a CBP dataset document"
     )
