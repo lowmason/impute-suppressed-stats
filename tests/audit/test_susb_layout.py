@@ -14,7 +14,8 @@ Three defects were confirmed live and are pinned here, matching the numbering in
 3. **`has_113310` computed over a whole file is a different (here false) claim from
    `has_113310_at_state`.** `us_state_naics_detailedsizes_2022.txt` carries `113310` only at
    `STATE == "00"` (confirmed live: 0 of 23,887 state-level rows, all 19 matching rows at
-   `STATE == "00"`); `us_state_6digitnaics_2022.txt` carries it at 46 states. `describe_layout`
+   `STATE == "00"`); `us_state_6digitnaics_2022.txt` carries it at 45 real states (46 distinct
+   `STATE` values, one of which is `"00"`, the national row, not a state). `describe_layout`
    is pinned below against two small fixtures reproducing exactly this shape, through the same
    code path, so the asymmetry is not a coincidence of two separately-written checks.
 
@@ -128,6 +129,23 @@ def sixdigit_shaped_df() -> pl.DataFrame:
         "ENTRSIZE": ["01", "01", "01", "01"],
         "ENTRSIZEDSCR": ["01: Total", "01: Total", "01: Total", "01: Total"],
     })
+
+
+# --- module docstring: the 45-vs-46-states count (fix round 1, finding 1) ------------------------
+
+
+def test_module_docstring_states_the_real_state_count_not_the_national_row_inflated_one():
+    """Fix round 1, finding 1: the shipped docstring claimed `us_state_6digitnaics_2022.txt`
+    carries `113310` in "46 states, confirmed live". The controller verified directly against
+    the fetched file that the real count is 45 real states -- 46 is 45 states plus the
+    national/US-total row (`STATE == "00"`) counted as a 46th state, the exact `has_113310` vs.
+    `has_113310_at_state` collision this module's defect 3 exists to catch, now recurring inside
+    defect 3's own explanatory paragraph. No function returns this count (it is prose only, not
+    a computed finding -- `summary.json` stores only the boolean `has_113310_at_state.six_digit`
+    per module docstring point 3, so this pins `m.__doc__` directly, the only place the claim
+    lives), so the corrected text and the absence of the false phrase are both asserted here."""
+    assert "45 real states" in m.__doc__
+    assert "46 states, confirmed" not in m.__doc__
 
 
 # --- html_title / is_directory_listing -----------------------------------------------------------

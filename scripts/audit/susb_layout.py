@@ -46,9 +46,12 @@ files during this task (not from memory or the reference repo):
    `detailed_sizes_reaches_six_digit_at_state: true` -- exactly the false claim the Copilot
    review that opened this task warns against: `detailed_sizes` reaches six-digit NAICS
    nationally, not at the state level its own finding name promises.
-   `us_state_6digitnaics_2022.txt` DOES carry `113310` at the state level (46 states, confirmed
-   live), so this defect would not be caught by any check that only asks whether a file
-   mentions `113310` at all. `state_scope`/`has_target_industry`/`code_lengths` filter to
+   `us_state_6digitnaics_2022.txt` DOES carry `113310` at the state level -- in 45 real states,
+   confirmed live: 46 distinct `STATE` values carry `113310`, and one of those 46 is `"00"`, the
+   national aggregate row, not a state (counting it as a 46th state would repeat, in this very
+   paragraph, the exact `has_113310` vs. `has_113310_at_state` collision this defect describes).
+   So this defect would not be caught by any check that only asks whether a file mentions
+   `113310` at all. `state_scope`/`has_target_industry`/`code_lengths` filter to
    `STATE`-column values in `_common.STATES_DC_FIPS` before checking, so every "_at_state"
    field answers the question its own name asks.
 
