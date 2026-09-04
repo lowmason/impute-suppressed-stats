@@ -45,7 +45,10 @@ and generalized, which is the mistake fix round 1 made and fix round 2 corrected
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+
+import httpx
 
 import _common
 import cbp_metadata as m
@@ -540,6 +543,76 @@ def test_common_module_is_importable_alongside_cbp_metadata():
     ever breaks, every other test in this file would fail for an unrelated reason and be
     confusing to debug."""
     assert _common.INDUSTRY_CODE == "113310"
+
+
+# --- manifest hygiene: cfe0c1f's two orphan-file failure modes ----------------------------------
+#
+# cfe0c1f closed both and shipped no test, so nothing held either invariant. They are the same
+# invariant from two directions: every file left under `data/raw/audit/` must be registered in
+# a summary's `extracts`, and a run must never leave a previous run's file looking current.
+
+
+def test_fetch_json_or_none_reports_a_404_without_registering_an_extract(tmp_path, monkeypatch):
+    """Direction one. A keyless metadata route answering 404 used to crash the run inside
+    `c.request`, after this run's earlier extracts were written to disk and before
+    `write_summary` could register them -- every one of them an orphan. The status is returned
+    as the documented gap instead, and nothing is recorded for a body that never arrived."""
+    monkeypatch.setattr(_common, "AUDIT_ROOT", tmp_path)
+    client = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(404)))
+    extracts: list = []
+    status, payload = m.fetch_json_or_none(
+        client, "cbp_metadata", "https://example.invalid/groups.json", "2021/groups.json",
+        extracts)
+    assert (status, payload) == (404, None)
+    assert extracts == []
+    assert list(tmp_path.rglob("*")) == [], "a route that did not answer must leave no file"
+
+
+def test_fetch_json_or_none_registers_exactly_one_extract_on_a_real_answer(tmp_path, monkeypatch):
+    """The other direction of the same guard: the swallow is scoped to the failure. A route
+    that does answer is still parsed and still recorded, or the fix would trade a crash for a
+    silently unfetched probe."""
+    monkeypatch.setattr(_common, "AUDIT_ROOT", tmp_path)
+    body = {"variables": {"EMPSZES": {"label": "Employment size of establishments"}}}
+    client = httpx.Client(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=body)))
+    extracts: list = []
+    status, payload = m.fetch_json_or_none(
+        client, "cbp_metadata", "https://example.invalid/v.json", "2021/variables.json", extracts)
+    assert status == 200
+    assert payload == body
+    assert [Path(e.path).name for e in extracts] == ["variables.json"]
+    assert (tmp_path / "cbp_metadata" / "2021" / "variables.json").exists()
+
+
+def test_main_wipes_a_year_directory_before_the_probe_can_skip_it(tmp_path, monkeypatch, capsys):
+    """Direction two, and the ordering that carries it. The year-directory wipe runs before
+    `c.probe`, so no exit path can skip it: a year whose probe comes back non-200 this run
+    still loses whatever an earlier run left behind. Moving the wipe back inside the
+    `status == 200` branch -- where fix round 2 had it -- would leave a previous run's
+    `data_113310.json` sitting at the exact filename the plan's Produces block names,
+    registered by nothing in this run's summary and looking current to anything that opens the
+    path instead of the manifest. Every one of the 605 tests before this one passed with the
+    wipe in that position."""
+    monkeypatch.setattr(_common, "AUDIT_ROOT", tmp_path)
+    monkeypatch.setattr(_common, "probe", lambda *args, **kwargs: (404, 0))
+    # `main` refuses to start without one. Set to a placeholder rather than inherited, so this
+    # test behaves the same whether or not the suite was run with `.env` sourced, and never
+    # puts a real credential anywhere near `record_extract`'s secret scan.
+    monkeypatch.setenv("CENSUS_API_KEY", "placeholder-key-never-sent-anywhere")
+    monkeypatch.setenv("BLS_CONTACT_EMAIL", "audit-suite@example.invalid")
+    stale = tmp_path / "cbp_metadata" / "2017" / "data_113310.json"
+    stale.parent.mkdir(parents=True)
+    stale.write_bytes(b'[["NAME","EMP"],["Alabama","20"]]')
+
+    m.main()
+
+    assert not stale.exists(), "a previous run's canonical file survived a non-200 probe year"
+    assert not stale.parent.exists()
+    written = json.loads(
+        (tmp_path / "cbp_metadata" / "summary.json").read_text(encoding="utf-8"))
+    assert written["extracts"] == []
+    assert written["findings"]["years_available"] == []
 
 
 # --- the module docstring's own claims ----------------------------------------------------------
