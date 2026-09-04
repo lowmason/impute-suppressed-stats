@@ -210,11 +210,19 @@ def test_regime_by_year_2017_is_distinguished_from_2018_onward():
     assert m.REGIME_BY_YEAR["2017"]["regime"] != m.REGIME_BY_YEAR["2018"]["regime"]
 
 
-def test_regime_by_year_no_two_non_unknown_years_share_byte_identical_evidence():
+def test_regime_by_year_non_unknown_years_each_name_their_own_year_in_their_evidence():
     """Trap the dispatch names by name: a shared prefix/string used across differing years is
-    fine only if genuinely accurate for every year it's attached to. Requiring each year's own
-    number to appear in its own evidence text is a cheap mechanical check that the string was
-    actually rendered per-year rather than copy-pasted verbatim across a range."""
+    fine only if genuinely accurate for every year it's attached to. This checks only that each
+    year's own evidence text contains its own year -- a cheap mechanical guard against a
+    copy-pasted block that was never rendered per-year at all (e.g. a literal string assigned
+    once and reused for every entry).
+
+    It does NOT check pairwise byte-distinctness across years, and must not be read as if it
+    did: 2019-2023 deliberately share one template (`_no_year_specific_doc_evidence`) rendered
+    once per year, so those five entries are byte-identical to each other apart from the
+    substituted year token, and this test passes on exactly that shape. That is the honest state
+    of the evidence (see that function's own docstring), not a defect this test is meant to
+    catch."""
     for year, entry in m.REGIME_BY_YEAR.items():
         if entry["regime"] == "unknown":
             continue
@@ -222,6 +230,29 @@ def test_regime_by_year_no_two_non_unknown_years_share_byte_identical_evidence()
             f"{year}: evidence text does not name its own year -- suspicious of a copy-pasted "
             "block shared across years without being rendered per-year"
         )
+
+
+def test_no_year_specific_doc_evidence_marks_the_banner_scope_reading_as_inference():
+    """Finding 1 (fix round 1): methodology.html's 'no longer current' banner does not itself
+    distinguish a prospective/current-approach scope from a retraction of the dated 2007-2018
+    historical statements 2019-2023's entries rest on -- reading it as the former is this
+    auditor's own interpretation, not a fetched fact, and it is load-bearing (the opposite
+    reading would leave these years with no documentary basis, i.e. `unknown`). It must be
+    marked inline with a scope a reader can't miss: exactly one opening and one closing marker,
+    with the interpretive clause itself between them and the "weighted accordingly" caveat
+    outside them (that caveat follows from the banner's mere existence, not from how its scope
+    is read, so it must not be swept inside the marked span)."""
+    for year in (2019, 2020, 2021, 2022, 2023):
+        evidence = m._no_year_specific_doc_evidence(year)
+        assert evidence.count("INFERENCE MARKER, OPENING") == 1
+        assert evidence.count("INFERENCE MARKER, CLOSING") == 1
+        opening = evidence.index("INFERENCE MARKER, OPENING")
+        closing = evidence.index("INFERENCE MARKER, CLOSING")
+        assert opening < closing
+        marked = evidence[opening:closing]
+        assert "prospective" in marked
+        assert "retraction" in marked
+        assert "weighted accordingly" in evidence[:opening]
 
 
 # --- DOC_URLS structural guards ------------------------------------------------------------
