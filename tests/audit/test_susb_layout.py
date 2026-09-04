@@ -655,3 +655,41 @@ def test_compose_retention_rule_discloses_that_a_failure_aborts_the_run():
 def test_compose_retention_rule_zero_non_200_count_is_not_claimed_as_impossibility():
     rule = m.compose_retention_rule([200, 200])
     assert "not evidence" in rule["rule"]
+
+
+# --- covered_and_uncovered_years (fix round 1, finding 2) ---------------------------------------
+
+
+def test_covered_and_uncovered_years_excludes_a_gap_year_below_latest_not_just_above_it():
+    """Fix round 1, finding 2: the shipped code derived `covered` from `y <= latest`, which
+    over-collects if the archive ever has a gap below its latest published year -- correct on
+    the real, contiguous SUSB archive only by luck of that run's data, not by construction. This
+    fixture simulates a real gap (2019 missing from the parsed year directories, even though
+    2022 -- above it -- was published) to prove the derivation now checks membership in `years`,
+    not a threshold against `latest`."""
+    years = [2017, 2018, 2020, 2021, 2022]  # 2019 missing -- a gap below latest (2022)
+    covered, uncovered = m.covered_and_uncovered_years(years)
+    assert 2019 not in covered
+    assert 2019 in uncovered
+    assert covered == [2017, 2018, 2020, 2021, 2022]
+
+
+def test_covered_and_uncovered_years_matches_the_real_contiguous_archive_shape():
+    """The real, live-confirmed shape (2017-2022 all published, 2023-2024 not yet) still
+    resolves the same way under the corrected membership-based derivation as it did under the
+    old threshold -- this fix changes how the gap case is handled, not the real run's result."""
+    years = [2017, 2018, 2019, 2020, 2021, 2022]
+    covered, uncovered = m.covered_and_uncovered_years(years)
+    assert covered == [2017, 2018, 2019, 2020, 2021, 2022]
+    assert uncovered == [2023, 2024]
+
+
+def test_covered_and_uncovered_years_partition_every_window_year_exactly_once():
+    """Every `c.WINDOW_YEARS` entry must land in exactly one of the two lists -- a gap year
+    cannot silently fall through both `covered` (membership in `years`) and `uncovered` (the old
+    `y > latest` complement would have missed a gap year below `latest` entirely, the same
+    over-collection bug this fix removes)."""
+    years = [2017, 2019, 2021]  # 2018, 2020 missing; nothing published after 2021
+    covered, uncovered = m.covered_and_uncovered_years(years)
+    assert sorted(covered + uncovered) == sorted(m.c.WINDOW_YEARS)
+    assert set(covered).isdisjoint(uncovered)

@@ -411,6 +411,22 @@ def compose_retention_rule(extract_statuses: list[int]) -> dict:
     }
 
 
+def covered_and_uncovered_years(years: list[int]) -> tuple[list[int], list[int]]:
+    """`c.WINDOW_YEARS` split by membership in `years` -- the year directories this run actually
+    parsed from the SUSB tables index -- not by a `y <= latest` threshold (fix round 1, finding
+    2). A threshold over-collects if the archive ever has a gap before its latest published
+    year: this run's archive happens to be contiguous through 2022, so the two predicates agree
+    on this run's data, but that agreement is a fact about this run's data, not something the
+    threshold itself checks. Membership only ever marks a window year covered when this run
+    actually found and parsed that year's directory, so a future gap year is caught rather than
+    silently folded into the covered range. `uncovered` is derived the same way (rather than
+    kept as the old `y > latest` complement) so every `WINDOW_YEARS` entry lands in exactly one
+    of the two lists -- a gap year below `latest` cannot fall through both."""
+    covered = [y for y in c.WINDOW_YEARS if y in years]
+    uncovered = [y for y in c.WINDOW_YEARS if y not in years]
+    return covered, uncovered
+
+
 def main() -> None:
     client = c.build_client()
     extracts: list[c.ExtractRecord] = []
@@ -471,9 +487,9 @@ def main() -> None:
         detailed["has_113310_at_state"] and 6 in detailed["industry_code_lengths_at_state"]
     )
 
-    covered_years = [y for y in c.WINDOW_YEARS if y <= latest]
+    covered_years, uncovered_years = covered_and_uncovered_years(years)
     covered = f"{covered_years[0]}-{covered_years[-1]}" if covered_years else ""
-    uncovered = ",".join(str(y) for y in c.WINDOW_YEARS if y > latest)
+    uncovered = ",".join(str(y) for y in uncovered_years)
 
     c.write_summary(
         SOURCE,
