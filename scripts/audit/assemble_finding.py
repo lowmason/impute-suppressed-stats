@@ -64,8 +64,12 @@ import verify_extracts as v  # noqa: E402
 OUT = c.FINDINGS_DIR / "source-audit.md"
 NOTES = c.FINDINGS_DIR / "source-audit-notes.md"
 
-# A glance-table cell longer than this is replaced by a derived descriptor rather than cut.
-GLANCE_CELL_LIMIT = 80
+# A glance-table value longer than this many *characters of markdown* is replaced by a derived
+# descriptor rather than cut. Named for characters rather than cells on purpose: "cell"
+# everywhere else in this audit means a state-month data cell, and 80 is the number §2.2's
+# binding decision forbids encoding as a confidentiality threshold. This constant is neither --
+# it is a table-width limit, and the collision in the old name was gratuitous.
+GLANCE_TABLE_CHAR_LIMIT = 80
 
 # Which Appendix A `sources:` entry each audited source key belongs to. Declared, not inferred
 # from the name: `qcew_size` is both an Appendix A key and a prefix-shaped sibling of the four
@@ -102,7 +106,7 @@ def cell(value) -> str:
     collapsed = " ".join(str(value).split())
     if not collapsed:
         return "(empty)"
-    if len(collapsed) > GLANCE_CELL_LIMIT:
+    if len(collapsed) > GLANCE_TABLE_CHAR_LIMIT:
         return f"recorded value ({len(str(value))} chars) -- see the per-source section"
     return collapsed.replace("|", "\\|")
 
