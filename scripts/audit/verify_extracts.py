@@ -383,29 +383,50 @@ def check_gitignore(gitignore_text: str | None) -> list[Failure]:
 def classification_block(spec_text: str) -> list[str]:
     """The lines inside the fenced block under the spec's own `### 3.1` heading.
 
-    Anchored, not merely first-match. An unanchored scan of the whole file lands on §3.1 only
-    because §3.1 happens to come first: three of the four names are published again in
-    Appendix A's example configuration, and a renamed or moved §3.1 whose names survived
-    elsewhere would be read from there without complaint. So the scan starts at the `### 3.1`
-    heading, stops at the next heading of the same level or higher -- a §3.1 that lost its
-    fence cannot borrow §3.2's -- and reads only what the fence encloses.
+    Anchored, not merely first-match -- for the general case, not for anything today's spec
+    presents. Three of the four names do appear again (Appendix A's example configuration, plus
+    `industry_title` in a column list), but always as YAML `key: value` or a bare word, never
+    the `key = value` form the parser splits on, and `classification_status` appears only in
+    §3.1. Nowhere outside §3.1 does this spec carry these names in `=` form, so an unanchored
+    scan of it would read §3.1's block or find nothing at all and raise -- it could not reach
+    Appendix A. What anchoring guards is the case the spec does not present: a §3.1 that moved
+    or was renamed while `=`-form assignments for these names survive in some other fenced
+    block, which
+    `test_parse_classification_record_raises_when_the_names_sit_outside_the_section_31_fence`
+    constructs directly. The scan therefore starts at the `### 3.1` heading, takes the first
+    fence to open before the next heading of the same level or higher -- a §3.1 that lost its
+    fence cannot borrow §3.2's -- and reads only what that fence encloses.
 
-    Raises when the heading is absent, when the section carries no fence, and when a fence
-    opens inside the section and never closes.
+    Raises when the heading is absent, when the section carries no fence, and when no later
+    fence closes the one it opens. That closing fence is the next fence line in the file rather
+    than the next one inside the section, so an unclosed §3.1 fence is reported as unclosed
+    only when no fence follows it anywhere.
     """
     lines = spec_text.splitlines()
     start = next((i for i, line in enumerate(lines) if re.match(r"###\s+3\.1(\s|$)", line)), None)
     if start is None:
         raise ValueError("the spec has no §3.1 heading (`### 3.1 ...`) to anchor the "
                          "classification block to")
-    end = next((i for i in range(start + 1, len(lines)) if re.match(r"#{1,3}\s", lines[i])),
-               len(lines))
-    fences = [i for i in range(start + 1, end) if lines[i].lstrip().startswith("```")]
-    if not fences:
+    # One pass, and whichever comes first after the heading decides: a fence opens the block
+    # and no later heading is consulted, while a heading reached before any fence ends the
+    # section with no block in it. Scanning raw lines for the section end *before* locating the
+    # fences cannot make that distinction -- a `#`-prefixed line inside the fence was read as a
+    # heading, cutting the section between the opening and closing fence and reporting the
+    # block unclosed, an error naming a defect the spec does not have.
+    opening = None
+    for i in range(start + 1, len(lines)):
+        if lines[i].lstrip().startswith("```"):
+            opening = i
+            break
+        if re.match(r"#{1,3}\s", lines[i]):
+            break
+    if opening is None:
         raise ValueError("the spec's §3.1 section carries no fenced classification block")
-    if len(fences) < 2:
+    closing = next((i for i in range(opening + 1, len(lines))
+                    if lines[i].lstrip().startswith("```")), None)
+    if closing is None:
         raise ValueError("the spec's §3.1 fenced classification block is never closed")
-    return lines[fences[0] + 1:fences[1]]
+    return lines[opening + 1:closing]
 
 
 def parse_classification_record(spec_text: str) -> dict[str, str]:

@@ -21,7 +21,12 @@ version, defect by defect:
 6. `check_document(None, ...)` failing E1, E2 and C together, so no criterion whose checks did
    not run can print PASS;
 7. `parse_classification_record` anchored to the `### 3.1` heading and the fence under it, so
-   the four names published again elsewhere in the spec cannot stand in for a §3.1 that moved.
+   `=`-form assignments for these names elsewhere in the file cannot stand in for a §3.1 that
+   moved. The real spec carries no such assignments outside §3.1: where three of the four names
+   appear again, they are YAML or a bare word, so the specs below construct the case;
+8. `classification_block` bounding the block by the fence it locates rather than by a heading
+   scan over raw lines, so a `#`-prefixed line inside the fence is block content rather than a
+   heading that truncates the section and makes the block look unclosed.
 
 `verify_extracts` is imported bare, like `_common`, per `tests/conftest.py`. Importing it is
 inert: the module's only side effects sit behind `if __name__ == "__main__"`.
@@ -387,10 +392,12 @@ CLASSIFICATION_ASSIGNMENTS = ("industry_code_supplied = '1113310'\n"
 
 
 def test_parse_classification_record_raises_when_the_names_sit_outside_the_section_31_fence():
-    """The real gap. An unanchored scan takes the first `key = value` match per name from
-    anywhere in the file, so it lands on §3.1 only because §3.1 comes first. Here §3.1 has lost
-    its fence and the names survive in §3.2 and in Appendix A -- which must fail loudly, not be
-    read from the wrong section."""
+    """The real gap, constructed rather than observed: the spec's own second copies of these
+    names -- three of the four have one -- are YAML `key: value` and a bare column name, which
+    a `key = value` scan skips, so the real spec never presented this gap at all. Here
+    §3.1 has lost its fence and `=`-form assignments survive in §3.2, which an unanchored scan
+    would read from that wrong section instead of failing. Appendix A is included as the spec
+    ships it -- YAML, and invisible to either scan."""
     spec = ("## 3. Scope\n\n"
             "### 3.1 Classification decision\n\n"
             "The classification block moved.\n\n"
@@ -421,6 +428,21 @@ def test_parse_classification_record_raises_on_an_unclosed_31_fence():
             + "\n### 3.2 Core estimand\n")
     with pytest.raises(ValueError, match="never closed"):
         m.parse_classification_record(spec)
+
+
+def test_classification_block_keeps_a_hash_prefixed_line_inside_the_fence():
+    """A `# `-prefixed line inside §3.1's fence is block content, not a heading. Scanning raw
+    lines for the section end *before* locating the fences read it as one: the section was cut
+    between the opening and closing fence, and the block was reported "never closed" -- an
+    error naming a defect the spec does not have. Today's spec carries no such line, so this
+    constructs one."""
+    spec = ("### 3.1 Classification decision\n\n```text\n"
+            "# the supplied code and the correction, both recorded\n"
+            + CLASSIFICATION_ASSIGNMENTS + "```\n\n### 3.2 Core estimand\n")
+    assert m.classification_block(spec) == [
+        "# the supplied code and the correction, both recorded",
+        *CLASSIFICATION_ASSIGNMENTS.splitlines()]
+    assert m.parse_classification_record(spec)["industry_title"] == "Logging"
 
 
 def test_classification_block_returns_only_the_fenced_lines():
