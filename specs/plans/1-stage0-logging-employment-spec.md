@@ -4266,11 +4266,25 @@ reference year" into `evidence`.
 > field (mandated above at lines 4254-4255, and by this task's own illustrative `flag_evidence`
 > code at lines 4306-4307) is renamed to `emp_n_present_and_nonzero_share`.**
 >
-> **The computation is unchanged.** The shipped script still counts rows where `EMP_N` is present
-> and not the string `"0"`, divided by the row total (a prior, in-scope fix round already
-> reconciled this against the illustrative code's `sum(n for v, n in EMP_N.items() if v)`, a
-> different but equivalent-in-practice expression) — only the local variable and the output key
-> holding that count were renamed to match. No persisted value moves as a result of this rename.
+> **The computation is unchanged by this rename.** The shipped script still counts rows where
+> `EMP_N` is present and not the string `"0"`, divided by the row total — only the local variable
+> and the output key holding that count were renamed to match. No persisted value moves as a
+> result of this rename.
+>
+> **That computation diverges sharply from the plan's own illustrative
+> `sum(n for v, n in EMP_N.items() if v)` above (lines 4306-4307) — it is not "a different but
+> equivalent-in-practice expression," and this run's own data proves it isn't.** `EMP_N` is the
+> literal string `"0"` for every row in every window year this task observes (e.g. 2017:
+> `{'0': 188}`, 2020: `{'0': 182}`, 2023: `{'0': 188}`). Python treats the non-empty string `"0"`
+> as truthy, so the plan's `if v` counts every row: on this data it evaluates to `1.0` for every
+> year. The shipped `not in (None, "0")` counts none of those same rows: it evaluates to `0.0`
+> for every year, which is what `emp_n_present_and_nonzero_share` actually reads in the persisted
+> artifact. These are the two opposite extremes on the observed data, not an equivalence. The
+> shipped expression is also the correct one of the two: the plan's illustrative `if v` measures
+> only whether `EMP_N` is present, not whether it is nonzero, which is meaningless as a share and
+> is itself why that expression would report `1.0` unconditionally regardless of what `EMP_N`
+> actually holds — the same string-truthiness bug is why the shipped field reads `0.0` for every
+> window year rather than some other value.
 >
 > **Why:** the plan's name `noise_flagged_share` implies CBP's actual per-cell noise-magnitude
 > flag, `EMP_N_F` — a `"FLAG"`-typed attribute, documented in methodology.html as a low/moderate/
