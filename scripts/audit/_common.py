@@ -86,7 +86,11 @@ class ExtractRecord:
     sha256: str
     bytes: int
     retrieved_utc: str
-    http_status: int
+    # `int | None`, not `int`: `qcew_panel`'s derived parquet is never fetched over HTTP, so it
+    # records no status at all rather than a fabricated one. `validate_summary` requires the
+    # key's presence, not its type, and the exit gate renders `None` as an empty manifest
+    # field. Every fetched extract still carries the status its response arrived with.
+    http_status: int | None
 
 
 def _utcnow() -> str:
@@ -231,7 +235,7 @@ def _write_sidecar(dest: Path, digest: str) -> None:
 
 
 def record_extract(
-    source: str, url: str, rel_path: str, content: bytes, *, http_status: int = 200
+    source: str, url: str, rel_path: str, content: bytes, *, http_status: int | None = 200
 ) -> ExtractRecord:
     """Write `content` verbatim under data/raw/audit/<source>/<rel_path> with a hash sidecar."""
     assert_no_secrets(url)
