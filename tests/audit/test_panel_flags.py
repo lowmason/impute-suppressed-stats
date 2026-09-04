@@ -17,9 +17,13 @@ the module's only side effects sit behind `if __name__ == "__main__"`.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import polars as pl
 
 import pytest
+
+import _common as c
 
 from qcew_panel import (
     PANEL_SCHEMA,
@@ -28,6 +32,7 @@ from qcew_panel import (
     build_panel,
     disclosure_code_values,
     estabs_survival,
+    main,
     run_lengths,
     titles_provenance,
 )
@@ -74,7 +79,10 @@ def write_fixture(tmp_path, monkeypatch, extra_rows=()):
         (tmp_path / name / "summary.json").write_text(json.dumps(payload))
 
     summary("qcew_routes", slice_csv, {})
-    summary("qcew_codes", titles, {"private_own_code": "5"})
+    # `titles_available` because `main` reads it directly (`notes` interpolates
+    # `titles_provenance` from it); the pure-function tests below reach none of that.
+    summary("qcew_codes", titles,
+            {"private_own_code": "5", "titles_available": {"disclosure_code": None}})
 
 
 def test_suppressed_is_boolean_never_null(tmp_path, monkeypatch):
@@ -269,3 +277,39 @@ def test_titles_provenance_treats_a_missing_key_as_nothing_fetched():
     written before the key existed must not raise here -- absent and null mean the same thing:
     no titles request was sent for this column."""
     assert "fetched no titles file" in titles_provenance({})
+
+
+# --- main: the derived parquet's http_status -------------------------------------------------
+#
+# The merge blocker nothing guarded. `record_extract` defaults `http_status` to 200, and this
+# script's parquet is built from files on disk -- no HTTP request is made anywhere in this
+# module. Taking the default shipped an HTTP 200 for a file that was never fetched into
+# `specs/findings/source-audit-extracts.csv`, one of the three artifacts that survive into a
+# fresh clone. The `http_status=None` kwarg in `main` is the entire fix, and deleting it left
+# every other test in this suite green, so it is pinned here through the written summary
+# rather than by reading the call site.
+
+
+def test_the_derived_parquet_records_no_http_status(tmp_path, monkeypatch):
+    write_fixture(tmp_path, monkeypatch)
+    main()
+
+    (record,) = c.load_summary("qcew_panel")["extracts"]
+    assert record["url"].startswith("derived://"), \
+        "guard: this assertion is only about an extract that was never fetched over HTTP"
+    assert record["http_status"] is None, \
+        "a file built from disk has no HTTP status; 200 here is a fabricated measurement"
+
+
+def test_the_derived_parquet_is_the_only_extract_and_it_is_on_disk(tmp_path, monkeypatch):
+    """The other half of the claim above: `None` is what a *recorded* extract carries, not what
+    an absent one defaults to. The parquet is written, hashed and registered like any fetched
+    file -- only its status is missing, because only its status was never measured."""
+    write_fixture(tmp_path, monkeypatch)
+    main()
+
+    (record,) = c.load_summary("qcew_panel")["extracts"]
+    written = Path(record["path"])
+    assert written.is_relative_to(tmp_path), "guard: never write into the real audit root"
+    assert written.read_bytes() and record["bytes"] == written.stat().st_size
+    assert record["sha256"] == c.sha256_file(written)
