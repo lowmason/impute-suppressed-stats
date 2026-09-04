@@ -10,7 +10,8 @@
 Reads nothing from the network: every input is an extract another audit script already
 recorded (Task 2's slice CSVs, Task 3's fetched titles and derived `private_own_code`), so the
 panel is reproducible from the artifacts on disk. The panel itself is registered through
-`record_extract` under a `derived://` URL, which is why it re-hashes like any fetched file.
+`record_extract` under a `derived://` URL, which is why it re-hashes like any fetched file --
+and with `http_status=None`, because nothing was fetched over HTTP to carry a status.
 
 This script measures. It records no verdict on any SRC-QCEW finding: the geography and
 suppression counts below state what the retained rows contain, and nothing about what they
@@ -302,6 +303,38 @@ def cell_coverage(states: pl.DataFrame, interior_month_gaps: int) -> dict[str, A
     }
 
 
+def titles_provenance(titles_available: dict[str, Any]) -> str:
+    """What this audit fetched for the disclosure_code column's titles -- not what BLS
+    publishes.
+
+    `qcew_codes.TITLES` maps each dimension to a titles URL, and `qcew_codes.main` requests
+    exactly the ones that are not `None`; the resulting map is persisted as
+    `titles_available`. So a `None` there records that this audit sent no titles request for
+    that column, which is a fact about this audit's requests. Whether BLS publishes such a file
+    is a different claim, tested by no request in either script, and this sentence must not
+    make it -- the earlier wording ("records the published titles file for this column as
+    None") did, by reading a key name as a measurement across a task boundary.
+
+    Still derived from the loaded value rather than typed: a future `qcew_codes` run that does
+    fetch a titles file for this column makes the other branch true, and this sentence then
+    describes that run instead of repeating this one's absence.
+    """
+    url = titles_available.get("disclosure_code")
+    if url is None:
+        return (
+            "This audit fetched no titles file for this column: qcew_codes.findings."
+            "titles_available carries null for disclosure_code, which records that "
+            "qcew_codes sent no titles request for it -- not that no such file is published, "
+            "which no request in either script tests. The code values below therefore come "
+            "from the retained rows alone."
+        )
+    return (
+        f"This audit fetched a titles file for this column: qcew_codes.findings."
+        f"titles_available records {url!r}, and qcew_codes' own extract of it is what any "
+        f"code-to-label reading of the values below should be checked against."
+    )
+
+
 def notes(
     *,
     panel: pl.DataFrame,
@@ -337,9 +370,8 @@ def notes(
         f"Suppression flag. `suppressed` is true where the published disclosure_code strips "
         f"to {SUPPRESSION_CODE!r}, and false for every other value, including an empty one: "
         f"the flag is the published code alone, and no cell-count or concentration threshold "
-        f"enters it (Global Constraints, §2.2 row 1). qcew_codes.findings.titles_available "
-        f"records the published titles file for this column as "
-        f"{titles_available.get('disclosure_code')!r}. Values observed on the retained rows, "
+        f"enters it (Global Constraints, §2.2 row 1). "
+        f"{titles_provenance(titles_available)} Values observed on the retained rows, "
         f"with what each carries: {code_counts}. Employment on a suppressed row is written "
         f"null in the panel (INV-003), so of the two counts above, "
         f"emplvl_raw_nonzero_rows is taken before that null-out and "
@@ -408,8 +440,16 @@ def main() -> None:
 
     buf = io.BytesIO()
     panel.write_parquet(buf)
+    # `http_status=None`, not `record_extract`'s 200 default: this parquet was never fetched
+    # over HTTP, so there is no status to record. A status is a measurement a run made, not a
+    # property of a route, and typing 200 here would put a fabricated measurement into the one
+    # artifact a fresh clone keeps (`specs/findings/source-audit-extracts.csv`, where the field
+    # renders empty for this row). `0` was rejected: `_common.probe` already spends it as the
+    # "no response at all" sentinel, so a reader could not tell a derived file from a transport
+    # failure. `_common.validate_summary` requires the key's presence, not its type, so `None`
+    # validates and the exit gate carries it through as an empty manifest field.
     rec = c.record_extract(SOURCE, "derived://qcew_routes/slices", "panel.parquet",
-                           buf.getvalue())
+                           buf.getvalue(), http_status=None)
 
     span_start, span_end = (f"{y}-{m:02d}" for y, m in (first_month, last_month))
     c.write_summary(

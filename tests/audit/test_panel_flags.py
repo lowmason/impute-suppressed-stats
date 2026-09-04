@@ -29,6 +29,7 @@ from qcew_panel import (
     disclosure_code_values,
     estabs_survival,
     run_lengths,
+    titles_provenance,
 )
 
 
@@ -227,3 +228,44 @@ def test_disclosure_code_values_counts_source_employment_before_the_null_out(
     assert by_code["-"]["emplvl_published_rows"] == 3  # not suppressed, so a published zero
     assert by_code["-"]["qtrly_estabs_positive_rows"] == 0
     assert by_code[""]["emplvl_raw_nonzero_rows"] == 6
+
+
+# --- titles_provenance ------------------------------------------------------------------------
+#
+# Whole-branch review, finding 3. `qcew_codes.TITLES["disclosure_code"] = None` is a hardcoded
+# constant carrying a claim about BLS that no request in either script tests. It persists under
+# the key `titles_available`, whose name asserts availability, and this module then re-quoted it
+# downstream as "qcew_codes.findings.titles_available RECORDS the published titles file for
+# this column as None" -- a typed claim wearing a measurement's clothes, across a task boundary
+# where neither task's reviewer could see both halves.
+#
+# The sentence is now about what this audit FETCHED, and it is still read off the loaded value
+# rather than typed, so a future qcew_codes run that does fetch a titles file for this column
+# describes that run instead of repeating this one's absence.
+
+
+def test_titles_provenance_says_this_audit_fetched_nothing_not_that_nothing_is_published():
+    sentence = titles_provenance({"disclosure_code": None})
+    assert "This audit fetched no titles file for this column" in sentence
+    assert "sent no titles request" in sentence
+    assert "not that no such file is published" in sentence
+    # The retracted framing, pinned negatively in both its parts.
+    assert "records the published titles file for this column" not in sentence
+    assert "the published titles file" not in sentence
+
+
+def test_titles_provenance_describes_a_fetched_file_when_one_is_recorded():
+    """The branch no run has taken. It must not be reachable only by editing prose: the value
+    is what selects it, so adding the URL to `qcew_codes.TITLES` is enough."""
+    url = "https://data.bls.gov/cew/doc/titles/disclosure/disclosure_titles.csv"
+    sentence = titles_provenance({"disclosure_code": url})
+    assert "This audit fetched a titles file for this column" in sentence
+    assert url in sentence
+    assert "fetched no titles file" not in sentence
+
+
+def test_titles_provenance_treats_a_missing_key_as_nothing_fetched():
+    """`notes` reaches this through `c.load_summary("qcew_codes")`, so a qcew_codes summary
+    written before the key existed must not raise here -- absent and null mean the same thing:
+    no titles request was sent for this column."""
+    assert "fetched no titles file" in titles_provenance({})
