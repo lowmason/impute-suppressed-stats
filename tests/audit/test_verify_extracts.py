@@ -396,8 +396,8 @@ def test_parse_classification_record_raises_when_the_names_sit_outside_the_secti
     names -- three of the four have one -- are YAML `key: value` and a bare column name, which
     a `key = value` scan skips, so the real spec never presented this gap at all. Here
     §3.1 has lost its fence and `=`-form assignments survive in §3.2, which an unanchored scan
-    would read from that wrong section instead of failing. Appendix A is included as the spec
-    ships it -- YAML, and invisible to either scan."""
+    would read from that wrong section instead of failing. Appendix A is included in the form
+    the spec ships it -- YAML, and invisible to either scan."""
     spec = ("## 3. Scope\n\n"
             "### 3.1 Classification decision\n\n"
             "The classification block moved.\n\n"
