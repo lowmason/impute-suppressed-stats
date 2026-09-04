@@ -191,12 +191,26 @@ def compose_retention_rule(extract_statuses: list[int]) -> dict:
     """Ruling D-B: this script's raw-retention rule, restated inside the artifact the rule
     shaped, with its counters derived from the run rather than typed. Every response this
     script actually received (any HTTP status, including 204's empty body) is registered as an
-    extract; only a transport failure -- which produces no body at all -- registers none."""
+    extract; only a transport failure -- which produces no body at all -- registers none.
+
+    The rule's first sentence covers both fetch classes, the five NAICS-detail probes and the
+    single `variables.json` request, because the counters below are `len(extract_statuses)` and
+    friends over ALL extracts. Scoping the sentence to the probes alone left the shipped
+    `extracts_recorded: 6` sitting under a sentence about five things. The alternative --
+    deriving the counters over the probe extracts only -- was rejected: it would change a
+    measured value in a shipped artifact to fix a wording defect, and it would strand the
+    `variables.json` fetch under no stated rule at all, which is the state `susb_layout.py`'s
+    own rule text already cites this script as the precedent against."""
     return {
         "rule": (
-            "This script writes and registers a fetched body from the five NAICS-detail probes "
-            "whenever the endpoint answered at all, whatever the HTTP status, and each "
-            "extract's own http_status records which status it carried. On this access-verdict "
+            "This script performs two kinds of fetch and registers a body from both, so the "
+            "counters below count both. From each of the five NAICS-detail probes it writes "
+            "and registers a fetched body whenever the endpoint answered at all, whatever the "
+            "HTTP status, and each extract's own http_status records which status it carried. "
+            "It also fetches this dataset's variables.json once, before any probe, to read "
+            "which of the wanted variables the dataset declares; that body is registered on "
+            "the same terms and is the sixth extract whenever all five probes answer. On this "
+            "access-verdict "
             "probe, http_status alone already separates a 204 with an empty body (matched no "
             "published cell) from either 200 outcome; retaining that empty body anyway, with "
             "its sha256 sidecar like every other extract, is what makes the 204 a recorded "

@@ -386,6 +386,35 @@ def test_compose_retention_rule_states_why_the_204_body_is_retained():
     assert "recorded observation" in rule["rule"]
 
 
+def test_compose_retention_rule_covers_the_variables_fetch_its_counters_already_count():
+    """Whole-branch review, finding 7. The rule read "a fetched body from the five NAICS-detail
+    probes" while `extracts_recorded` is `len(extract_statuses)` over ALL extracts, including
+    the separate `variables.json` fetch -- so the shipped artifact said `extracts_recorded: 6`
+    under a sentence about five things, and that fetch was retained under no stated rule at
+    all. `susb_layout.py`'s own rule text cites "bds_detail.py's own precedent for its single
+    non-probed variables.json fetch", i.e. SUSB documented a BDS behaviour BDS did not.
+
+    Fixed by widening the rule's domain, not by narrowing the counters: deriving them over the
+    probe extracts only would change a measured value (6 -> 5) in a shipped artifact to fix a
+    wording defect."""
+    rule = m.compose_retention_rule([200, 200, 204, 204, 204, 204])
+    assert rule["extracts_recorded"] == 6
+    text = rule["rule"]
+    assert "two kinds of fetch and registers a body from both" in text
+    assert "variables.json" in text
+    assert "the sixth extract whenever all five probes answer" in text
+    assert "registers a fetched body from the five NAICS-detail probes whenever" not in text
+
+
+def test_compose_retention_rule_counters_are_unchanged_by_the_domain_widening():
+    """The counters are the measured half and must be byte-identical to what shipped: the fix
+    was to the sentence above them. Pinned against this run's real shipped triple."""
+    rule = m.compose_retention_rule([200, 200, 204, 204, 204, 204])
+    assert rule["extracts_recorded"] == 6
+    assert rule["extracts_with_non_200_status"] == 4
+    assert rule["non_200_statuses_recorded"] == [204]
+
+
 def test_classify_probe_body_is_case_insensitive_on_the_content_type():
     """Same fix as `cbp_metadata.classify_data_body`, made in both places: media types are
     case-insensitive (RFC 9110 8.3.1), so `application/JSON` must not fall to the HTML-error
