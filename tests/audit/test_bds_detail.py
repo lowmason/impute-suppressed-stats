@@ -4,10 +4,12 @@ probes run.
 The brief's illustrative code has two defects, both confirmed live against
 `https://api.census.gov/data/timeseries/bds` during this task, not from memory:
 
-1. **A NAICS predicate that matches no published cell answers HTTP 204 with a zero-length
-   body, never a 404 and never a 200 with an empty `[header]`-only JSON array.** Confirmed live
-   for every candidate finer than `'11'` this run (`'113'`, `'1133'`, `'11331'`, `'113310'`),
-   and for nonsense predicates (`'999999'`, `'abc'`) tried during this task's investigation.
+1. **This run met HTTP 204 with a zero-length body for every candidate NAICS predicate that
+   matched no published cell -- never a 404 and never a 200 with an empty `[header]`-only JSON
+   array.** Confirmed live for every candidate finer than `'11'` this run (`'113'`, `'1133'`,
+   `'11331'`, `'113310'`), and for nonsense predicates (`'999999'`, `'abc'`) tried during this
+   task's investigation. What this run met, not a documented property of the endpoint in
+   general -- see `bds_detail.py`'s module docstring, point 1, for the same scoping.
    204 is a 2xx status, so `resp.raise_for_status()` never raises and the brief's
    `except httpx.HTTPStatusError` never fires; the brief then calls `resp.json()` on the empty
    body, which raises `json.JSONDecodeError` -- uncaught, crashing the script on the very first
@@ -94,8 +96,9 @@ def test_classify_transport_failure_is_its_own_outcome():
 
 def test_classify_204_is_no_content_not_bad_shape_and_not_a_crash():
     """The central live finding this task exists to catch: a 204 with a JSON content-type and
-    an empty body is Census's own signal that the predicate matched nothing -- not an error to
-    retry and not a malformed response, so it must not collapse into "bad_shape"."""
+    an empty body is what this run met whenever a candidate predicate matched no published cell
+    (module docstring point 1) -- not an error to retry and not a malformed response, so it
+    must not collapse into "bad_shape"."""
     outcome, payload = m.classify_probe_body(204, JSON_CONTENT_TYPE, b"")
     assert outcome == "no_content"
     assert payload is None
@@ -335,3 +338,22 @@ def test_compose_retention_rule_discloses_the_status_200_zero_row_ambiguity():
     status 200 and both row_count 0. The rule text must disclose that gap, not claim it away."""
     rule = m.compose_retention_rule([200, 204])
     assert "header row and zero data rows" in rule["rule"]
+
+
+def test_compose_retention_rule_attributes_the_204_vs_200_split_to_http_status():
+    """Fix round 1 (external review), item 1: the first draft claimed that a 204 with an empty
+    body, a 200 auth-rejection page, and a 200 real answer are "three different verdicts and
+    only the retained bytes tell them apart." False for the 204 case -- its retained body is
+    zero bytes, carrying no discriminating information; http_status alone (200 vs. 204) already
+    separates it from either 200 outcome, and the rule's own prior sentence already says so."""
+    rule = m.compose_retention_rule([200, 204])
+    assert "http_status alone" in rule["rule"]
+
+
+def test_compose_retention_rule_reserves_the_retained_bytes_claim_for_the_two_200_outcomes():
+    """Fix round 1, item 1 continued: "only the retained bytes tell them apart" is only true of
+    the 200-auth-rejection vs. 200-real-answer split, where http_status is identical for both
+    and inspecting the body is the only way to tell them apart. The rule text must scope that
+    claim to those two outcomes, not extend it to the 204 case as well."""
+    rule = m.compose_retention_rule([200, 204])
+    assert "only the retained bytes tell the two 200 outcomes" in rule["rule"]
