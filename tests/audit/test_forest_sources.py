@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import pytest
 
+import _common
 import forest_sources as m
 
 # --- classify_probe ---------------------------------------------------------------------
@@ -1029,3 +1030,54 @@ def test_compose_retention_rule_on_an_all_200_run_records_zero_without_omitting_
 def test_compose_retention_rule_warns_the_reader_not_to_generalise_it_to_other_sources():
     rule = m.compose_retention_rule([200, 404])
     assert "is not evidence that no non-200 response occurred there" in rule["rule"]
+
+
+# --- composed verdicts round-tripped through the summary schema --------------------------------
+
+
+def _summary_payload(access: dict) -> dict:
+    return {
+        "source": "fia", "generated_utc": "2026-01-01T00:00:00+00:00",
+        "coverage_span": {
+            "published_start": "1968", "published_end": "2026",
+            "window_start": _common.WINDOW_START, "window_end": _common.WINDOW_END,
+            "covered": "x", "uncovered": "y",
+        },
+        "access": access, "extracts": [], "findings": {},
+    }
+
+
+@pytest.mark.parametrize("overrides", [
+    {},
+    {"doc_params_parsed": False},
+    {"real_probe_parsed": False},
+    {"snum_index": SNUM_INDEX_UNREADABLE},
+    {"snum_index": SNUM_INDEX_NO_HARVEST},
+    {"measure_proved": None},
+])
+def test_every_composed_fia_access_passes_the_summary_schema(overrides):
+    # `_common.validate_summary` raises unless a non-verified status carries a truthy reason.
+    # The live run only ever exercises whichever branch the day's fetches produce, so the two
+    # new routes to `documented` (unreadable snum catalog, no harvest attribute catalogued)
+    # would otherwise first be exercised at write time, in production, as a ValueError.
+    _common.validate_summary(_summary_payload(_fia_access(**overrides)))
+
+
+@pytest.mark.parametrize("overrides", [
+    {},
+    {"harvest_origin_available": False},
+    {"harvest_origin_available": False, "box_navigation": {"share_url_discovered": None}},
+    {"harvest_origin_available": False, "probes": PROBES_WITH_TRANSPORT_FAILURE},
+])
+def test_every_composed_tpo_access_passes_the_summary_schema(overrides):
+    payload = _summary_payload(_tpo_access(**overrides)) | {"source": "tpo"}
+    _common.validate_summary(payload)
+
+
+def test_retention_rule_warns_that_a_retained_200_is_not_evidence_of_usable_data():
+    # The naive `/fullreport` probe is retained at status 200 and carries an EVALIDator error
+    # page. Without this sentence, `non_200_statuses_recorded` invites a reader to treat every
+    # other extract's 200 as a clean, usable body.
+    rule = m.compose_retention_rule([200, 403])["rule"]
+    assert "not that the body is usable data" in rule
+    assert "status 200" in rule
