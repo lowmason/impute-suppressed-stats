@@ -5428,9 +5428,12 @@ reproduce a reliable raw TPO URL, and Appendix A already ships `tpo.enabled: fal
     bounded, spaced retry attempts per DataMart URL and the elapsed span, kept separate from
     the `/fullreport` verdict per the plan's three-outcome distinction: a transport failure
     (`_common.probe`'s `(0, 0)`) is not a 404, and neither is a `200`. `other_routes_probed`
-    uses `probe_url` rather than `_common.probe` so the 403 body `Evalidator/evalidator.jsp`
+    uses `probe_url` rather than `_common.probe` so the non-200 body `Evalidator/evalidator.jsp`
     answers with is retained (see `raw_retention_rule`) — that body is the evidence of *how*
-    the route is closed, and `_common.probe` discards bodies by construction.
+    the route is closed, and `_common.probe` discards bodies by construction. Which non-200
+    status that route serves is not stable: it answered 403 to one run and 500 to the next, and
+    both within seconds on a hand check, so the retained extract's own `http_status` is the
+    only reliable statement of what any given run met there.
   - `snum_estimate_attributes` — added by the implementation. The parsed
     `/fullreport/parameters/snum` catalog: how many estimate attributes `/fullreport` can
     return at all, which of them sit in *harvest*-removals estimate groups (kept distinct from
@@ -5447,10 +5450,17 @@ reproduce a reliable raw TPO URL, and Appendix A already ships `tpo.enabled: fal
   - `industry_concept_scan` — added by the implementation: word-boundary hit counts for
     industry-classification terms (`NAICS`, `SIC`, `industry`, `establishment`, `employment`)
     and for FIA's own organising concepts (`species`, `land use`, `product`) across every FIA
-    page this run fetched and hashed, named per page. `coverage_span.uncovered`'s
-    industry-concept sentence is interpolated from these counts; the reading drawn *from* the
-    zeros is delimited by the `INFERENCE MARKER, OPENING`/`CLOSING` convention rather than
-    stated as a further measurement.
+    page this run fetched and hashed, named per page. A page joins that corpus only if it also
+    became a registered extract (`scannable_text_page`: the retention gate *and* a 200), so the
+    "fetched and hashed" phrase names artifacts a reader can re-grep and a status-200 empty body
+    is counted by neither. `coverage_span.uncovered`'s industry-concept sentence is interpolated
+    from these counts, and whichever reading those counts support is delimited by the
+    `INFERENCE MARKER, OPENING`/`CLOSING` convention rather than stated as a further
+    measurement. Three cases are distinct there and none borrows another's sentence: a scan over
+    zero pages (every FIA fetch non-200) reports that it examined nothing rather than that it
+    found nothing; a nonzero industry count withholds the zero-hit reading; and the taxonomy
+    counts are reported, never asserted nonzero. The D.C. clause likewise separates "absent from
+    a parsed index" from "no index was read".
   - `raw_retention_rule` — added by the implementation, and present in **both** summaries.
     States this script's non-200 retention rule inside the artifact the rule shaped, with
     counters (`extracts_recorded`, `extracts_with_non_200_status`,
@@ -5482,7 +5492,19 @@ reproduce a reliable raw TPO URL, and Appendix A already ships `tpo.enabled: fal
     deterministically selected (`probed_year`: the latest window year with a subfolder) and
     its listing (`files_listed_this_page` vs. Box's own `filescount_per_box_metadata`, checked
     for pagination truncation), and the selected sample file's sheet names and header row —
-    the direct evidence behind `harvest_origin_available`.
+    the direct evidence behind `harvest_origin_available`. Added by the implementation for the
+    same reason: `sample_file_first_sheet_name` and `sample_file_first_sheet_unresolved`, since
+    the header row is read from the sheet the workbook's own relationship part binds to its
+    first `<sheet>` element (`xlsx_first_sheet_part`) rather than from whichever worksheet is
+    filed under `sheet1.xml`, and a first sheet that cannot be resolved is recorded as a named
+    gap; and `shared_folder_parse_error`, which is what lets `compose_tpo_access` tell "the
+    share page never answered" from "it answered and did not parse" instead of reading a share
+    URL's presence in the markup as proof the folder was entered. These header names are
+    themselves evidence, not decoration: `classify_header_row` picks out the county-identifier
+    and volume/weight-measure columns, so `access.reason` can state from the header row —
+    outside any inference marker — that the workbook carries county-resolved volume columns.
+    Which county those identifiers name stays inside the marker, because a column name does not
+    say whose county and no data-row cells were read or compared across sheets.
 
 - [ ] **Step 1: Write the script**
 
@@ -5674,6 +5696,15 @@ def retain_body(extracts: list, source: str, res: dict, rel_path: str) -> None:
     if answered_with_body(res):
         extracts.append(c.record_extract(
             source, res["url"], rel_path, res["body"], http_status=res["http_status"]))
+
+
+def scannable_text_page(res: dict) -> bool:
+    """Whether a probe's body joins the term-scan corpus. Deliberately the retention gate AND
+    a 200, not the status alone: `industry_concept_scan` names its corpus as the pages this run
+    "fetched and hashed", so every page it counts must also be a registered extract, and
+    `retain_body` refuses an empty body. A status-200 response with no body would otherwise be
+    counted in a sentence no extract backs."""
+    return answered_with_body(res) and res["http_status"] == 200
 
 
 def probe_record(res: dict, origin: str) -> dict:
@@ -6070,6 +6101,29 @@ def xlsx_header_row(sheet_xml: str, shared_strings: list[str]) -> list[str]:
     return [shared_strings[int(i)] for i in indices]
 
 
+def xlsx_first_sheet_part(workbook_xml: str, rels_xml: str) -> tuple[str, str] | None:
+    """The workbook's first sheet as `(name, zip path)`, resolved through the relationship id
+    that `<sheet>` carries. Sheet order in `workbook.xml` and the `sheetN.xml` filenames are
+    independent -- the relationship part is what binds them -- so reading
+    `xl/worksheets/sheet1.xml` and calling it the first sheet is an assumption where this is a
+    derivation. Returns `None` when the workbook lists no sheet or the relationship is absent;
+    the caller records that gap rather than falling back to a guess."""
+    sheet = re.search(r"<sheet\b[^>]*>", workbook_xml)
+    if not sheet:
+        return None
+    name = re.search(r'\bname="([^"]*)"', sheet.group(0))
+    rel_id = re.search(r'\br:id="([^"]*)"', sheet.group(0))
+    if not name or not rel_id:
+        return None
+    target = re.search(
+        rf'<Relationship\b[^>]*\bId="{re.escape(rel_id.group(1))}"[^>]*\bTarget="([^"]*)"',
+        rels_xml,
+    )
+    if not target:
+        return None
+    return html_module.unescape(name.group(1)), "xl/" + target.group(1).lstrip("/")
+
+
 def inspect_xlsx(content: bytes) -> dict:
     """Sheet names and the first sheet's header row, read directly from the xlsx zip
     container with `zipfile` + `re` -- no new dependency (`openpyxl`/`polars` are not in this
@@ -6077,18 +6131,54 @@ def inspect_xlsx(content: bytes) -> dict:
     needed to evidence SRC-FOR-001, not the full data table."""
     with zipfile.ZipFile(io.BytesIO(content)) as zf:
         names = zf.namelist()
-        sheets = xlsx_sheet_names(zf.read("xl/workbook.xml").decode("utf-8", "replace"))
+        workbook_xml = zf.read("xl/workbook.xml").decode("utf-8", "replace")
+        sheets = xlsx_sheet_names(workbook_xml)
+        rels_xml = (
+            zf.read("xl/_rels/workbook.xml.rels").decode("utf-8", "replace")
+            if "xl/_rels/workbook.xml.rels" in names else ""
+        )
+        first = xlsx_first_sheet_part(workbook_xml, rels_xml)
         shared = (
             xlsx_shared_strings(zf.read("xl/sharedStrings.xml").decode("utf-8", "replace"))
             if "xl/sharedStrings.xml" in names else []
         )
-        headers = (
-            xlsx_header_row(
-                zf.read("xl/worksheets/sheet1.xml").decode("utf-8", "replace"), shared
-            )
-            if "xl/worksheets/sheet1.xml" in names else []
-        )
-    return {"sheet_names": sheets, "first_sheet_headers": headers}
+        unresolved = ""
+        headers: list[str] = []
+        if first is None:
+            unresolved = "no <sheet> element resolved to a worksheet part via its r:id"
+        elif first[1] not in names:
+            unresolved = f"first sheet's relationship target {first[1]} is not in the container"
+        else:
+            headers = xlsx_header_row(zf.read(first[1]).decode("utf-8", "replace"), shared)
+    return {
+        "sheet_names": sheets,
+        "first_sheet_name": first[0] if first else "",
+        "first_sheet_headers": headers,
+        "first_sheet_unresolved": unresolved,
+    }
+
+
+# Header-row classification. Both patterns are anchored rather than substring tests: a
+# `COUNTY`-prefixed name identifies a county, while `RPA_STD_AMOUNT_UOM_CODE` names the unit a
+# measure is expressed in, not a measured volume, and would be swept in by a bare "amount" or
+# an unanchored "vol".
+COUNTY_IDENTIFIER_HEADER_PATTERN = re.compile(r"(?i)^county")
+VOLUME_MEASURE_HEADER_PATTERN = re.compile(r"(?i)(?:vol|tons)$")
+
+
+def classify_header_row(headers: list[str]) -> dict:
+    """Which of a sheet's column names identify a county and which name a volume or weight
+    measure. This is what lets the TPO verdict say -- from the header row this run actually
+    read, not from a sheet name -- that the workbook carries county-resolved volume columns.
+    What it cannot say is *whose* county: a column named COUNTY_NAME is as consistent with a
+    mill's county as with a harvest county, which is why the origin/receipt reading stays
+    inside the inference marker."""
+    return {
+        "county_identifier_headers": [
+            h for h in headers if COUNTY_IDENTIFIER_HEADER_PATTERN.search(h)],
+        "volume_measure_headers": [
+            h for h in headers if VOLUME_MEASURE_HEADER_PATTERN.search(h)],
+    }
 
 
 HARVEST_ORIGIN_SHEET_PATTERN = re.compile(r"(?i)\bproduction\b")
@@ -6156,9 +6246,16 @@ def compose_fia_access(
     catalog was read AND lists harvest-removals attributes: a capability nothing this run could
     read is not a capability this run verified.
 
-    Each branch is a complete, independent sentence. In particular the `documented` branch
-    names which of `doc_params_parsed` / `real_probe_parsed` actually held, rather than
-    asserting both outcomes in one string that only one failure mode makes true."""
+    Each branch is a complete, independent sentence, and no clause shared across branches
+    names an outcome that differs between them. The `documented` branch names which of
+    `doc_params_parsed` / `real_probe_parsed` actually held rather than asserting both. The
+    `verified` opening claims retrieval only -- never that the measure was named -- because
+    `real_probe_parsed` requires non-empty estimates and metadata but not the `numEstDesc` /
+    `estMeta` keys that name the returned attribute, so a response that names nothing reaches
+    this branch. For the same reason the closing clause refers back to an attribute number
+    only when one was read: `proved_estimate_measure` returns a record whenever *either*
+    metadata field is present, and its `attribute_nbr` is empty when `numEstDesc` opens with a
+    non-numeric token."""
     if not (doc_params_parsed and real_probe_parsed):
         clauses = [
             "the /fiadb-api/ documentation page's parameter table parsed"
@@ -6174,20 +6271,31 @@ def compose_fia_access(
             + ". See findings.doc_parameters and findings.probe."
         )}
 
-    measured = (
-        f"the request sent snum={measure_proved['attribute_nbr']} and the response's own "
-        f'metadata names what came back as "{measure_proved["num_est_desc"]}" -- '
-        f'"{measure_proved["est_meta"]}"'
-        if measure_proved else
-        "the response carried no numEstDesc/estMeta metadata naming the measure it returned, "
-        "so which attribute was retrieved is not established by the response itself"
-    )
+    numbered = measure_proved is not None and bool(measure_proved["attribute_nbr"])
+    if numbered:
+        measured = (
+            "the response's own metadata names what came back as attribute "
+            f'{measure_proved["attribute_nbr"]}, "{measure_proved["num_est_desc"]}" -- '
+            f'"{measure_proved["est_meta"]}"'
+        )
+    elif measure_proved is not None:
+        measured = (
+            "the response's own metadata names what came back as "
+            f'"{measure_proved["num_est_desc"]}" -- "{measure_proved["est_meta"]}", with no '
+            "leading attribute number this script could read out of it"
+        )
+    else:
+        measured = (
+            "the response carried no numEstDesc/estMeta metadata naming the measure it "
+            "returned, so which attribute was retrieved is not established by the response "
+            "itself"
+        )
     row_count = snum_index["row_count"]
     harvest_count = snum_index["harvest_removals_attribute_count"]
 
     if row_count == 0:
         return {"route": route, "status": "documented", "reason": (
-            f"The /fullreport route answered with real machine-readable data for one measure "
+            f"The /fullreport route answered with real machine-readable data this run "
             f"({measured}), but the /fullreport/parameters/snum attribute catalog could not be "
             "read this run, so whether FIA publishes a harvest-origin (removals) estimate "
             "attribute at all is unestablished here. See findings.probe and "
@@ -6195,7 +6303,7 @@ def compose_fia_access(
         )}
     if harvest_count == 0:
         return {"route": route, "status": "documented", "reason": (
-            f"The /fullreport route answered with real machine-readable data for one measure "
+            f"The /fullreport route answered with real machine-readable data this run "
             f"({measured}), but the /fullreport/parameters/snum catalog fetched this run "
             f"enumerates {row_count} estimate attributes and none of them is a harvest-removals "
             "attribute, so the harvest-origin measure SS2.2 asks for is not obtainable from "
@@ -6210,20 +6318,31 @@ def compose_fia_access(
     )
     non_harvest = ", ".join(snum_index["non_harvest_removals_groups"]) or "none"
     proved_is_harvest = (
-        measure_proved is not None
+        numbered
         and measure_proved["attribute_nbr"] in snum_index["harvest_removals_attribute_nbrs"]
     )
-    gap = (
-        "That attribute number is itself one of those harvest-removals attributes, so a "
-        "harvest-removals report is what this run requested and received."
-        if proved_is_harvest else
-        "That attribute number is not one of those harvest-removals attributes: what this run "
-        "proved end to end is retrieval of the one measure named above, while the "
-        "harvest-removals capability rests on the fetched catalog listing those attributes and "
-        "not on a harvest-removals report having been requested and returned."
-    )
+    if not numbered:
+        gap = (
+            "No attribute number could be read out of this run's response, so what came back "
+            "cannot be checked against those harvest-removals attribute numbers: what this run "
+            "proved end to end is retrieval of one report from this endpoint, while the "
+            "harvest-removals capability rests on the fetched catalog listing those attributes "
+            "and not on a harvest-removals report having been requested and returned."
+        )
+    elif proved_is_harvest:
+        gap = (
+            "That attribute number is itself one of those harvest-removals attributes, so a "
+            "harvest-removals report is what this run requested and received."
+        )
+    else:
+        gap = (
+            "That attribute number is not one of those harvest-removals attributes: what this "
+            "run proved end to end is retrieval of the one measure named above, while the "
+            "harvest-removals capability rests on the fetched catalog listing those attributes "
+            "and not on a harvest-removals report having been requested and returned."
+        )
     return {"route": route, "status": "verified", "reason": (
-        f"Verified for retrieval, with the retrieved measure named: {measured}. The "
+        f"Verified for retrieval of one report from this endpoint: {measured}. The "
         f"/fullreport/parameters/snum catalog fetched this run enumerates {row_count} estimate "
         f"attributes, of which {harvest_count} sit in harvest-removals estimate groups -- "
         f"{groups} -- which that same catalog keeps distinct from its non-harvest removals "
@@ -6235,38 +6354,67 @@ def compose_fia_uncovered(
     *, industry_scan: dict, dc_has_evaluation: bool, wc_row_count: int
 ) -> str:
     """`coverage_span.uncovered` for FIA. The industry-concept claim is interpolated from a
-    zero-hit term scan over this run's own extracts (the same derivation
-    `tpo_mentions_on_fia_doc_page` uses), and the reading drawn from those zeros -- that FIA
-    carries no industry concept to join on at all -- is delimited by the
+    term scan over this run's own extracts (the same derivation `tpo_mentions_on_fia_doc_page`
+    uses), and whatever reading is drawn from the resulting counts is delimited by the
     `INFERENCE MARKER, OPENING`/`CLOSING` pair `qcew_identity.absent_state_months_note`
     established, so the marking's scope ends where the reader can see it end. The D.C. clause
-    is itself measured and therefore sits outside the marker."""
-    industry = ", ".join(
-        f"{term}={count}"
-        for term, count in sorted(industry_scan["industry_classification_terms"].items())
-    )
-    taxonomy = ", ".join(
-        f"{term}={count}"
-        for term, count in sorted(industry_scan["fia_taxonomy_terms"].items())
-    )
+    is itself measured and therefore sits outside the marker.
+
+    Three outcomes are kept apart that one string used to run together. A scan over zero pages
+    -- what every FIA fetch returning non-200 produces -- examined nothing, and a scan that
+    examined nothing must not read as a scan that found nothing. A scan over pages that DID
+    turn up industry terms cannot carry the zero-hit reading either. And the count of FIA's own
+    taxonomy terms is reported, never asserted to be nonzero, since the function does not
+    branch on it. The same distinction governs D.C.: `dc_has_evaluation` is False both when the
+    fetched index omits D.C. and when no index was read at all."""
+    industry_counts = industry_scan["industry_classification_terms"]
+    taxonomy_counts = industry_scan["fia_taxonomy_terms"]
+    industry = ", ".join(f"{t}={c}" for t, c in sorted(industry_counts.items()))
+    taxonomy = ", ".join(f"{t}={c}" for t, c in sorted(taxonomy_counts.items()))
+    industry_total = sum(industry_counts.values())
     pages = industry_scan["pages_scanned"]
-    text = (
-        "no monthly resolution: SRC-FOR-004 forbids interpolating to months. Also measured, "
-        f"over the {len(pages)} FIA page(s) this run fetched and hashed "
-        f"({', '.join(pages)}): word-boundary hits for the classification codes and measures an "
-        f"industry-coded source would carry are {industry}, while hits for the concepts those "
-        f"same pages do use are {taxonomy}. "
-        "INFERENCE MARKER, OPENING: what follows to the closing marker is a reading of those "
-        "counts, not a further measurement; it is supplied by hand, carries no extract hash and "
-        "is re-checked by no later run. Zero industry-term hits across those pages is read here "
-        "as FIA carrying no industry concept to join on at all, so a Logging (113310) slice "
-        "cannot be selected out of FIA the way it is out of QCEW or CBP and Stage 7 would need "
-        "its own crosswalk from FIA's species/product/land-use taxonomy instead; the competing "
-        "reading -- that an industry concept exists elsewhere in the API and merely goes "
-        "unmentioned on the pages this script happens to fetch -- is not excluded by a zero "
-        "count over those pages. INFERENCE MARKER, CLOSING."
-    )
-    if not dc_has_evaluation:
+    text = "no monthly resolution: SRC-FOR-004 forbids interpolating to months. "
+    if not pages:
+        text += (
+            "No FIA page was fetched and hashed this run, so the industry-term scan ran over "
+            "no pages and reports nothing about FIA: a scan that examined no pages is not a "
+            "scan that found no industry terms, and whether FIA carries an industry concept a "
+            "Logging (113310) slice could be selected on is unestablished here."
+        )
+    else:
+        reading = (
+            "Zero industry-term hits across those pages is read here as FIA carrying no "
+            "industry concept to join on at all, so a Logging (113310) slice cannot be "
+            "selected out of FIA the way it is out of QCEW or CBP and Stage 7 would need its "
+            "own crosswalk from FIA's species/product/land-use taxonomy instead; the competing "
+            "reading -- that an industry concept exists elsewhere in the API and merely goes "
+            "unmentioned on the pages this script happens to fetch -- is not excluded by a "
+            "zero count over those pages."
+            if industry_total == 0 else
+            f"{industry_total} industry-term hit(s) across those pages leaves the no-industry-"
+            "concept reading this scan was written to test unavailable: a nonzero hit count is "
+            "not itself an industry concept a Logging (113310) slice could be selected on, and "
+            "which of those hits (if any) name a classification FIA could be joined on is not "
+            "established by a count."
+        )
+        text += (
+            f"Also measured, over the {len(pages)} FIA page(s) this run fetched and hashed "
+            f"({', '.join(pages)}): word-boundary hits for the classification codes and "
+            f"measures an industry-coded source would carry are {industry}, and hits for the "
+            f"species/product/land-use concepts FIA organises its own reporting by are "
+            f"{taxonomy}. "
+            "INFERENCE MARKER, OPENING: what follows to the closing marker is a reading of "
+            "those counts, not a further measurement; it is supplied by hand, carries no "
+            f"extract hash and is re-checked by no later run. {reading} "
+            "INFERENCE MARKER, CLOSING."
+        )
+    if wc_row_count == 0:
+        text += (
+            " The /fullreport/parameters/wc evaluation index was not read this run (zero rows "
+            "parsed), so whether FIA has an evaluation unit for the District of Columbia -- "
+            "states_dc's 51st member -- is unestablished here rather than answered no."
+        )
+    elif not dc_has_evaluation:
         text += (
             " Also measured: no FIA evaluation unit for the District of Columbia -- absent from "
             f"the {wc_row_count}-row evaluation index fetched this run (states_dc's 51st member "
@@ -6359,47 +6507,128 @@ def compose_tpo_access(
 ) -> dict:
     """The TPO access verdict and the sentence that justifies it.
 
-    `not_obtainable` branches on what actually stopped the run, because the three states are
-    different evidence: no share link in the fetched page (the folder route was never entered),
-    the folder entered but nothing in it matching, and a probed URL that never answered at all.
-    The last is what `classify_probe`'s docstring calls the weakest possible basis for
-    `not_obtainable`, and the sentence says so rather than letting a network failure read as a
-    finding about the source."""
+    `not_obtainable` branches on what actually stopped the run, because each state is different
+    evidence and a clause naming one of them is false on the others. Finding a share URL in the
+    page markup is not entering the folder: the share page can then answer 5xx (an answer, so
+    not a transport failure either) or answer with a body that does not parse as a Box listing,
+    and on both of those nothing was entered and nothing was fetched. `year_subfolders_found`
+    is set only once the share page answered with a status-200 body, and
+    `nrum_data_folder_id` only once that body parsed, so the cascade below reads those two
+    rather than the share URL's mere presence. A probed URL that never answered at all is what
+    `classify_probe`'s docstring calls the weakest possible basis for `not_obtainable`, and the
+    sentence says so rather than letting a network failure read as a finding about the source.
+
+    The `verified` branch keeps three kinds of statement visibly apart: what the workbook's own
+    bytes show (sheet names, and the header row this run read out of the first sheet), what is
+    read *from* those sheet names, and what is carried over from the investigation that found
+    this route and was not measured by any probe in this run. The second and third each sit in
+    their own marked span."""
     transport_failed = [p["url"] for p in probes if p.get("outcome") == "transport_failure"]
     if harvest_origin_available:
         sheets = box_navigation.get("sample_file_sheet_names", [])
         origin = [s for s in sheets if HARVEST_ORIGIN_SHEET_PATTERN.search(s)]
         receipts = [s for s in sheets if MILL_RECEIPT_SHEET_PATTERN.search(s)]
+        headers = box_navigation.get("sample_file_first_sheet_headers", [])
+        classes = classify_header_row(headers)
+        counties = classes["county_identifier_headers"]
+        volumes = classes["volume_measure_headers"]
+        if not headers:
+            header_clause = (
+                "No header row was read from that workbook's first sheet this run"
+                + (f" ({box_navigation['sample_file_first_sheet_unresolved']})"
+                   if box_navigation.get("sample_file_first_sheet_unresolved") else "")
+                + ", so nothing here rests on its column names."
+            )
+        else:
+            header_clause = (
+                "Its first sheet "
+                f"({box_navigation.get('sample_file_first_sheet_name') or 'name unresolved'}) "
+                f"carries a {len(headers)}-column header row, {headers}, of which {counties} "
+                "match this script's county-identifier pattern and "
+                f"{volumes} match its volume/weight-measure pattern."
+            )
+            if counties and volumes:
+                header_clause += (
+                    " A county identifier and volume measures therefore share that header row: "
+                    "the workbook carries county-resolved volume columns, measured from the "
+                    "header row itself rather than read off a sheet name. Which county those "
+                    "identifiers name -- the county a harvest came from, or the county a mill "
+                    "sits in -- is not settled by a column name."
+                )
         return {"route": route, "status": "verified", "reason": (
             "Reachable and machine-readable, but only via an undocumented Box legacy-download "
-            "redirect found by reading the share page's own JS bundle, not via the modern share "
-            "URL (a 200 HTML app shell) or its embedded authenticated_download_url (401 without "
-            "a browser session); per-state coverage per year is not exhaustively verified (see "
-            f"coverage_span). Measured in the one workbook fetched this run "
-            f"({box_navigation.get('sample_file')}, from the "
+            "redirect rather than the modern share URL; per-state coverage per year is not "
+            "exhaustively verified (see coverage_span). Measured in the one workbook fetched "
+            f"this run ({box_navigation.get('sample_file')}, from the "
             f"{box_navigation.get('probed_year')} subfolder): its {len(sheets)} sheet names are "
             f"{sheets}, of which {origin} match this script's harvest-origin sheet-name pattern "
-            f"and {receipts} match its mill-receipt pattern. INFERENCE MARKER, OPENING: what "
-            "follows to the closing marker is a reading of those sheet names, not a further "
-            "measurement; it is supplied by hand, carries no extract hash and is re-checked by "
-            "no later run. Sheets named that way are read here as meaning the workbook carries "
-            "harvest volumes attributed to the county of harvest in fields distinct from its "
-            "mill-receipt fields, which is what SRC-FOR-001 requires -- rather than the names "
-            "being labels whose cells were never opened and compared, which is what actually "
-            "happened: no cell values were read, and only this one state-year workbook was "
-            "inspected, so whether every state-year workbook in the share shares this sheet "
-            "structure was not checked either. INFERENCE MARKER, CLOSING."
+            f"and {receipts} match its mill-receipt pattern. {header_clause} "
+            "INFERENCE MARKER, OPENING: what follows to the closing marker is a reading of "
+            "those sheet names, not a further measurement; it is supplied by hand, carries no "
+            "extract hash and is re-checked by no later run. Sheets named that way are read "
+            "here as meaning the workbook holds harvest volumes attributed to the county of "
+            "harvest in fields distinct from its mill-receipt fields, which is what "
+            "SRC-FOR-001 requires. No data-row cells were read or compared across sheets, so "
+            "the origin/receipt split rests on the sheet names alone; and only this one "
+            "state-year workbook was inspected, so whether every state-year workbook in the "
+            "share shares this sheet structure was not checked either. INFERENCE MARKER, "
+            "CLOSING. INFERENCE MARKER, OPENING: how this route was found comes from the "
+            "investigation that shaped this script rather than from this run -- the "
+            "legacy-download redirect was found by reading the share page's own JS bundle, and "
+            "the share page's embedded authenticated_download_url was observed there to answer "
+            "401 without a browser session. No probe in this run requested that URL, so both "
+            "statements carry no extract hash and are re-checked by no later run. INFERENCE "
+            "MARKER, CLOSING."
         )}
 
     share_url = box_navigation.get("share_url_discovered")
-    clauses = [
-        "no Box share link matching the discovery pattern was present in the fetched NRUM "
-        "data-downloads page markup, so the folder route was never entered"
-        if share_url is None else
-        f"the Box share read out of that page this run ({share_url}) was entered, but no file "
-        "fetched from it was both machine-readable by content type and carrying sheets matching "
-        "the harvest-origin and mill-receipt patterns on inspection"
-    ]
+    share_page_answered = "year_subfolders_found" in box_navigation
+    folder_parsed = box_navigation.get("nrum_data_folder_id") is not None
+    year_folders = box_navigation.get("year_subfolders_found", [])
+    probed_year = box_navigation.get("probed_year")
+    parse_error = box_navigation.get("shared_folder_parse_error")
+    inspection_error = box_navigation.get("sample_file_inspection_error")
+    if share_url is None:
+        stopped = (
+            "no Box share link matching the discovery pattern was present in the fetched NRUM "
+            "data-downloads page markup, so the folder route was never entered"
+        )
+    elif not share_page_answered:
+        stopped = (
+            f"a Box share URL was read out of that page this run ({share_url}), but it did not "
+            "answer this run with a status-200 body, so the folder behind it was never listed "
+            "and no workbook was fetched from it"
+        )
+    elif not folder_parsed:
+        stopped = (
+            f"the Box share URL read out of that page this run ({share_url}) answered with a "
+            "body, but that body did not parse as a Box folder listing"
+            + (f" ({parse_error})" if parse_error else "")
+            + ", so no year subfolder was reached and no workbook was fetched"
+        )
+    elif probed_year is None:
+        stopped = (
+            f"the Box folder behind the share URL read out of that page this run ({share_url}) "
+            f"was entered and listed {len(year_folders)} year subfolder(s) ({year_folders}), "
+            "none of which this run selected to probe, so no workbook was fetched"
+        )
+    elif box_navigation.get("sample_file") is None:
+        stopped = (
+            f"the Box folder behind the share URL read out of that page this run ({share_url}) "
+            f"was entered and its {probed_year} subfolder probed, but no workbook from that "
+            "subfolder was both fetched and inspected this run"
+            + (f" (inspection error: {inspection_error})" if inspection_error else "")
+        )
+    else:
+        stopped = (
+            f"the workbook inspected from the {probed_year} subfolder "
+            f"({box_navigation['sample_file']}) has sheet names "
+            f"{box_navigation.get('sample_file_sheet_names', [])}, which do not include both a "
+            "sheet matching this script's harvest-origin pattern and a sheet matching its "
+            "mill-receipt pattern, so harvest origin held distinct from mill receipts is not "
+            "evidenced by the workbook this run fetched"
+        )
+    clauses = [stopped]
     if transport_failed:
         clauses.append(
             f"{len(transport_failed)} probed URL(s) returned no response at all "
@@ -6428,7 +6657,7 @@ def run_fia(client: httpx.Client) -> None:
     doc_params: list[dict] = []
     tpo_mentions_on_doc_page = None
     retain_body(extracts, SOURCE_FIA, doc, "fiadb_api_doc.html")
-    if doc["http_status"] == 200:
+    if scannable_text_page(doc):
         doc_text = doc["body"].decode("utf-8", "replace")
         scanned_pages["fiadb_api_doc.html"] = doc_text
         doc_params = parse_fia_doc_parameters(doc_text)
@@ -6439,7 +6668,7 @@ def run_fia(client: httpx.Client) -> None:
     wc_index = {"states": [], "year_min": None, "year_max": None, "row_count": 0}
     wc_resp = probe_url(client, FIA_WC_PARAMETERS)
     retain_body(extracts, SOURCE_FIA, wc_resp, "wc_evaluation_index.html")
-    if wc_resp["http_status"] == 200:
+    if scannable_text_page(wc_resp):
         wc_text = wc_resp["body"].decode("utf-8", "replace")
         scanned_pages["wc_evaluation_index.html"] = wc_text
         wc_index = parse_wc_evaluation_index(wc_text)
@@ -6451,7 +6680,7 @@ def run_fia(client: httpx.Client) -> None:
     snum_index = parse_snum_estimate_attributes("")
     snum_resp = probe_url(client, FIA_SNUM_PARAMETERS)
     retain_body(extracts, SOURCE_FIA, snum_resp, "snum_estimate_attributes.html")
-    if snum_resp["http_status"] == 200:
+    if scannable_text_page(snum_resp):
         snum_text = snum_resp["body"].decode("utf-8", "replace")
         scanned_pages["snum_estimate_attributes.html"] = snum_text
         snum_index = parse_snum_estimate_attributes(snum_text)
@@ -6462,7 +6691,7 @@ def run_fia(client: httpx.Client) -> None:
         and b"Error Type" in naive_probe["body"]
     )
     retain_body(extracts, SOURCE_FIA, naive_probe, "fullreport_naive_probe.html")
-    if naive_probe["http_status"] == 200:
+    if scannable_text_page(naive_probe):
         scanned_pages["fullreport_naive_probe.html"] = naive_probe["body"].decode(
             "utf-8", "replace")
 
@@ -6471,7 +6700,7 @@ def run_fia(client: httpx.Client) -> None:
     metadata: dict = {}
     real_probe_parsed = False
     retain_body(extracts, SOURCE_FIA, real_probe, "fullreport_real_probe.json")
-    if real_probe["http_status"] == 200 and real_probe["body"]:
+    if scannable_text_page(real_probe):
         scanned_pages["fullreport_real_probe.json"] = real_probe["body"].decode(
             "utf-8", "replace")
         try:
@@ -6492,9 +6721,13 @@ def run_fia(client: httpx.Client) -> None:
             wait_seconds=FIA_DATAMART_WAIT_SECONDS)
         for url in FIA_DATAMART_CANDIDATES
     ]
-    # `probe_url`, not `_common.probe`: these two routes answer with a real status, and one of
-    # them answers 403 with a body that is itself the evidence of *how* it is closed (ruling
-    # D-B). `_common.probe` discards bodies by construction, so it cannot retain that.
+    # `probe_url`, not `_common.probe`: these two routes answer with a real status, and the
+    # non-200 one answers with a body that is itself the evidence of *how* it is closed
+    # (ruling D-B). Which non-200 status that is has moved between runs -- `Evalidator/
+    # evalidator.jsp` served 403 to one run and 500 to the next, and answered both within
+    # seconds of each other on a hand check -- which is the case for retaining the bytes
+    # rather than trusting a status transcribed into a comment: the run's own extract says
+    # which it was. `_common.probe` discards bodies by construction, so it cannot retain that.
     other_route_probes = []
     for i, url in enumerate(FIA_OTHER_ROUTES):
         res = probe_url(client, url)
@@ -6622,6 +6855,10 @@ def run_tpo(client: httpx.Client) -> None:
             root_folder = box_shared_folder_items(box_base["body"].decode("utf-8", "replace"))
         except (ValueError, json.JSONDecodeError) as exc:
             root_folder = {"items": [], "parse_error": str(exc)}
+            # Recorded, not just caught: `compose_tpo_access` distinguishes "the share page
+            # never answered" from "it answered and did not parse", and the second branch is
+            # only readable if the reason it did not parse reaches the artifact.
+            box_navigation["shared_folder_parse_error"] = str(exc)
         year_folders = sorted(
             (it.get("name") for it in root_folder.get("items", [])
              if it.get("type") == "folder" and str(it.get("name", "")).isdigit()),
@@ -6673,8 +6910,15 @@ def run_tpo(client: httpx.Client) -> None:
                             box_navigation["sample_file"] = chosen_file["name"]
                             box_navigation["sample_file_sheet_names"] = (
                                 inspected["sheet_names"])
+                            box_navigation["sample_file_first_sheet_name"] = (
+                                inspected["first_sheet_name"])
                             box_navigation["sample_file_first_sheet_headers"] = (
                                 inspected["first_sheet_headers"])
+                            # Empty on every workbook this run has seen. Persisted anyway so an
+                            # absent header row shows up as a named gap in the artifact rather
+                            # than as a clause the access reason silently omits.
+                            box_navigation["sample_file_first_sheet_unresolved"] = (
+                                inspected["first_sheet_unresolved"])
                             if chosen is None:
                                 chosen = file_url
                         except (zipfile.BadZipFile, KeyError) as exc:

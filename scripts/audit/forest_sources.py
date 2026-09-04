@@ -1208,9 +1208,13 @@ def run_fia(client: httpx.Client) -> None:
             wait_seconds=FIA_DATAMART_WAIT_SECONDS)
         for url in FIA_DATAMART_CANDIDATES
     ]
-    # `probe_url`, not `_common.probe`: these two routes answer with a real status, and one of
-    # them answers 403 with a body that is itself the evidence of *how* it is closed (ruling
-    # D-B). `_common.probe` discards bodies by construction, so it cannot retain that.
+    # `probe_url`, not `_common.probe`: these two routes answer with a real status, and the
+    # non-200 one answers with a body that is itself the evidence of *how* it is closed
+    # (ruling D-B). Which non-200 status that is has moved between runs -- `Evalidator/
+    # evalidator.jsp` served 403 to one run and 500 to the next, and answered both within
+    # seconds of each other on a hand check -- which is the case for retaining the bytes
+    # rather than trusting a status transcribed into a comment: the run's own extract says
+    # which it was. `_common.probe` discards bodies by construction, so it cannot retain that.
     other_route_probes = []
     for i, url in enumerate(FIA_OTHER_ROUTES):
         res = probe_url(client, url)
