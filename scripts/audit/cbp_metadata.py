@@ -454,8 +454,8 @@ def main() -> None:
             # the keyed pull's rows. This also means empszes_by_year can be populated for a
             # year even when the keyed pull itself fails -- the crosswalk probe is entirely
             # keyless. Which years a run's keyed pull actually failed for is read off
-            # working_query_by_year, never assumed here: with the non-authenticating key this
-            # task was developed against it was every year, and with a working one it is none.
+            # working_query_by_year, never assumed here -- an auth rejection, a geography
+            # problem and a query problem are all live causes, and a run can meet a mix.
             empszes[str(year)] = {
                 "source": EMPSZES_SOURCE_OFFICIAL,
                 "pairs": [
