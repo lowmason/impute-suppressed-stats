@@ -30,15 +30,18 @@ during this task (not from memory or the reference repo):
    `classify_probe_body`), not reinvented: a bare status check cannot tell a real answer from
    an auth-rejection page, because both come back HTTP 200.
 
-Ruling D-B binds this task: this is an access-verdict probe over five NAICS predicates, and a
-non-200 response body (204's empty body, or a 200 auth-rejection page's HTML) IS the evidence
-distinguishing "not published at this NAICS level" from "reachable but blocked" from a real
-answer. Every response this run actually receives is persisted regardless of its status; only
-a transport failure (no response at all, after `_common.request`'s retries) registers no
-extract, because there is no body to persist. `compose_retention_rule` states this script's own
-retention rule inside the artifact it shapes, per `forest_sources.py`'s established pattern --
-retention rules differ per script, so a reader must not generalise this one to any other
-source's summary.
+Ruling D-B binds this task: this is an access-verdict probe over five NAICS predicates.
+`http_status` alone already separates a 204 ("not published at this NAICS level") from either
+200 outcome; it's the response body -- a 200 auth-rejection page's HTML versus a 200 real
+tabular answer -- that distinguishes "reachable but blocked" from a real answer, since those two
+share the identical status. Every response this run actually receives is persisted regardless of
+its status, including the 204's empty body: retaining it, sha256-sidecarred like every other
+extract, is what turns "not published" into a recorded observation rather than an unrecorded
+absence. Only a transport failure (no response at all, after `_common.request`'s retries)
+registers no extract, because there is no body to persist. `compose_retention_rule` states this
+script's own retention rule inside the artifact it shapes, per `forest_sources.py`'s established
+pattern -- retention rules differ per script, so a reader must not generalise this one to any
+other source's summary.
 """
 
 from __future__ import annotations
