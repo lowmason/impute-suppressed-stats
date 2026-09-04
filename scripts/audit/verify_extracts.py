@@ -11,7 +11,10 @@ What that last claim is worth: E2 to E5 are checked against the values themselve
 "every field above" half is checked against `ROADMAP_FIELDS`, a hand-authored reading of the
 roadmap's `Produces:` prose onto the findings keys the twelve scripts shipped, marked there
 with the inference-marker convention. A field the roadmap names that nobody mapped would pass
-this gate silently, so the mapping is the thing to review, not the PASS line.
+this gate silently, so the mapping is the thing to review, not the PASS line. Criterion C is
+weaker still: four substring matches plus one presence test per Appendix A source name, which
+proves the deliverable carries those sections and says nothing about what they contain -- see
+the comment on `REQUIRED_DOC_TEXT`.
 
 Deviations from the plan's illustrative code, each established against the twelve shipped
 summaries and this repository rather than assumed:
@@ -190,6 +193,17 @@ ROADMAP_FIELDS: tuple[tuple[str, str, str], ...] = (
 
 # Headings and row labels the finding document must carry for criterion C. The §21 row labels
 # are quoted from the spec's §21 table; the §1.2 heading from the spec's §1.2 bullet.
+#
+# What C's PASS is worth, stated because rule 7 requires it. These four are substring matches,
+# and `check_document` adds one presence test per Appendix A source name. Together they prove
+# the deliverable carries the sections the plan's Task 13 `Closes:` line names, and nothing
+# whatever about what those sections say: a notes file carrying these four headings with
+# entirely empty verdict cells passes C. Deliberately not strengthened. The only check that
+# would catch that without inventing a semantic judgement the gate cannot make is a non-empty
+# test on the cells of a markdown table row, and that would fail on correct work the day
+# someone writes the §21 verdicts as prose instead of a table. Disclosing the limit is the
+# honest fix; the verdicts themselves are what a reviewer reads, not this criterion's PASS
+# line. The shipped document says the same thing to a fresh-clone reader.
 REQUIRED_DOC_TEXT: tuple[tuple[str, str], ...] = (
     ("the §1.2 table of requirements needing further source verification",
      "cannot be implemented without"),
