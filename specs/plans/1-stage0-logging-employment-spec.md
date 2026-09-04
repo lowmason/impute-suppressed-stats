@@ -3100,11 +3100,17 @@ QCEW unless a concrete file extract proves otherwise."* This task is that proof-
 - Consumes: `_common`, including `STATES_DC_FIPS` / `STATE_AREAS` / `NATIONAL_AREA` — shared
   from Task 1, not re-declared locally, because the audit scripts do not import one another
   except through summaries.
-- Produces: `has_simultaneous_state_industry_size(df, *, industry, state_areas) -> bool` and
+- Produces: `has_simultaneous_state_industry_size(df, *, industry, state_areas, all_sizes) -> bool`
+  and `all_sizes_code(titles) -> str` — `all_sizes` is the aggregate size_code the predicate
+  excludes, and it is **derived from the fetched size_code titles file, never hardcoded**
+  (FIX 13 / B1; the same rule that governs `private_own_code`). `main()` therefore loads the
+  titles file before computing the verdict, because the verdict depends on it. Also produces
   `data/raw/audit/qcew_size/summary.json` (source key `qcew_size`), plus one
   `{year}_q1_by_size.zip` per window year under `data/raw/audit/qcew_size/`.
   `findings` keys:
   - `simultaneous_state_industry_size` — bool. **The `SRC-QSIZE-002` verdict.**
+  - `all_sizes_code` — `{code, title}` for the derived all-sizes aggregate, recorded so the
+    value the verdict depends on is auditable rather than implicit.
   - `agglvl_inventory` — per `agglvl_code` present in the by-size product:
     `{agglvl_code, row_count, has_113310, area_pattern, size_codes}` where `area_pattern` is one
     of `national`, `state_level`, `sub_state`, `mixed`.
