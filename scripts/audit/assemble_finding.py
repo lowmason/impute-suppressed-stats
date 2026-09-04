@@ -272,7 +272,10 @@ def render_document(
         "Everything from here to the end of the document is the recorded evidence itself: for "
         "each source, its `access`, `coverage_span` and `findings` objects rendered whole from "
         "`data/raw/audit/<source>/summary.json`, unabridged and unedited. Nothing in this "
-        "section is summarised, ranked or interpreted by this assembler -- where a recorded "
+        "section is summarised, ranked or interpreted by this assembler, besides each source's "
+        "extract count in the italic line closing its block -- the one number below that this "
+        "assembler computes rather than reproduces, and it is computed because the `extracts` "
+        "list is the one recorded object this section does not render at all. Where a recorded "
         "value contains a reading rather than a measurement, it is the source script that says "
         "so, inside the value."
     )

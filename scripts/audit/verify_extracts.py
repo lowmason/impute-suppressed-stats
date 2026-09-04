@@ -9,7 +9,7 @@ extract manifest.
 
 What that last claim is worth: E2 to E5 are checked against the values themselves. E1's
 "every field above" half is checked against `ROADMAP_FIELDS`, a hand-authored reading of the
-roadmap's `Produces:` prose onto the findings keys the twelve scripts shipped, marked there
+roadmap's `Produces:` prose onto the findings keys the eleven scripts shipped, marked there
 with the inference-marker convention. A field the roadmap names that nobody mapped would pass
 this gate silently, so the mapping is the thing to review, not the PASS line. Criterion C is
 weaker still: four substring matches plus one presence test per Appendix A source name, which
@@ -149,7 +149,7 @@ CRITERIA: dict[str, str] = {
 
 # INFERENCE MARKER, OPENING: the mapping below, to the closing marker, is a reading of the
 # roadmap's Stage 0 `Produces:` line -- prose written before the audit ran -- onto the findings
-# keys the twelve scripts actually shipped. It is hand-authored, measures nothing, and is how
+# keys the eleven scripts actually shipped. It is hand-authored, measures nothing, and is how
 # this gate supports criterion E1's "every field above". The plan's own per-task `Produces:`
 # blocks are deliberately NOT the reference: two sources ship keys those blocks never named
 # (`bds.probe_query_scope`, `bds.raw_retention_rule`, `susb.raw_retention_rule`), reviewed and
@@ -658,7 +658,7 @@ def main() -> int:
         # A fresh clone has no data/ tree at all -- it is gitignored. A later stage re-running
         # this gate there should be told that, not handed a FileNotFoundError traceback.
         print(f"FAIL [S] no audit root at {c.AUDIT_ROOT}; the raw tree is gitignored, so run "
-              "the twelve source scripts before re-checking the stage")
+              "the eleven source scripts before re-checking the stage")
         return 1
 
     found = enumerate_sources(c.AUDIT_ROOT)
