@@ -277,8 +277,14 @@ def main() -> None:
     extracts: list[c.ExtractRecord] = []
 
     vresp = c.request(client, f"{BASE}/variables.json")
+    # `http_status=vresp.status_code`, not `record_extract`'s 200 default: `c.request` calls
+    # `raise_for_status()`, which admits any 2xx, so a 204 or a 206 here would have been
+    # recorded as a fabricated 200 -- the same defect class the probe loop below avoids by
+    # passing its measured status. `compose_retention_rule` derives its counters from these
+    # records, so this is what keeps its 200/204 split a measurement across every extract.
     extracts.append(c.record_extract(
-        SOURCE, f"{BASE}/variables.json", "variables.json", vresp.content))
+        SOURCE, f"{BASE}/variables.json", "variables.json", vresp.content,
+        http_status=vresp.status_code))
     names = set(vresp.json()["variables"].keys())
     present = [v for v in WANTED_VARS if v in names]
 
