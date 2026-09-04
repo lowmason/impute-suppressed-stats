@@ -44,12 +44,17 @@ Deviations from the brief's illustrative code, established this task, not from m
    low/moderate/high indicator methodology.html describes as G/H/J, and it is absent from every
    year's 113310 x state response header this run (Task 7's query never selected it as an output
    column). Every observed `EMP_N` value in every year's extract this run is the literal string
-   `"0"`. `noise_flagged_share` therefore measures "EMP_N present and not the string 0", not the
-   published noise-flag distribution -- `emp_n_f_caveat` states this plainly in `findings`, not
-   only in this docstring, so a reader who never opens this file still sees it next to the
-   number it qualifies (the exact trap this task's dispatch names: a claim about how much a
-   check proves must be as verified as a claim about data, and live beside the number, not only
-   in prose a reader might skip).
+   `"0"`. This finding is therefore named `emp_n_present_and_nonzero_share` -- a name that states
+   exactly what it measures ("EMP_N present and not the string 0"), not the published noise-flag
+   distribution, and that cannot be misread as the share of cells carrying CBP's actual per-cell
+   noise flag (`EMP_N_F`). (Fix round 2: this field was originally named `noise_flagged_share`,
+   the plan's mandated name at spec lines 4254-4255/4306-4307 -- misleading for the same reason.
+   Renamed on the human's ruling at the execution gate; see the Task 8 deviation note in
+   `specs/plans/1-stage0-logging-employment-spec.md` and `emp_n_f_caveat` below, which states this
+   plainly in `findings`, not only in this docstring, so a reader who never opens this file still
+   sees it next to the number it qualifies (the exact trap this task's dispatch names: a claim
+   about how much a check proves must be as verified as a claim about data, and live beside the
+   number, not only in prose a reader might skip). The computation itself is unchanged.)
 
 5. **`regime_by_year` is seeded from `c.WINDOW_YEARS`, not from `years_available`.** The brief's
    illustrative code loops `for year in years` (i.e. `meta["findings"]["years_available"]`),
@@ -137,9 +142,10 @@ def flag_evidence(header: list[str], body: list[list]) -> dict:
         if col in idx:
             out[col] = dict(Counter(flag_value_key(row[idx[col]]) for row in body))
     suppressed = sum(1 for row in body if "EMP_F" in idx and row[idx["EMP_F"]] is not None)
-    noised = sum(1 for row in body if "EMP_N" in idx and row[idx["EMP_N"]] not in (None, "0"))
+    emp_n_present_and_nonzero = sum(
+        1 for row in body if "EMP_N" in idx and row[idx["EMP_N"]] not in (None, "0"))
     out["suppressed_share"] = suppressed / total if total else 0.0
-    out["noise_flagged_share"] = noised / total if total else 0.0
+    out["emp_n_present_and_nonzero_share"] = emp_n_present_and_nonzero / total if total else 0.0
     out["emp_n_f_in_response"] = "EMP_N_F" in idx
     return out
 
@@ -337,10 +343,11 @@ def emp_n_f_caveat(*, observed_any: bool, emp_n_f_label: str | None) -> str:
     actually observed (`observed_any`, aggregated over `flag_evidence_by_year`'s
     `emp_n_f_in_response` per year) and actually fetched (`emp_n_f_label`, from
     `variable_definition_summary` against a real `variables/EMP_N_F.json` response) -- not
-    typed from memory of prior research. This is what keeps `noise_flagged_share` from silently
-    contradicting a `noise_infusion` regime label above it (a share of 0.0 next to a label that
-    says noise infusion applies is exactly the kind of derived-number-beside-authored-label
-    contradiction this task's dispatch names). `emp_n_f_label=None` means this run's own
+    typed from memory of prior research. This is what keeps
+    `emp_n_present_and_nonzero_share` from silently contradicting a `noise_infusion` regime label
+    above it (a share of 0.0 next to a label that says noise infusion applies is exactly the kind
+    of derived-number-beside-authored-label contradiction this task's dispatch names).
+    `emp_n_f_label=None` means this run's own
     `variables/EMP_N_F.json` fetch failed for the representative year -- must read as "not
     fetched", never render as if the label itself were the string 'None'."""
     label_clause = (
@@ -352,8 +359,8 @@ def emp_n_f_caveat(*, observed_any: bool, emp_n_f_label: str | None) -> str:
         return (
             f"EMP_N_F ({label_clause}) -- CBP's actual per-cell noise-magnitude flag, distinct "
             "from EMP_N itself -- appears in at least one year's 113310 x state response header "
-            "this run; flag_evidence_by_year's EMP_N-derived noise_flagged_share can be "
-            "cross-checked against it directly for that year."
+            "this run; flag_evidence_by_year's EMP_N-derived emp_n_present_and_nonzero_share can "
+            "be cross-checked against it directly for that year."
         )
     return (
         f"EMP_N_F ({label_clause}) is CBP's actual per-cell noise-magnitude flag (documented in "
@@ -362,10 +369,10 @@ def emp_n_f_caveat(*, observed_any: bool, emp_n_f_label: str | None) -> str:
         "not the flag itself. EMP_N_F does not appear in any year's 113310 x state response "
         "header this run (Task 7's query never selected it as an output column). Every observed "
         "EMP_N value in every year's extract this run is the literal string '0'. "
-        "noise_flagged_share in flag_evidence_by_year therefore measures only 'EMP_N present "
-        "and not the string 0', not the published noise-flag distribution, and must not be read "
-        "as evidence that no noise was applied in a year labelled noise_infusion above -- the "
-        "regime label does not rest on this share."
+        "emp_n_present_and_nonzero_share in flag_evidence_by_year therefore measures only 'EMP_N "
+        "present and not the string 0', not the published noise-flag distribution, and must not "
+        "be read as evidence that no noise was applied in a year labelled noise_infusion above "
+        "-- the regime label does not rest on this share."
     )
 
 
@@ -514,7 +521,7 @@ def main() -> None:
             print(year, "no 113310 extract this run")
             continue
         print(year, "suppressed", round(ev["suppressed_share"], 3),
-              "noise-flagged", round(ev["noise_flagged_share"], 3),
+              "emp_n_present_and_nonzero", round(ev["emp_n_present_and_nonzero_share"], 3),
               "EMP_F values", sorted(ev.get("EMP_F", {})),
               "| regime:", REGIME_BY_YEAR[year]["regime"])
     print("unknown_years:", unknown_years)
