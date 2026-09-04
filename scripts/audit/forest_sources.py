@@ -24,9 +24,11 @@ undocumented legacy download redirect instead of its modern (session-gated) shar
 `main()` for the full probe sequence and `tests/audit/test_forest_sources.py` for what is
 pinned about each parsing step.
 
-Raw-retention rule, specific to this script (ruling D-B). Every other Stage 0 audit script
-records a fetched body only when the status is 200. This one records a body whenever the
-endpoint answered at all, whatever the status, and stamps each extract with the status it
+Raw-retention rule, specific to this script (ruling D-B). The obvious default for a
+body-recording site is to keep the bytes only on a status of 200; what every other Stage 0
+script does is that script's business and is not asserted here, because a claim about other
+files dates the moment one of them changes. This one records a body whenever the endpoint
+answered at all, whatever the status, and stamps each extract with the status it
 actually carried -- because on an access-verdict probe the non-200 body IS the evidence: a 404
 page, a 403 page and an empty 200 are three different verdicts, and only the retained bytes
 tell them apart. A transport failure yields no body and so registers no extract; its evidence

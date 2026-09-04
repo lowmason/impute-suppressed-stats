@@ -1492,3 +1492,16 @@ def test_retention_rule_warns_that_a_retained_200_is_not_evidence_of_usable_data
     rule = m.compose_retention_rule([200, 403])["rule"]
     assert "not that the body is usable data" in rule
     assert "status 200" in rule
+
+
+def test_docstring_makes_no_claim_about_what_other_audit_scripts_retain():
+    """Whole-branch review, finding 2: the other claim that aged in-branch. The ruling-D-B
+    paragraph asserted "Every other Stage 0 audit script records a fetched body only when the
+    status is 200". True when this file landed (d90f13a); `bds_detail.py` landed later
+    (8dde34c), passes `http_status=status`, and ships four extracts at status 204 with
+    zero-byte bodies. A claim about other files dates the moment one of them changes, so the
+    comparative is gone -- while the rule this script actually follows, and the reason for it,
+    stay. Negative pin, so re-adding the sentence beside the corrected text is still caught."""
+    doc = " ".join(m.__doc__.split())
+    assert "Every other Stage 0 audit script records a fetched body" not in doc
+    assert "records a body whenever the endpoint answered at all, whatever the status" in doc
