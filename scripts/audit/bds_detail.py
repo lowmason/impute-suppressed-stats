@@ -272,8 +272,11 @@ def main() -> None:
         outcome, payload = classify_probe_body(status, content_type, body)
         outcomes.append(outcome)
 
-        # Ruling D-B: persist whatever this run actually received, whatever its status -- the
-        # body is the evidence. Only a transport failure (status 0, no body) registers nothing.
+        # Ruling D-B: persist whatever this run actually received, whatever its status --
+        # http_status alone already separates a 204 from either 200 outcome, but retaining the
+        # 204's empty body anyway makes it a recorded observation rather than an unrecorded
+        # absence. Only between the two 200 outcomes is the retained body itself the evidence.
+        # Only a transport failure (status 0, no body) registers nothing.
         if status != 0:
             extracts.append(c.record_extract(
                 SOURCE, BASE, f"naics_{naics}.json", body, http_status=status))

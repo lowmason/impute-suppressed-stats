@@ -1,8 +1,10 @@
 """Judgment-logic tests for `bds_detail` (SRC-OTH-002), pinned before the live NAICS-detail
 probes run.
 
-The brief's illustrative code has two defects, both confirmed live against
-`https://api.census.gov/data/timeseries/bds` during this task, not from memory:
+The brief's illustrative code has three defects. The two enumerated below were confirmed live
+against `https://api.census.gov/data/timeseries/bds` during this task, not from memory; the
+third -- a dropped fallback branch in the `uncovered` computation -- is disclosed in the task
+report only, since it was never exercised by any live run:
 
 1. **This run met HTTP 204 with a zero-length body for every candidate NAICS predicate that
    matched no published cell -- never a 404 and never a 200 with an empty `[header]`-only JSON
@@ -310,9 +312,10 @@ def test_probe_query_scope_excludes_naics_and_key():
 
 
 def test_compose_retention_rule_counts_the_retained_non_200_bodies():
-    # Ruling D-B: this task's 204 bodies (empty, but a status the brief's illustrative code
-    # never anticipated) ARE the evidence distinguishing "not published at this NAICS level"
-    # from "reachable but blocked" from a real answer.
+    # Ruling D-B: this task's 204 bodies are empty -- a status the brief's illustrative code
+    # never anticipated -- and http_status alone, not those bodies, distinguishes "not
+    # published at this NAICS level" from either 200 outcome. Only "reachable but blocked"
+    # vs. a real answer -- both 200 -- actually turns on the retained bytes.
     rule = m.compose_retention_rule([200, 204, 204, 204, 204])
     assert rule["extracts_recorded"] == 5
     assert rule["extracts_with_non_200_status"] == 4
