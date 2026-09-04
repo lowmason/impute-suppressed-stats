@@ -351,12 +351,21 @@ REAL_GROUP_DETAIL_DOC_TRIMMED = {
     },
 }
 
-# Synthetic -- fabricated to exercise the positive case; no keyless CBP endpoint checked this
-# task carries one to capture for real. Modeled on the `values.item` shape the plan's
-# illustrative `value_list` helper assumed CBP would use (some other Census APIs do).
-SYNTHETIC_DOC_WITH_CROSSWALK = {
+# Real, captured live from /2017/cbp/variables/EMPSZES.json, trimmed from 44 real code/label
+# pairs to 5 -- fix round 2's finding: this route DOES carry a values.item crosswalk for 2017,
+# even though 2018-2023 (REAL_EMPSZES_DOC above, and every year actually checked in round 1)
+# do not. No fabricated fixture is needed for the positive case any more.
+REAL_2017_EMPSZES_DOC_TRIMMED = {
     "name": "EMPSZES",
-    "values": {"item": {"001": "All establishments", "251": "1 to 4 employees"}},
+    "label": "Employment size of establishments",
+    "group": "CB1700CBP",
+    "values": {"item": {
+        "001": "All establishments",
+        "204": "Establishments with no paid employees",
+        "205": "Establishments with paid employees",
+        "207": "Establishments with less than 10 employees",
+        "209": "Establishments with less than 20 employees",
+    }},
 }
 
 
@@ -403,8 +412,8 @@ def test_crosswalk_absent_from_real_group_detail_doc():
     assert m.crosswalk_present_in_payload(REAL_GROUP_DETAIL_DOC_TRIMMED, "EMPSZES") is False
 
 
-def test_crosswalk_present_when_values_item_exists_at_top_level():
-    assert m.crosswalk_present_in_payload(SYNTHETIC_DOC_WITH_CROSSWALK, "EMPSZES") is True
+def test_crosswalk_present_for_the_real_2017_doc():
+    assert m.crosswalk_present_in_payload(REAL_2017_EMPSZES_DOC_TRIMMED, "EMPSZES") is True
 
 
 def test_crosswalk_present_when_values_item_exists_under_group_variables():
@@ -429,6 +438,47 @@ def test_crosswalk_present_in_payload_handles_non_dict_values_key_without_crashi
     """A malformed or unexpected payload (e.g. `values` present but not a dict) must classify
     as absent, not raise."""
     assert m.crosswalk_present_in_payload({"values": "not a dict"}, "EMPSZES") is False
+
+
+# --- crosswalk_items_from_payload ---------------------------------------------------------------
+#
+# Fix round 2: the boolean check above answers "does a crosswalk exist"; this function answers
+# "what is it" -- the actual {code: label} dict, needed to populate empszes_by_year with the
+# real 2017 enumeration rather than just a yes/no.
+
+
+def test_crosswalk_items_from_payload_returns_the_real_2017_pairs():
+    items = m.crosswalk_items_from_payload(REAL_2017_EMPSZES_DOC_TRIMMED, "EMPSZES")
+    assert items == {
+        "001": "All establishments",
+        "204": "Establishments with no paid employees",
+        "205": "Establishments with paid employees",
+        "207": "Establishments with less than 10 employees",
+        "209": "Establishments with less than 20 employees",
+    }
+
+
+def test_crosswalk_items_from_payload_returns_none_for_real_absent_vintages():
+    assert m.crosswalk_items_from_payload(REAL_EMPSZES_DOC, "EMPSZES") is None
+    assert m.crosswalk_items_from_payload(REAL_GROUPS_DOC, "EMPSZES") is None
+    assert m.crosswalk_items_from_payload(REAL_GROUP_DETAIL_DOC_TRIMMED, "EMPSZES") is None
+
+
+def test_crosswalk_items_from_payload_reads_the_nested_group_shape():
+    payload = {"variables": {"EMPSZES": {"values": {"item": {"001": "All establishments"}}}}}
+    assert m.crosswalk_items_from_payload(payload, "EMPSZES") == {"001": "All establishments"}
+
+
+def test_crosswalk_items_from_payload_scoped_to_the_named_variable():
+    payload = {"variables": {
+        "OTHER_VAR": {"values": {"item": {"1": "something"}}},
+        "EMPSZES": {"label": "no values key here"},
+    }}
+    assert m.crosswalk_items_from_payload(payload, "EMPSZES") is None
+
+
+def test_crosswalk_items_from_payload_handles_non_dict_values_key_without_crashing():
+    assert m.crosswalk_items_from_payload({"values": "not a dict"}, "EMPSZES") is None
 
 
 # --- unavailable_year_reason ---------------------------------------------------------------------
