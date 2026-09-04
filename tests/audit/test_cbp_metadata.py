@@ -13,8 +13,12 @@ confirmed absence).
 
 The `MISSING_KEY_PREFIX` / `INVALID_KEY_PREFIX` fixtures are real byte prefixes captured from
 live GET requests to `https://api.census.gov/data/2021/cbp` -- one with no `key` param at all,
-one with the actual (invalid) `CENSUS_API_KEY` from this repo's `.env`. Both came back HTTP 200
-with `content-type: text/html` after redirect-following, never 4xx.
+one with the `CENSUS_API_KEY` this repo's `.env` carried during this task's development runs,
+which those requests showed Census did not accept. Both came back HTTP 200 with `content-type:
+text/html` after redirect-following, never 4xx. That is fixture provenance, not a standing
+claim about any credential: these bytes pin how `classify_data_body` reads Census's two
+key-rejection pages, and they stay valid whatever key a later run uses -- what a given run's
+key actually did is `access.status`'s business, recorded in the summary, not theirs.
 
 Fix round 2 (spec review): whether CBP's metadata publishes an EMPSZES code/label crosswalk
 turned out to vary by vintage, not to be uniformly absent as fix round 1 assumed from checking
@@ -40,6 +44,8 @@ and generalized, which is the mistake fix round 1 made and fix round 2 corrected
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import _common
 import cbp_metadata as m
@@ -528,3 +534,47 @@ def test_common_module_is_importable_alongside_cbp_metadata():
     ever breaks, every other test in this file would fail for an unrelated reason and be
     confusing to debug."""
     assert _common.INDUSTRY_CODE == "113310"
+
+
+# --- the module docstring's own claims ----------------------------------------------------------
+#
+# Prose-only claims, returned by no function, so `m.__doc__` is the only place they live and the
+# only place a regression could reintroduce one -- the same reason `test_susb_layout.py` pins its
+# module docstring directly.
+
+
+def _flat(text: str) -> str:
+    """Docstring text with its line wrapping collapsed, so these assertions survive a reflow."""
+    return " ".join(text.split())
+
+
+def test_docstring_does_not_state_the_env_key_failure_as_a_standing_fact():
+    """Whole-branch review, finding 1: the claim that aged in-branch. Point 3 opened "A key
+    genuinely present in this repo's `.env` does not authenticate" and concluded that every
+    keyed request "is therefore expected to fail" -- unhedged present tense, true at Task 7
+    review time. A later run with a working credential recorded `access.status: "verified"`
+    with 179-190 rows for each of 2017-2023, and seven `data_113310.json` extracts at HTTP 200
+    are in the tracked manifest. Point 2 of the same docstring was already run-scoped ("checked
+    this run"); point 3's present tense was the anomaly. Negative pin, because a regression
+    could re-add the sentence beside the corrected one and leave a presence-only check green."""
+    doc = _flat(m.__doc__)
+    assert "does not authenticate" not in doc
+    assert "Every keyed request in a run against this credential is therefore expected" not in doc
+
+
+def test_docstring_scopes_the_env_key_failure_to_the_runs_that_observed_it():
+    """The other half: the invalid-key episode is why `classify_data_body` and
+    `zero_pull_cause` exist, so it is re-scoped rather than deleted, and the docstring points
+    at the summary for what any given run's credential actually did."""
+    doc = _flat(m.__doc__)
+    assert "during this task's development runs, the key then in `.env` did not" in doc
+    assert "a later run with a working key succeeded" in doc
+
+
+def test_the_keyless_crosswalk_comment_does_not_claim_every_year_failed():
+    """Same claim, second site: the inline comment beside the official-crosswalk branch used to
+    qualify "even when the keyed pull itself fails" with "(this run, for every year)". Read
+    from the source rather than `__doc__`, since a comment is not reachable at runtime."""
+    source = Path(m.__file__).read_text(encoding="utf-8")
+    assert "(this run, for every year)" not in source
+    assert "Which years a run's keyed pull actually failed for is read off" in source

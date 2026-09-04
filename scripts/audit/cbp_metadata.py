@@ -51,15 +51,20 @@ during this task (not from memory or the reference repo):
    ever yield a full LFO crosswalk from its rows even once a pull succeeds -- `lfo_by_year`
    stays `null` with that limitation recorded in `notes` per year.
 
-3. **A key genuinely present in this repo's `.env` does not authenticate.** Confirmed against
-   both this dataset and, as a control ruling out a CBP-specific malformed query, against a
-   wholly different dataset (ACS1) with the same key: both return HTTP 200 with an "Invalid
-   Key" HTML page. Every keyed request in a run against this credential is therefore expected
-   to fail; the script still performs every keyed request for real (it does not special-case
-   "this key looks broken, skip the network calls") so a fixed credential needs no code change
-   to start succeeding, and so `access.status`/`notes` report what THIS run actually measured
-   -- `access.reason` is interpolated from the distinct failure causes actually recorded in
-   `working_query_by_year`, not hardcoded to name the credential regardless of what happened.
+3. **A key can be genuinely present in `.env` and still not authenticate -- during this task's
+   development runs, the key then in `.env` did not.** Confirmed against both this dataset
+   and, as a control ruling out a CBP-specific malformed query, against a wholly different
+   dataset (ACS1) with the same key: both returned HTTP 200 with an "Invalid Key" HTML page.
+   Those runs are why `classify_data_body` and `zero_pull_cause` exist at all, and they are the
+   provenance of this file's key-rejection fixtures. What a credential does is not a fact about
+   this file, though, and this docstring does not assert one: a later run with a working key
+   succeeded, and `access.status`, `rows_113310_by_year` and `extracts` in the written summary
+   record which years that was -- not this text. That split is the design. The script performs
+   every keyed request for real (it does not special-case "this key looks broken, skip the
+   network calls"), so a fixed credential needs no code change to start succeeding, and
+   `access.status`/`notes` report what THAT run actually measured -- `access.reason` is
+   interpolated from the distinct failure causes actually recorded in `working_query_by_year`,
+   not hardcoded to name the credential regardless of what happened.
 
 4. **Every window year gets an explicit entry in every by-year finding, not only the years that
    responded.** A year outside `years_available` (a confirmed non-200 like 2024's 404, or a
@@ -447,8 +452,10 @@ def main() -> None:
             # The official enumeration exists in metadata for this vintage (confirmed live for
             # 2017 -- 44 codes) -- use it, and record that it came from metadata rather than
             # the keyed pull's rows. This also means empszes_by_year can be populated for a
-            # year even when the keyed pull itself fails (this run, for every year) -- the
-            # crosswalk probe is entirely keyless.
+            # year even when the keyed pull itself fails -- the crosswalk probe is entirely
+            # keyless. Which years a run's keyed pull actually failed for is read off
+            # working_query_by_year, never assumed here: with the non-authenticating key this
+            # task was developed against it was every year, and with a working one it is none.
             empszes[str(year)] = {
                 "source": EMPSZES_SOURCE_OFFICIAL,
                 "pairs": [
