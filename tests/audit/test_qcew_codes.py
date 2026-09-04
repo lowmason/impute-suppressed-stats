@@ -160,3 +160,83 @@ def test_same_industry_detail_false_on_missing_title_names_the_absent_code():
     assert same is False
     assert "the clause comparison was not reached" in outcome
     assert "carries no entry for code(s) 99" in outcome
+
+
+# --- _geography_universe_note ----------------------------------------------------------------
+#
+# The composing helper itself, which the four helpers above feed. Until now it was the one
+# unprotected branch in this module: each callee had both its branches pinned while the
+# composer that chooses between them, and appends the DC-absence paragraph on one of them, had
+# none -- and that paragraph is where a previous fix round's own defect landed. It is a pure
+# function of five plain arguments, so no network, fixture or artifact is involved here either.
+
+
+def _note(*, dc_present: bool) -> str:
+    return qcew_codes._geography_universe_note(
+        32,
+        ["01000", "02000"],
+        [],
+        {"present": dc_present, "row_count": 4, "years": ["2017"]} if dc_present
+        else {"present": False, "row_count": 0, "years": []},
+        ["71"],
+    )
+
+
+def test_geography_universe_note_does_not_assert_an_unobservable_dc_contribution():
+    """Whole-branch review, finding 2. The DC paragraph asserted a residual as a fact -- "DC's
+    contribution to the national total is unobservable at the state level -- a national-vs-sum-
+    of-states residual distinct from, and additional to, cell-level suppression". That needs an
+    unstated premise (that DC has nonzero private 113310 activity at all) which nothing fetched
+    here supports, and on the establishment margin `qcew_identity` measures the opposite:
+    `estab_gap = estab_gap_after_other = 0` in every quarter, read there as an area adding zero
+    establishments adding no employment either. The shipped document carried both readings.
+    Negative pin: re-adding the old sentence beside the corrected one is still caught."""
+    note = _note(dc_present=False)
+    assert "contribution to the national total is unobservable" not in note
+    assert "a national-vs-sum-of-states residual distinct from" not in note
+
+
+def test_geography_universe_note_names_a_channel_and_disclaims_its_magnitude():
+    """The corrected wording: a *channel* whose magnitude this script does not measure, and a
+    statement of where it would be observed if it is open at all."""
+    note = _note(dc_present=False)
+    assert "potential national-vs-sum-of-states residual channel" in note
+    assert "That is a channel, not a quantity." in note
+    assert "no value is claimed for it" in note
+    assert "not even that it is nonzero" in note
+    # Names where the channel would appear rather than leaving the reader to find it.
+    assert "estab_gap and estab_gap_after_other" in note
+    assert "clean_months" in note
+
+
+def test_geography_universe_note_wraps_the_dc_reading_in_an_inference_marker():
+    """The reading sits outside the delimited scope of the composition argument's own marking,
+    so it carries its own pair -- the convention this branch uses for exactly this. Balance is
+    what `test_assemble_finding`'s document-level count assertion rests on."""
+    note = _note(dc_present=False)
+    assert note.count("INFERENCE MARKER, OPENING") == 1
+    assert note.count("INFERENCE MARKER, CLOSING") == 1
+    assert note.index("INFERENCE MARKER, OPENING") < note.index("INFERENCE MARKER, CLOSING")
+    # The measured sentences stay outside the marked span: what is marked is the reading.
+    assert note.index("the state-like predicate above yields") < note.index(
+        "INFERENCE MARKER, OPENING")
+
+
+def test_geography_universe_note_omits_the_dc_paragraph_entirely_when_dc_publishes():
+    """The other branch, which no real run has taken. A future run where DC starts publishing
+    must not ship a residual-channel reading premised on an absence that did not happen -- and
+    must not ship an unbalanced marker either, since the pair lives inside that paragraph."""
+    note = _note(dc_present=True)
+    assert "residual channel" not in note
+    assert "INFERENCE MARKER" not in note
+    assert "District of Columbia (11000) is present in the state-like rows" in note
+
+
+def test_geography_universe_note_keeps_marking_the_hand_authored_composition_argument():
+    """Wave 2 added a marker pair; it must not have displaced the existing self-marking of the
+    quotation, the membership premise and the conclusion, which is on both branches."""
+    for dc_present in (True, False):
+        note = _note(dc_present=dc_present)
+        assert "hand-authored in all three of its parts" in note
+        assert "Unquoted premise, supplied by hand" in note
+        assert _common.INDUSTRY_CODE in note

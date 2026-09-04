@@ -20,7 +20,10 @@ TITLES = {
     "size_code": "https://data.bls.gov/cew/doc/titles/size/size_titles.csv",
     "area_fips": "https://data.bls.gov/cew/doc/titles/area/area_titles.csv",
     "industry_code": "https://data.bls.gov/cew/doc/titles/industry/industry_titles.csv",
-    # No disclosure_code titles file is published; codes come from observed values only.
+    # `None` means this script requests no titles file for this column, so its codes come from
+    # the observed values alone. It is not a claim that BLS publishes none: no request in this
+    # run tests that, and `titles_available` (which persists this map) records what was
+    # fetched, not what exists. A later task that finds such a file should add the URL here.
     "disclosure_code": None,
 }
 
@@ -214,7 +217,14 @@ def _geography_universe_note(
     conclusion that needs both. This script fetches none of the three and cannot re-derive any
     of them, so all three say so about themselves inline -- the premise and the conclusion as
     explicitly as the quotation, because the conclusion is the part a later task consumes and a
-    marking scoped to the quotation alone would leave it looking checked. States only what the
+    marking scoped to the quotation alone would leave it looking checked. The DC-absence
+    paragraph that follows on the absent branch reads that conclusion against `_dc_sentence`'s
+    measured absence, which is a further step past the composition argument's own scope, so it
+    carries its own `INFERENCE MARKER, OPENING`/`CLOSING` pair rather than sheltering under the
+    marking above it. What it names is a residual *channel* and where that channel would be
+    observed; it claims no magnitude for it, and in particular does not assert that DC has any
+    private-ownership activity to contribute -- nothing fetched here establishes that, and the
+    establishment margin is measured by `qcew_identity`, not by this script. States only what the
     data and BLS's published documentation show -- never which way SRC-QCEW-006's branch should
     resolve. That verdict is Task 5's, reached test-first against toy panels before the real
     scan (plan Architecture), not reverse-engineered from this finding."""
@@ -223,12 +233,27 @@ def _geography_universe_note(
         dc_gap = (
             " DC's complete row-level absence is a genuine states_dc coverage gap: a "
             "private-ownership Logging panel over this window will have no DC series at all, "
-            "which a later task should expect rather than mistake for a bug. Because US000 "
-            "includes DC on the hand-authored membership premise recorded above -- not by "
-            "anything derived here -- while no DC state row is published, DC's contribution "
-            "to the national total is unobservable at the state level -- a "
-            "national-vs-sum-of-states residual distinct from, and additional to, cell-level "
-            "suppression."
+            "which a later task should expect rather than mistake for a bug. INFERENCE "
+            "MARKER, OPENING: what follows to the closing marker is a reading of that absence "
+            "against the hand-authored membership premise recorded above, not a further "
+            "measurement. It is supplied by hand, carries no extract hash, and is re-checked "
+            "by no later run. On that premise US000 includes DC, while no DC state row is "
+            "published, so nothing at the state level observes whatever DC contributes to the "
+            "national total: a potential national-vs-sum-of-states residual channel, distinct "
+            "from and additional to cell-level suppression. That is a channel, not a "
+            "quantity. Its magnitude is not measured here and no value is claimed for it -- "
+            "not even that it is nonzero, which would need DC to carry private "
+            f"{c.INDUSTRY_CODE} activity at all, and nothing this script fetched shows "
+            "whether it does. Where the channel would show up, if it is open at all, is the "
+            "national-minus-sum-of-states difference qcew_identity measures quarter by "
+            "quarter: quarter_table's estab_gap and estab_gap_after_other on the "
+            "establishment margin, and evidence's clean_months on the employment one. Read "
+            "the two findings together rather than either alone. On a margin where "
+            "qcew_identity finds that difference closing exactly, its own recorded reading -- "
+            "that an area adding zero establishments to a quarterly total which closes "
+            "exactly can add no employment in that quarter's months -- rules this channel out "
+            "for that margin, and what is left open here is only the margin qcew_identity "
+            "could not evaluate. INFERENCE MARKER, CLOSING."
         )
     nat_label = f"agglvl-{'/'.join(nat_agglvl)}" if nat_agglvl else "national-agglvl"
     return (
