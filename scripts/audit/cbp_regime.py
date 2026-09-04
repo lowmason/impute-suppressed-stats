@@ -194,11 +194,54 @@ def _and_join(years: "list[int]") -> str:
 # right-product entry in `REGIME_BY_YEAR`, never rendered through this function.
 YEARS_WITH_WRONG_PRODUCT_RECORD_LAYOUT = (2018, 2020)
 YEARS_WITH_NO_RECORD_LAYOUT_AT_ALL = (2019, 2021, 2022, 2023)
-assert (
-    set(YEARS_WITH_WRONG_PRODUCT_RECORD_LAYOUT) | set(YEARS_WITH_NO_RECORD_LAYOUT_AT_ALL) | {2017}
-    == {y for y in c.WINDOW_YEARS if y != 2024}
-), "these two sets plus 2017 must partition every window year _no_year_specific_doc_evidence " \
-   "could ever be called for (every year but 2017 and 2024)"
+
+
+def _year_set_problems(
+    wrong_product: "tuple[int, ...]", no_layout: "tuple[int, ...]"
+) -> "list[str]":
+    """Every well-formedness property `_no_year_specific_doc_evidence`'s two year-sets must hold,
+    as a plain function rather than only a module-level assert -- so a test can exercise a
+    deliberately-broken pair of sets directly, without the shipped constants themselves needing
+    to be broken to prove the check works. Two independent properties, both checked, each named
+    in its own returned problem string if violated:
+
+    1. **Disjointness.** The two sets must share no year. Fix round 3 fixed a self-contradiction
+       where `_no_year_specific_doc_evidence` claimed both "a {year}-labeled file is archived"
+       and "no year-labeled file for {year} is archived ... at all" for 2020. That fix branches
+       on `year in YEARS_WITH_WRONG_PRODUCT_RECORD_LAYOUT`; a future year added to *both* tuples
+       would reproduce the identical self-contradiction past that fix, because the branch would
+       render the wrong-product clause for a year the no-layout clause still lists as having no
+       file at all.
+    2. **Coverage.** The two sets plus 2017 must equal every window year but 2024 --
+       `_no_year_specific_doc_evidence`'s full possible domain (2017 has its own right-product
+       entry in `REGIME_BY_YEAR` and is never rendered through that function; 2024 is `unknown`
+       and carries no year-specific-documentation claim at all).
+
+    The previous module-level assert checked only coverage, not disjointness -- a year added to
+    both tuples would have passed it silently.
+    """
+    problems = []
+    overlap = set(wrong_product) & set(no_layout)
+    if overlap:
+        problems.append(
+            f"{sorted(overlap)}: present in both YEARS_WITH_WRONG_PRODUCT_RECORD_LAYOUT and "
+            "YEARS_WITH_NO_RECORD_LAYOUT_AT_ALL -- these two sets must be disjoint, or "
+            "_no_year_specific_doc_evidence would render contradictory clauses for the same year"
+        )
+    covered = set(wrong_product) | set(no_layout) | {2017}
+    expected = {y for y in c.WINDOW_YEARS if y != 2024}
+    if covered != expected:
+        problems.append(
+            f"{covered} (the two sets plus 2017) does not equal {expected} (every window year "
+            "but 2024) -- these two sets plus 2017 must partition every window year "
+            "_no_year_specific_doc_evidence could ever be called for"
+        )
+    return problems
+
+
+_year_set_problems_found = _year_set_problems(
+    YEARS_WITH_WRONG_PRODUCT_RECORD_LAYOUT, YEARS_WITH_NO_RECORD_LAYOUT_AT_ALL)
+assert not _year_set_problems_found, "; ".join(_year_set_problems_found)
 
 
 def _no_year_specific_doc_evidence(year: int) -> str:
