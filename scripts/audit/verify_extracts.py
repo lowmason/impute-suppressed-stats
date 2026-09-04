@@ -604,15 +604,22 @@ def check_document(
                 Failure("E2", absent + "look for the verdict sentence in it did not run"),
                 Failure("C", absent + "look for the §1.2 and §21 sections in it did not run")]
     if not doc_text.strip():
-        # Same criterion set as the absent branch above, for the same reason: the §3.1,
-        # REQUIRED_DOC_TEXT and Appendix A checks below are criterion C's only source of
-        # failures, so early-returning E1 alone printed `PASS C` for a deliverable with no
-        # §1.2 or §21 sections in it at all. The message stays specific to emptiness -- an
-        # empty file and a file missing four sections are different things to fix.
-        empty = "the finding file is empty, so the checks that "
-        return [Failure("E1", empty + "read it did not run"),
-                Failure("E2", empty + "look for the verdict sentence in it did not run"),
-                Failure("C", empty + "look for the §1.2 and §21 sections in it did not run")]
+        # Same criterion set as the absent branch above, but NOT the same reason, and the
+        # details must not be copied from it. `read_optional` returns `""` for a file that
+        # exists and is empty, and `None` only for a path that does not exist -- so `main`'s
+        # `if doc_text is not None` guard is TRUE here, and `check_roadmap_fields` and
+        # `check_verdict` both run and both read this document; `check_verdict` prints its own
+        # E2 line right beside these. What did not run is the rest of THIS function: the §3.1,
+        # REQUIRED_DOC_TEXT and Appendix A checks below, the last two of which are criterion
+        # C's only source of failures -- so early-returning E1 alone printed `PASS C` for a
+        # deliverable with no §1.2 or §21 sections in it at all. The details below therefore
+        # say what the empty file does not carry, which is true of the file itself and claims
+        # nothing about which checks ran. They stay specific to emptiness either way: an empty
+        # file and a file missing four sections are different things to fix.
+        empty = "the finding file is empty, so it carries no "
+        return [Failure("E1", empty + "§3.1 classification record"),
+                Failure("E2", empty + "verdict sentence"),
+                Failure("C", empty + "§1.2 or §21 section, and names no Appendix A source")]
     failures = [Failure("E1", f"the §3.1 classification record is missing {key}={value!r} from "
                               "the finding document")
                 for key, value in classification.items() if value not in doc_text]

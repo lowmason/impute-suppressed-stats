@@ -687,6 +687,52 @@ def test_check_document_fails_the_same_three_criteria_when_the_document_is_empty
     assert all("empty" in f.detail for f in failures)
 
 
+# The empty branch's details were copied from the absent branch above, where "so the checks
+# that read it did not run" is true *because* `main`'s guard is `is not None`. For an empty
+# file that guard is satisfied, so the copied sentence was false: the document-reading checks
+# do run, and `check_verdict` emits its own E2 line contradicting it. The three tests below
+# pin the claim's truth rather than its wording -- each one fails if a document-reading check
+# actually stops running for an empty document, which is the only way the new details could
+# become false.
+
+
+def test_read_optional_distinguishes_an_empty_file_from_an_absent_path(tmp_path):
+    """The premise the whole branch rests on, pinned as behaviour rather than as prose: an
+    empty finding document reaches `main` as `""`, not as `None`, so it does not take the
+    absent branch's route through the `if doc_text is not None` guard."""
+    empty = tmp_path / "source-audit.md"
+    empty.write_text("", encoding="utf-8")
+    assert m.read_optional(empty) == ""
+    assert m.read_optional(tmp_path / "never-written.md") is None
+
+
+def test_the_verdict_check_runs_and_reports_against_an_empty_document():
+    """`check_verdict` takes `str`, not `str | None`, and `main` calls it for any non-`None`
+    `doc_text`. So for an empty document it runs, reads it, and fails E2 on the sentence it
+    cannot find -- which is why no failure detail may say the verdict check did not run."""
+    summaries = {"qcew_identity": summary("qcew_identity",
+                                          findings={"branch": "decline",
+                                                    "verdict_sentence": GOOD_VERDICT})}
+    failures = m.check_verdict(summaries, "   \n")
+    assert [f.criterion for f in failures] == ["E2"]
+    assert "not present in the finding document" in failures[0].detail
+
+
+def test_the_empty_branch_claims_nothing_about_checks_that_did_not_run():
+    """The false claim, pinned negatively where it lived. Each detail now states what the empty
+    file does not carry, which is a fact about the file; the absent branch keeps the wording
+    that is only true there."""
+    empty = m.check_document("   \n", {"industry_code_used": "113310"}, {"qcew": True})
+    assert all("did not run" not in f.detail for f in empty)
+    assert all("the checks that" not in f.detail for f in empty)
+    verdict_failure = next(f for f in empty if f.criterion == "E2")
+    assert verdict_failure.detail == "the finding file is empty, so it carries no verdict "\
+                                     "sentence"
+
+    absent = m.check_document(None, {"industry_code_used": "113310"}, {"qcew": True})
+    assert all("did not run" in f.detail for f in absent)
+
+
 def test_check_document_reports_a_missing_classification_value():
     doc = "# findings\ncannot be implemented without\nGeography universe\nTPO/FIA coverage\n" \
           "Optional state sources\n`qcew`\n"
