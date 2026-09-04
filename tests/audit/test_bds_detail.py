@@ -1,10 +1,12 @@
 """Judgment-logic tests for `bds_detail` (SRC-OTH-002), pinned before the live NAICS-detail
 probes run.
 
-The brief's illustrative code has three defects. The two enumerated below were confirmed live
-against `https://api.census.gov/data/timeseries/bds` during this task, not from memory; the
-third -- a dropped fallback branch in the `uncovered` computation -- is disclosed in the task
-report only, since it was never exercised by any live run:
+This implementation departs from the brief's illustrative code in three places: two defects and
+one deviation. The two defects are enumerated below and were confirmed live against
+`https://api.census.gov/data/timeseries/bds` during this task, not from memory. The third
+departure -- a dropped fallback branch in the `uncovered` computation -- is a deviation, named
+that way because it describes an action this implementation took rather than a flaw found in
+the brief; it is disclosed in the task report only, since no live run ever exercised it:
 
 1. **This run met HTTP 204 with a zero-length body for every candidate NAICS predicate that
    matched no published cell -- never a 404 and never a 200 with an empty `[header]`-only JSON
