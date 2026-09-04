@@ -4262,6 +4262,35 @@ documentation is found, `unknown` is the correct answer and the exit criterion i
 writing "not obtainable — no published disclosure-methodology statement located for this
 reference year" into `evidence`.
 
+> **Deviation (recorded on execution, 2026-09-04): `flag_evidence_by_year`'s `noise_flagged_share`
+> field (mandated above at lines 4254-4255, and by this task's own illustrative `flag_evidence`
+> code at lines 4306-4307) is renamed to `emp_n_present_and_nonzero_share`.**
+>
+> **The computation is unchanged.** The shipped script still counts rows where `EMP_N` is present
+> and not the string `"0"`, divided by the row total (a prior, in-scope fix round already
+> reconciled this against the illustrative code's `sum(n for v, n in EMP_N.items() if v)`, a
+> different but equivalent-in-practice expression) — only the local variable and the output key
+> holding that count were renamed to match. No persisted value moves as a result of this rename.
+>
+> **Why:** the plan's name `noise_flagged_share` implies CBP's actual per-cell noise-magnitude
+> flag, `EMP_N_F` — a `"FLAG"`-typed attribute, documented in methodology.html as a low/moderate/
+> high (G/H/J) indicator. The value this field actually holds is derived from `EMP_N` itself,
+> which CBP's own API metadata labels "Noise range for number of employees" and types as `int`,
+> not a flag — and `EMP_N_F` is absent from every window year's 113310 x state response header
+> this task fetches (confirmed live; Task 7's query never selected it as an output column). A
+> reader relying on the plan's name alone would believe this field reports the published
+> noise-flag distribution; it does not.
+>
+> **This was flagged, not silently fixed.** The implementer's first round refused to rename the
+> field unilaterally, since both the name and the computation are plan-mandated here, and instead
+> shipped an `emp_n_f_caveat` finding disclosing the gap next to the number. A reviewer then
+> raised the name itself as misleading in a second round. The human ruled on it at the execution
+> gate: rename the field to say what it measures, keep the computation exactly as specified above,
+> and keep `emp_n_f_caveat`. This note is the tracked record of that ruling — `specs/` is
+> versioned but `.sdd/` and `data/` are both gitignored, so without this line nothing surviving a
+> fresh clone would carry the decision or the reason for the mismatch between this section's
+> field name and `scripts/audit/cbp_regime.py`'s actual one.
+
 - [ ] **Step 1: Write the script**
 
 Create `scripts/audit/cbp_regime.py`:
