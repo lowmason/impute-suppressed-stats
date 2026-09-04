@@ -121,10 +121,15 @@ def test_is_empty_recurses_through_nested_containers():
     assert m.is_empty({"a": {"b": [None, ""]}, "c": [False]}) is False
 
 
-def test_is_empty_flags_exactly_the_two_declared_findings_over_the_shipped_shapes():
-    """The blast radius, pinned as a shape rather than read off `data/` (gitignored). The two
-    values the deepened check flags across the twelve summaries are both declared in
-    `LEGITIMATELY_EMPTY_FINDINGS`, so E1 still passes and its pass now names them."""
+def test_the_two_declared_empty_shapes_are_accepted_by_e1():
+    """Both shapes the deepened check flags in the shipped summaries are declared, so
+    `check_findings_filled` accepts them and E1 still passes.
+
+    What this does *not* check: that they are the only two. Nothing here reads `data/`, which is
+    gitignored, so a thirteenth all-null mapping appearing in a real summary tomorrow would
+    leave this test green. "Exactly two across the twelve summaries" was measured out-of-band
+    and is recorded in `verify_extracts`'s module docstring, point 7 -- not guarded here.
+    """
     assert ("cbp_metadata", "lfo_by_year") in m.LEGITIMATELY_EMPTY_FINDINGS
     assert ("qcew_routes", "bulk_years_required") in m.LEGITIMATELY_EMPTY_FINDINGS
     summaries = {
