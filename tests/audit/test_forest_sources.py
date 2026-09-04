@@ -1012,6 +1012,33 @@ def test_compose_fia_uncovered_does_not_read_an_empty_scan_as_a_zero_hit_finding
     assert "is not a scan that found no industry terms" in text
 
 
+def test_compose_fia_uncovered_empty_scan_does_not_deny_that_anything_was_fetched():
+    # Fix round 3, item 1. `retain_body` gates on `answered_with_body` (any status but 0, with
+    # bytes); `scannable_text_page` additionally requires a 200. A run whose every /fiadb-api/
+    # fetch answers 403-with-a-body therefore registers and hashes five extracts while
+    # `scanned_pages` stays empty -- so "No FIA page was fetched and hashed this run" is false
+    # on exactly the branch it is written for. The sentence must name the 200-gate the scan
+    # actually turns on, and must scope itself to the scan's own corpus: `other_route_*`
+    # bodies are fetched and hashed too (one of them at 200) and never reach the scan.
+    text = m.compose_fia_uncovered(
+        industry_scan={"pages_scanned": [], "industry_classification_terms": {"NAICS": 0},
+                       "fia_taxonomy_terms": {"species": 0}},
+        dc_has_evaluation=False, wc_row_count=0)
+    assert "fetched and hashed" not in text
+    assert "status-200 body" in text
+
+
+def test_compose_fia_uncovered_names_the_scan_corpus_not_every_hashed_extract():
+    # Same fix, the live half: today's artifact scans 5 pages while `extracts[]` holds 7
+    # hashed entries (statuses 200 x5, 403, 200), so "the 5 FIA page(s) this run fetched and
+    # hashed" misdescribes the set it counts. The count phrase names the scan corpus.
+    text = m.compose_fia_uncovered(
+        industry_scan=INDUSTRY_SCAN, dc_has_evaluation=True, wc_row_count=1138)
+    assert "fetched and hashed" not in text
+    assert "status-200 body" in text
+    assert "fiadb_api_doc.html" in text
+
+
 def test_compose_fia_uncovered_does_not_draw_the_zero_reading_when_terms_were_found():
     text = m.compose_fia_uncovered(
         industry_scan=INDUSTRY_SCAN | {
@@ -1074,6 +1101,14 @@ BOX_NAV_SHARE_PAGE_UNPARSED = {
     "nrum_data_folder_id": None,
     "year_subfolders_found": [],
     "shared_folder_parse_error": "marker not found: sharedFolder",
+}
+# Fix round 3, item 3: a payload that parsed but carried no `currentFolderID`. This leaves
+# `nrum_data_folder_id` None through a parse that *succeeded* -- the state that made
+# "that body did not parse" false while `year_subfolders_found` was non-empty.
+BOX_NAV_PARSED_WITHOUT_A_FOLDER_ID = {
+    "share_url_discovered": "https://usfs-public.app.box.com/s/abc",
+    "nrum_data_folder_id": None,
+    "year_subfolders_found": ["2023", "2024"],
 }
 BOX_NAV_NO_YEAR_SELECTED = {
     "share_url_discovered": "https://usfs-public.app.box.com/s/abc",
@@ -1179,6 +1214,37 @@ def test_compose_tpo_access_not_obtainable_names_the_folder_parse_failure():
     assert "was entered" not in reason
 
 
+def test_compose_tpo_access_takes_the_parse_failure_branch_only_when_the_parse_raised():
+    # Fix round 3, item 3, state (b). `nrum_data_folder_id is None` is also what a *successful*
+    # parse leaves behind when the payload carries no `currentFolderID`, and on that state the
+    # old predicate asserted "that body did not parse" with no parse error to name, while
+    # `year_subfolders_found` was non-empty. The exact signal is `shared_folder_parse_error`.
+    reason = _tpo_access(harvest_origin_available=False,
+                         box_navigation=BOX_NAV_PARSED_WITHOUT_A_FOLDER_ID)["reason"]
+    assert "did not parse as a Box folder listing" not in reason
+    assert "was entered" in reason
+    assert "2023" in reason and "2024" in reason
+
+
+def test_compose_tpo_access_parse_failure_branch_always_names_the_error():
+    # State (a): `shared_folder_parse_error` is set in the same except that produces this
+    # branch, so the branch can no longer be reached with no error to name.
+    reason = _tpo_access(harvest_origin_available=False,
+                         box_navigation=BOX_NAV_SHARE_PAGE_UNPARSED)["reason"]
+    assert "(marker not found: sharedFolder)" in reason
+
+
+def test_compose_tpo_access_unanswered_share_page_outranks_the_missing_parse_error_key():
+    # State (c): a share page that never answered 200-with-a-body sets neither
+    # `year_subfolders_found` nor `shared_folder_parse_error`. The absent parse-error key must
+    # not read as "the parse succeeded" -- the "did not answer" clause still wins.
+    reason = _tpo_access(harvest_origin_available=False,
+                         box_navigation=BOX_NAV_SHARE_PAGE_UNREAD)["reason"]
+    assert "did not answer this run with a status-200 body" in reason
+    assert "did not parse as a Box folder listing" not in reason
+    assert "was entered" not in reason
+
+
 def test_compose_tpo_access_not_obtainable_when_no_workbook_was_inspected():
     reason = _tpo_access(harvest_origin_available=False,
                          box_navigation=BOX_NAV_NO_WORKBOOK_INSPECTED)["reason"]
@@ -1219,6 +1285,16 @@ def test_compose_tpo_access_verified_derives_the_county_and_volume_columns_from_
     assert "SAWREMVOL" in reason
     assert "county-resolved volume columns" in reason
     assert reason.index("COUNTYCD") < reason.index("INFERENCE MARKER, OPENING")
+
+
+def test_compose_tpo_access_verified_does_not_call_the_header_reading_a_measurement():
+    # Fix round 3, item 4. The evidence belongs outside the marker (round 2 established that
+    # and it stands), but what happened was that two column names matched two patterns: that
+    # those names *denote* a county and a volume is still a reading of column names. "measured"
+    # claims more than the act was.
+    reason = _tpo_access()["reason"]
+    assert "measured from the header row" not in reason
+    assert "read from the header row's own column names" in reason
 
 
 def test_compose_tpo_access_verified_does_not_claim_no_cell_values_were_read():
