@@ -196,7 +196,15 @@ def compose_retention_rule(extract_statuses: list[int]) -> dict:
     The rule's first sentence covers both fetch classes, the five NAICS-detail probes and the
     single `variables.json` request, because the counters below are `len(extract_statuses)` and
     friends over ALL extracts. Scoping the sentence to the probes alone left the shipped
-    `extracts_recorded: 6` sitting under a sentence about five things. The alternative --
+    `extracts_recorded: 6` sitting under a sentence about five things.
+
+    The two classes are covered but NOT equated, because they are not on the same terms: the
+    probes go through `fetch_naics_probe`, which returns whatever status arrived, while
+    `variables.json` goes through `_common.request`, which calls `raise_for_status()` -- so a
+    non-2xx there aborts the run instead of registering a non-200 extract. A first draft of
+    this sentence said the variables body "is registered on the same terms" and called it "the
+    sixth extract"; both were false (it is `extracts[0]`, being fetched before the loop), which
+    is this wave's own defect class reappearing inside its fix. The alternative --
     deriving the counters over the probe extracts only -- was rejected: it would change a
     measured value in a shipped artifact to fix a wording defect, and it would strand the
     `variables.json` fetch under no stated rule at all, which is the state `susb_layout.py`'s
@@ -208,8 +216,12 @@ def compose_retention_rule(extract_statuses: list[int]) -> dict:
             "and registers a fetched body whenever the endpoint answered at all, whatever the "
             "HTTP status, and each extract's own http_status records which status it carried. "
             "It also fetches this dataset's variables.json once, before any probe, to read "
-            "which of the wanted variables the dataset declares; that body is registered on "
-            "the same terms and is the sixth extract whenever all five probes answer. On this "
+            "which of the wanted variables the dataset declares, and registers that body as an "
+            "extract too -- the first one, since it is fetched first -- which is what brings "
+            "the count below to six whenever all five probes answer. That fetch is NOT on the "
+            "same any-status terms: it goes through the shared request helper, which raises on "
+            "a non-2xx status instead of returning it, so a failed variables fetch aborts the "
+            "run rather than registering a non-200 extract. On this "
             "access-verdict "
             "probe, http_status alone already separates a 204 with an empty body (matched no "
             "published cell) from either 200 outcome; retaining that empty body anyway, with "

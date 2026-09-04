@@ -732,7 +732,13 @@ def compose_retention_rule(extract_statuses: list[int]) -> dict:
     Shared by `run_fia` and `run_tpo`, so the scope clause below is written route-class-generic
     rather than naming FIA's datamart candidates: a per-source clause would ship a sentence
     into `tpo/summary.json` about routes TPO does not have. Each summary's own probe findings
-    say which of its routes were probed status-only."""
+    say which of its routes were probed status-only.
+
+    It is also written existence-neutral ("Where this script probes a route status-only ...
+    which routes, IF ANY"). A first draft said "Some routes are probed status-only", which is
+    true of `run_fia` and false of `run_tpo` -- every TPO probe goes through `probe_url`, and
+    `run_tpo` makes no `c.probe` call at all. That is the same false-by-irrelevance defect the
+    paragraph above exists to avoid, arriving from the other direction."""
     return {
         "rule": (
             "This script writes and registers a fetched body whenever a route it probes for "
@@ -745,11 +751,11 @@ def compose_retention_rule(extract_statuses: list[int]) -> dict:
             "field instead. A response whose body is empty -- including an empty 200 -- has "
             "nothing to keep either, so it registers no extract as well, and what records it "
             "is its probe entry's status and its bytes count of zero, not retained bytes. "
-            "Scope: this rule is about the routes probed for bytes. Some routes are probed "
-            "status-only, through a helper that discards the body by construction, and a route "
-            "in that class registers no extract whatever it answers; which routes a run probed "
-            "that way is recorded in this source's own probe findings, as entries carrying "
-            "each attempt's status and byte count and no body. "
+            "Scope: this rule is about the routes probed for bytes. Where this script probes a "
+            "route status-only, through a helper that discards the body by construction, that "
+            "route registers no extract whatever it answers; which routes, if any, a run "
+            "probed that way is recorded in this source's own probe findings, as entries "
+            "carrying each attempt's status and byte count and no body. "
             "The counters below therefore say which statuses were retained and nothing more: a "
             "retained status 200 means the endpoint answered, not that the body is usable data "
             "-- an application error page can arrive with status 200, and which retained bodies "

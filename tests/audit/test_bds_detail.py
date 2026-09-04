@@ -402,8 +402,32 @@ def test_compose_retention_rule_covers_the_variables_fetch_its_counters_already_
     text = rule["rule"]
     assert "two kinds of fetch and registers a body from both" in text
     assert "variables.json" in text
-    assert "the sixth extract whenever all five probes answer" in text
+    assert "brings the count below to six whenever all five probes answer" in text
     assert "registers a fetched body from the five NAICS-detail probes whenever" not in text
+
+
+def test_compose_retention_rule_places_the_variables_fetch_first_not_sixth():
+    """A defect in this wave's own fix for finding 7, caught in review before hand-off. The
+    first draft called the variables body "the sixth extract". It is `extracts[0]`: `main`
+    appends it BEFORE the `for naics in CANDIDATES` loop, and the written summary shows
+    variables.json at index 0 with naics_11.json at index 1. Ordinal claims about a shipped
+    artifact are exactly what this wave exists to remove."""
+    text = m.compose_retention_rule([200] * 6)["rule"]
+    assert "the first one, since it is fetched first" in text
+    assert "the sixth extract" not in text
+
+
+def test_compose_retention_rule_does_not_equate_the_variables_fetch_with_the_probes():
+    """The other half of the same defect. The draft said the variables body "is registered on
+    the same terms" -- directly after a clause reading "whatever the HTTP status". It is not:
+    the probes go through `fetch_naics_probe`, which returns whatever status arrived, while
+    `variables.json` goes through `_common.request`, whose `_attempt` calls
+    `resp.raise_for_status()`. A non-2xx there aborts the run instead of registering a non-200
+    extract, so the any-status rule genuinely does not reach it."""
+    text = m.compose_retention_rule([200] * 6)["rule"]
+    assert "NOT on the same any-status terms" in text
+    assert "raises on a non-2xx status instead of returning it" in text
+    assert "is registered on the same terms" not in text
 
 
 def test_compose_retention_rule_counters_are_unchanged_by_the_domain_widening():

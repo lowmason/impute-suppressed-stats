@@ -1487,9 +1487,23 @@ def test_retention_rule_scopes_itself_to_the_routes_probed_for_bytes():
     have made the persisted sentence false with no test failing."""
     rule = m.compose_retention_rule([200])["rule"]
     assert "Scope: this rule is about the routes probed for bytes." in rule
-    assert "probed status-only" in rule
+    assert "probes a route status-only" in rule
     assert "registers no extract whatever it answers" in rule
     assert "whenever the endpoint answered at all, whatever the HTTP status" not in rule
+
+
+def test_retention_rule_scope_clause_does_not_assert_tpo_has_status_only_routes():
+    """A defect in this wave's own fix for finding 6, caught in review before hand-off. The
+    first draft opened "Some routes are probed status-only" -- an existence claim, true of
+    `run_fia` (the datamart lambda is its one `c.probe` call) and false of `run_tpo`, whose
+    every probe goes through `probe_url` and which makes no `c.probe` call at all. Since this
+    text ships into BOTH summaries, that traded a sentence false for FIA's datamart for one
+    false for TPO. The clause is now existence-neutral, so it is true of a source with such
+    routes and of a source without."""
+    rule = m.compose_retention_rule([200])["rule"]
+    assert "Where this script probes a route status-only" in rule
+    assert "which routes, if any, a run probed that way" in rule
+    assert "Some routes are probed status-only" not in rule
 
 
 def test_retention_rule_scope_clause_is_route_class_generic_not_fia_specific():

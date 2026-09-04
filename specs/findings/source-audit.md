@@ -1,6 +1,6 @@
 # Stage 0 source audit -- findings
 
-**Assembled** by `scripts/audit/assemble_finding.py` from the 12 source summaries under `data/raw/audit/`. **Newest `generated_utc` among them:** 2026-09-04T23:14:42+00:00.
+**Assembled** by `scripts/audit/assemble_finding.py` from the 12 source summaries under `data/raw/audit/`. **Newest `generated_utc` among them:** 2026-09-04T23:27:14+00:00.
 **Spec:** `specs/logging-employment-spec.md` · **Roadmap:** `specs/logging-employment-spec-roadmap.md`, Stage 0 · **Plan:** `specs/plans/1-stage0-logging-employment-spec.md`
 **Window (D1):** 2017-01 → 2024-12 · **Industry:** 113310 (Logging) · **Ownership:** private · **Geography:** states + D.C.
 
@@ -297,7 +297,7 @@ Everything from here to the end of the document is the recorded evidence itself:
     "non_200_statuses_recorded": [
       204
     ],
-    "rule": "This script performs two kinds of fetch and registers a body from both, so the counters below count both. From each of the five NAICS-detail probes it writes and registers a fetched body whenever the endpoint answered at all, whatever the HTTP status, and each extract's own http_status records which status it carried. It also fetches this dataset's variables.json once, before any probe, to read which of the wanted variables the dataset declares; that body is registered on the same terms and is the sixth extract whenever all five probes answer. On this access-verdict probe, http_status alone already separates a 204 with an empty body (matched no published cell) from either 200 outcome; retaining that empty body anyway, with its sha256 sidecar like every other extract, is what makes the 204 a recorded observation rather than an unrecorded absence. The two 200 outcomes -- a 200 auth-rejection HTML page and a 200 real tabular answer -- share that identical status, so only the retained bytes tell the two 200 outcomes apart. A transport failure produces no body and so registers no extract; its evidence is the probe record's http_status-0 entry instead. The counters below therefore say which statuses were retained and nothing more: a retained status 200 means the endpoint answered with a body that claimed to be data, not that the body parsed as the tabular shape. findings.naics_probe's row_count tells a status-200 parse failure apart from a status-200 real answer whenever the real answer carries at least one data row; the one shape this script cannot distinguish by row_count alone is a status-200 parse failure against a status-200 tabular answer with a header row and zero data rows -- for that case the retained body itself, not any derived count, is what a reader would need to open. Reader's caution: this rule is this script's, and the absence of a non-200 extract under another source in this audit is not evidence that no non-200 response occurred there."
+    "rule": "This script performs two kinds of fetch and registers a body from both, so the counters below count both. From each of the five NAICS-detail probes it writes and registers a fetched body whenever the endpoint answered at all, whatever the HTTP status, and each extract's own http_status records which status it carried. It also fetches this dataset's variables.json once, before any probe, to read which of the wanted variables the dataset declares, and registers that body as an extract too -- the first one, since it is fetched first -- which is what brings the count below to six whenever all five probes answer. That fetch is NOT on the same any-status terms: it goes through the shared request helper, which raises on a non-2xx status instead of returning it, so a failed variables fetch aborts the run rather than registering a non-200 extract. On this access-verdict probe, http_status alone already separates a 204 with an empty body (matched no published cell) from either 200 outcome; retaining that empty body anyway, with its sha256 sidecar like every other extract, is what makes the 204 a recorded observation rather than an unrecorded absence. The two 200 outcomes -- a 200 auth-rejection HTML page and a 200 real tabular answer -- share that identical status, so only the retained bytes tell the two 200 outcomes apart. A transport failure produces no body and so registers no extract; its evidence is the probe record's http_status-0 entry instead. The counters below therefore say which statuses were retained and nothing more: a retained status 200 means the endpoint answered with a body that claimed to be data, not that the body parsed as the tabular shape. findings.naics_probe's row_count tells a status-200 parse failure apart from a status-200 real answer whenever the real answer carries at least one data row; the one shape this script cannot distinguish by row_count alone is a status-200 parse failure against a status-200 tabular answer with a header row and zero data rows -- for that case the retained body itself, not any derived count, is what a reader would need to open. Reader's caution: this rule is this script's, and the absence of a non-200 extract under another source in this audit is not evidence that no non-200 response occurred there."
   },
   "six_digit_logging_available": false,
   "variables_present": [
@@ -359,7 +359,7 @@ Everything from here to the end of the document is the recorded evidence itself:
 }
 ```
 
-_Extracts: 6; summary `generated_utc` 2026-09-04T23:14:14+00:00._
+_Extracts: 6; summary `generated_utc` 2026-09-04T23:26:52+00:00._
 
 ### `cbp_metadata`
 
@@ -2569,7 +2569,7 @@ _Extracts: 5; summary `generated_utc` 2026-09-04T23:14:01+00:00._
           "outcome": "transport_failure"
         }
       ],
-      "elapsed_seconds": 6.276,
+      "elapsed_seconds": 6.271,
       "url": "https://apps.fs.usda.gov/fia/datamart/CSV/"
     },
     {
@@ -2593,7 +2593,7 @@ _Extracts: 5; summary `generated_utc` 2026-09-04T23:14:01+00:00._
           "outcome": "transport_failure"
         }
       ],
-      "elapsed_seconds": 6.336,
+      "elapsed_seconds": 6.37,
       "url": "https://apps.fs.usda.gov/fia/datamart/datamart.html"
     }
   ],
@@ -2772,7 +2772,7 @@ _Extracts: 5; summary `generated_utc` 2026-09-04T23:14:01+00:00._
     "year_min": 1968
   },
   "industry_concept_scan": {
-    "bytes_scanned": 751303,
+    "bytes_scanned": 751299,
     "fia_taxonomy_terms": {
       "land use": 10,
       "product": 52,
@@ -2819,7 +2819,7 @@ _Extracts: 5; summary `generated_utc` 2026-09-04T23:14:01+00:00._
     }
   ],
   "probe": {
-    "bytes": 34037,
+    "bytes": 34033,
     "content_type": "application/json",
     "has_sampling_error": true,
     "http_status": 200,
@@ -2852,7 +2852,7 @@ _Extracts: 5; summary `generated_utc` 2026-09-04T23:14:01+00:00._
     "non_200_statuses_recorded": [
       500
     ],
-    "rule": "This script writes and registers a fetched body whenever a route it probes for bytes answered with a non-empty body, whatever the HTTP status, and each extract's own http_status records which status it carried. On an access-verdict probe the non-200 body IS the evidence: a 404 page and a 403 page are different verdicts and only the retained bytes tell them apart. Two cases register no extract, and they are not the same case. A transport failure produced no response at all, so there is no body to keep; its evidence is the probe record's outcome field instead. A response whose body is empty -- including an empty 200 -- has nothing to keep either, so it registers no extract as well, and what records it is its probe entry's status and its bytes count of zero, not retained bytes. Scope: this rule is about the routes probed for bytes. Some routes are probed status-only, through a helper that discards the body by construction, and a route in that class registers no extract whatever it answers; which routes a run probed that way is recorded in this source's own probe findings, as entries carrying each attempt's status and byte count and no body. The counters below therefore say which statuses were retained and nothing more: a retained status 200 means the endpoint answered, not that the body is usable data -- an application error page can arrive with status 200, and which retained bodies are usable is recorded per probe in findings, never inferable from an extract's http_status. Reader's caution: this rule is this script's, and the absence of a non-200 extract under another source in this audit is not evidence that no non-200 response occurred there."
+    "rule": "This script writes and registers a fetched body whenever a route it probes for bytes answered with a non-empty body, whatever the HTTP status, and each extract's own http_status records which status it carried. On an access-verdict probe the non-200 body IS the evidence: a 404 page and a 403 page are different verdicts and only the retained bytes tell them apart. Two cases register no extract, and they are not the same case. A transport failure produced no response at all, so there is no body to keep; its evidence is the probe record's outcome field instead. A response whose body is empty -- including an empty 200 -- has nothing to keep either, so it registers no extract as well, and what records it is its probe entry's status and its bytes count of zero, not retained bytes. Scope: this rule is about the routes probed for bytes. Where this script probes a route status-only, through a helper that discards the body by construction, that route registers no extract whatever it answers; which routes, if any, a run probed that way is recorded in this source's own probe findings, as entries carrying each attempt's status and byte count and no body. The counters below therefore say which statuses were retained and nothing more: a retained status 200 means the endpoint answered, not that the body is usable data -- an application error page can arrive with status 200, and which retained bodies are usable is recorded per probe in findings, never inferable from an extract's http_status. Reader's caution: this rule is this script's, and the absence of a non-200 extract under another source in this audit is not evidence that no non-200 response occurred there."
   },
   "sampling_error_field": "SE",
   "snum_estimate_attributes": {
@@ -2992,7 +2992,7 @@ _Extracts: 5; summary `generated_utc` 2026-09-04T23:14:01+00:00._
 }
 ```
 
-_Extracts: 7; summary `generated_utc` 2026-09-04T23:14:37+00:00._
+_Extracts: 7; summary `generated_utc` 2026-09-04T23:27:10+00:00._
 
 ### `qcew_codes`
 
@@ -6410,7 +6410,7 @@ _Extracts: 5; summary `generated_utc` 2026-09-04T19:58:36+00:00._
     "non_200_statuses_recorded": [
       404
     ],
-    "rule": "This script writes and registers a fetched body whenever a route it probes for bytes answered with a non-empty body, whatever the HTTP status, and each extract's own http_status records which status it carried. On an access-verdict probe the non-200 body IS the evidence: a 404 page and a 403 page are different verdicts and only the retained bytes tell them apart. Two cases register no extract, and they are not the same case. A transport failure produced no response at all, so there is no body to keep; its evidence is the probe record's outcome field instead. A response whose body is empty -- including an empty 200 -- has nothing to keep either, so it registers no extract as well, and what records it is its probe entry's status and its bytes count of zero, not retained bytes. Scope: this rule is about the routes probed for bytes. Some routes are probed status-only, through a helper that discards the body by construction, and a route in that class registers no extract whatever it answers; which routes a run probed that way is recorded in this source's own probe findings, as entries carrying each attempt's status and byte count and no body. The counters below therefore say which statuses were retained and nothing more: a retained status 200 means the endpoint answered, not that the body is usable data -- an application error page can arrive with status 200, and which retained bodies are usable is recorded per probe in findings, never inferable from an extract's http_status. Reader's caution: this rule is this script's, and the absence of a non-200 extract under another source in this audit is not evidence that no non-200 response occurred there."
+    "rule": "This script writes and registers a fetched body whenever a route it probes for bytes answered with a non-empty body, whatever the HTTP status, and each extract's own http_status records which status it carried. On an access-verdict probe the non-200 body IS the evidence: a 404 page and a 403 page are different verdicts and only the retained bytes tell them apart. Two cases register no extract, and they are not the same case. A transport failure produced no response at all, so there is no body to keep; its evidence is the probe record's outcome field instead. A response whose body is empty -- including an empty 200 -- has nothing to keep either, so it registers no extract as well, and what records it is its probe entry's status and its bytes count of zero, not retained bytes. Scope: this rule is about the routes probed for bytes. Where this script probes a route status-only, through a helper that discards the body by construction, that route registers no extract whatever it answers; which routes, if any, a run probed that way is recorded in this source's own probe findings, as entries carrying each attempt's status and byte count and no body. The counters below therefore say which statuses were retained and nothing more: a retained status 200 means the endpoint answered, not that the body is usable data -- an application error page can arrive with status 200, and which retained bodies are usable is recorded per probe in findings, never inferable from an extract's http_status. Reader's caution: this rule is this script's, and the absence of a non-200 extract under another source in this audit is not evidence that no non-200 response occurred there."
   },
   "route_probes": [
     {
@@ -6489,5 +6489,5 @@ _Extracts: 5; summary `generated_utc` 2026-09-04T19:58:36+00:00._
 }
 ```
 
-_Extracts: 8; summary `generated_utc` 2026-09-04T23:14:42+00:00._
+_Extracts: 8; summary `generated_utc` 2026-09-04T23:27:14+00:00._
 
