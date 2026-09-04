@@ -2490,6 +2490,33 @@ Expected: all four assertions hold and the verdict sentence prints. If the branc
 `decline`, add a `> Deviation:` note to this task recording it, because Stage 3's plan must
 then name a substitute allocation anchor before writing any baseline.
 
+> **Deviation (recorded on execution, 2026-09-03): the branch is `decline`.**
+>
+> **Stage 3 must name a substitute allocation anchor, or explicitly accept a weaker assumption
+> on the existing one, before any baseline is written.** This note is the tracked record of that
+> obligation: the audit summary lives under gitignored `data/` and the execution ledger under
+> gitignored `.sdd/`, so without this line nothing surviving a fresh clone would carry it.
+>
+> **The decline is for unverifiability, not for a geography mismatch — the distinction changes
+> what Stage 3 has to do.** The state universe exhausts the national one: national minus
+> states+DC quarterly establishments is exactly 0 in 32 of 32 quarters, the only distinct gap
+> value in the window. Puerto Rico, the single non-state area present, is measured **outside**
+> the `US000` total — it publishes 1–2 establishments in 8 quarters (2017q1–2018q4) and the gap
+> stays exactly 0 in every one of them, which is the discriminating test. What fails is
+> testability: `clean_months` is 0 because every one of the 96 months carries 9–15 suppressed
+> states+DC cells, so the employment identity is never checkable against a complete published
+> state sum. The monthly gap after non-state areas is +696 to +2711 and never negative —
+> consistent with the identity in every month, proving it in none. So Stage 3's choice is
+> between a weaker assumption on the *same* anchor and a genuine substitute; Stage 0 does not
+> decide which.
+>
+> **This step's own arithmetic is corrected above.** The illustrative
+> `estab_gap_after_other = estab_gap - other_estabs` presupposed that a non-state area is inside
+> the national total. Puerto Rico is not, so subtracting it manufactured a −1/−2 gap out of a
+> true zero. Containment is now settled from establishment counts *before* either table
+> subtracts anything. The branch was `decline` under both forms — only the recorded reason
+> changed, from false to true.
+
 - [ ] **Step 7: Commit**
 
 ```bash
