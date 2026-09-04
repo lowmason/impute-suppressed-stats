@@ -152,10 +152,14 @@ def test_sole_code_raises_when_no_title_matches():
 def test_sole_code_raises_when_more_than_one_title_matches():
     """The failure mode `sole_code` exists to prevent: an ambiguous vocabulary must fail loudly,
     not silently pick one. A loose, unanchored pattern against the real logging-named industry
-    titles is exactly the case that would trigger this."""
-    with pytest.raises(RuntimeError, match="got 2"):
+    titles is exactly the case that would trigger this -- it matches all three rows (both
+    supersectors and the target itself), not just the two the brief's illustrative filter
+    would have silently folded together."""
+    with pytest.raises(RuntimeError, match="expected exactly one") as exc_info:
         m.sole_code(REAL_INDUSTRY_TITLES, "industry_code", "industry_name", r"(?i)logging",
                    "sm.industry")
+    for code in ("10000000", "10113300", "15000000"):
+        assert code in str(exc_info.value)
 
 
 # --- qualifying_series -------------------------------------------------------------------------
@@ -262,3 +266,77 @@ def test_broader_code_note_reports_excluded_with_no_near_miss_states():
     note = m.broader_code_note(excluded, [])
     assert "15000000" in note
     assert "No state's only D1-window-overlapping" in note
+
+
+def test_broader_code_note_derives_the_near_miss_level_not_supersector_literal():
+    """A future excluded code that embeds e.g. NAICS 1131 (a sibling of 1133, per
+    test_level_of_a_sibling_naics_subsector_is_other_not_1133) resolves to 'other', not
+    'supersector' -- the note must say so instead of a typed 'supersector' literal."""
+    excluded = [{"industry_code": "99113100", "industry_name": "Some Future Logging Sibling"}]
+    near_miss = [{"state_code": "11", "industry_code": "99113100", "series_id": "X1"}]
+    note = m.broader_code_note(excluded, near_miss)
+    assert "'other'" in note
+    assert "'supersector'" not in note
+
+
+# --- window_coverage_note ---------------------------------------------------------------------
+
+
+def _series_df(rows: list[tuple[str, str, str]]) -> pl.DataFrame:
+    return pl.DataFrame(rows, schema=["series_id", "begin_year", "end_year"], orient="row")
+
+
+def test_window_coverage_note_true_when_every_series_spans_the_full_window():
+    df = _series_df([("A", "1990", "2026"), ("B", "2017", "2024")])
+    covered, note = m.window_coverage_note(df)
+    assert covered is True
+    assert "latest begin_year observed: 2017" in note
+    assert "earliest end_year observed: 2024" in note
+
+
+def test_window_coverage_note_false_and_names_a_partially_overlapping_series():
+    """The branch this task's dispatch flagged as unchecked in the brief's illustrative code:
+    a series that only overlaps part of D1 must not be silently counted as full coverage."""
+    df = _series_df([("FULL", "1990", "2026"), ("LATE_START", "2020", "2026")])
+    covered, note = m.window_coverage_note(df)
+    assert covered is False
+    assert "LATE_START" in note
+    assert "FULL" not in note
+
+
+def test_window_coverage_note_false_when_series_is_empty():
+    df = _series_df([])
+    covered, note = m.window_coverage_note(df)
+    assert covered is False
+    assert "no qualifying series exist" in note
+
+
+# --- granularity_note --------------------------------------------------------------------------
+
+
+def test_granularity_note_explains_absence_when_113310_is_not_a_defined_code():
+    """Also pins that the excluded code(s) are named from the data passed in, not a typed
+    literal: a future run whose only sub-supersector code differs from today's "10113300"
+    must show whatever code it actually finds."""
+    rows = [
+        {"industry_code": "10000000", "level": "supersector"},
+        {"industry_code": "10113300", "level": "1133"},
+    ]
+    note = m.granularity_note(rows)
+    assert "defines no SAE industry code at the NAICS 5- or 6-digit depth" in note
+    assert "CES/SAE itself stops short of 113310" in note
+    assert "10113300 (1133)" in note
+
+
+def test_granularity_note_explains_zero_differently_when_113310_is_defined():
+    """The branch no real run has taken -- CES/SAE defines no such code today. A future
+    vintage that does add one must not repeat today's "the code is absent" framing."""
+    rows = [
+        {"industry_code": "10000000", "level": "supersector"},
+        {"industry_code": "10113300", "level": "1133"},
+        {"industry_code": "10113310", "level": "113310"},
+    ]
+    note = m.granularity_note(rows)
+    assert "does define an SAE industry code at the 113310" in note
+    assert "not that the code is absent" in note
+    assert "stops short of 113310" not in note
