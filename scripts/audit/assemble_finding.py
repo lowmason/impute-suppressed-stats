@@ -152,17 +152,24 @@ def machine_path_disclosure(summaries: dict[str, dict]) -> str:
     ran on, counted rather than asserted: an audit script rerun elsewhere changes the answer,
     and a typed count in a tracked document is what goes stale. Only the three objects this
     document renders are scanned -- every `extracts[].path` is absolute by construction, and
-    those reach the document as a count, not as a value."""
+    those reach the document as a count, not as a value.
+
+    The unit counted is the SOURCE, and the sentence says so. `named` is built from
+    `summaries.items()`, so a source with three path-bearing values contributes 1; the sentence
+    used to read "N rendered value embeds", which was true only while the single named source
+    happened to carry exactly one such value. Counting values instead would mean walking each
+    rendered object, which the parenthesised source list would then no longer match."""
     root = str(v.REPO_ROOT)
     named = sorted(name for name, payload in summaries.items()
                    if any(root in json.dumps(payload[section], ensure_ascii=False)
                           for section in ("coverage_span", "access", "findings")))
     if not named:
-        return "No rendered value embeds an absolute path from the machine this audit ran on."
+        return ("No source has a rendered value embedding an absolute path from the machine "
+                "this audit ran on.")
     listed = ", ".join(f"`{name}`" for name in named)
-    verb = "value embeds" if len(named) == 1 else "values embed"
-    return (f"{len(named)} rendered {verb} an absolute path from the machine this audit ran "
-            f"on ({listed}).")
+    noun, verb = ("source", "has") if len(named) == 1 else ("sources", "have")
+    return (f"{len(named)} {noun} {verb} at least one rendered value embedding an absolute "
+            f"path from the machine this audit ran on ({listed}).")
 
 
 def render_document(
@@ -255,7 +262,21 @@ def render_document(
     ]
     lines += ["| " + " | ".join(row) + " |" for row in appendix_a_rows(summaries, appendix_a)]
 
-    lines += ["", notes_text.rstrip(), "", "## Per-source findings", ""]
+    # The signpost matters because this heading is the seam: everything above it is either
+    # hand-authored prose (the notes file, inlined verbatim) or a rendering shaped by this
+    # module, while everything below is the recorded evidence itself. The one sentence saying
+    # values are reproduced verbatim sits ~163 lines up, in an opening paragraph that reads as
+    # covering the whole document, so a reader arriving at the fences has nothing local telling
+    # them what they are looking at.
+    seam_signpost = (
+        "Everything from here to the end of the document is the recorded evidence itself: for "
+        "each source, its `access`, `coverage_span` and `findings` objects rendered whole from "
+        "`data/raw/audit/<source>/summary.json`, unabridged and unedited. Nothing in this "
+        "section is summarised, ranked or interpreted by this assembler -- where a recorded "
+        "value contains a reading rather than a measurement, it is the source script that says "
+        "so, inside the value."
+    )
+    lines += ["", notes_text.rstrip(), "", "## Per-source findings", "", seam_signpost, ""]
     for name, payload in summaries.items():
         access = payload["access"]
         lines += [f"### `{name}`", "", "**access**:", "", fence(access), ""]

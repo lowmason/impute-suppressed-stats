@@ -134,7 +134,10 @@ def test_machine_path_disclosure_names_the_source_whose_rendered_value_embeds_a_
     summaries = {"bds": summary("bds"),
                  "qcew_identity": identity_summary(access={"route": route})}
     disclosure = m.machine_path_disclosure(summaries)
-    assert disclosure.startswith("1 rendered value embeds")
+    # The unit is the source, and the sentence must say so: `named` is built from
+    # `summaries.items()`, so a source carrying three path-bearing values still counts 1.
+    assert disclosure.startswith("1 source has at least one rendered value embedding")
+    assert "rendered value embeds" not in disclosure
     assert "`qcew_identity`" in disclosure and "`bds`" not in disclosure
 
 
@@ -145,7 +148,8 @@ def test_machine_path_disclosure_ignores_extract_paths(tmp_path):
               "path": f"{v.REPO_ROOT}/data/raw/audit/bds/a.json", "sha256": "0" * 64,
               "bytes": 1, "retrieved_utc": "2026-09-04T00:00:00+00:00", "http_status": 200}
     summaries = {"bds": summary("bds", extracts=[record])}
-    assert m.machine_path_disclosure(summaries).startswith("No rendered value")
+    assert m.machine_path_disclosure(summaries).startswith(
+        "No source has a rendered value embedding")
 
 
 # --- the Appendix A juxtaposition ---------------------------------------------------------------
