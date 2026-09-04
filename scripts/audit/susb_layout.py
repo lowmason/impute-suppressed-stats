@@ -128,6 +128,25 @@ def choose_file(candidates: list[str]) -> str | None:
     return next((n for n in candidates if n.endswith(".xlsx")), None)
 
 
+def require_chosen_file(candidates: list[str], *, stem: str, ydir: str) -> str:
+    """`choose_file`, but raises immediately when `stem` has no candidate under `ydir`, instead
+    of `main()` building a `{"filename": None, "note": "not obtainable -- ..."}` placeholder
+    record for a later loop to re-raise on (fix round 1, finding 3). That placeholder was dead
+    code: nothing between it and `write_summary` could ever read `note`, because the later loop
+    always raised first, so `write_summary` was never reached with a placeholder in hand -- a
+    record no reader could ever observe is not a real "publish a partial record" behavior, just
+    an unreachable branch dressed as one. Fail-loud immediately, with no partial summary ever
+    assembled, also matches `compose_retention_rule`'s own docstring, which already states this
+    script never produces a partial summary on any other failure path."""
+    chosen = choose_file(candidates)
+    if chosen is None:
+        raise RuntimeError(
+            f"target file for stem {stem!r} not found under {ydir}; cannot derive "
+            "state-level findings without it"
+        )
+    return chosen
+
+
 # --- table parsing ----------------------------------------------------------------------------
 
 
@@ -425,13 +444,7 @@ def main() -> None:
     layouts: dict[str, dict] = {}
     for stem in TARGETS:
         candidates = [n for n in names if n.startswith(stem)]
-        chosen = choose_file(candidates)
-        if chosen is None:
-            layouts[stem] = {
-                "filename": None,
-                "note": f"not obtainable -- no matching file under {ydir}",
-            }
-            continue
+        chosen = require_chosen_file(candidates, stem=stem, ydir=ydir)
         url = ydir + chosen
         rec = c.download_extract(client, SOURCE, url, chosen)
         extracts.append(rec)
@@ -440,13 +453,6 @@ def main() -> None:
             "filename": chosen,
             **describe_layout(df, state_fips=c.STATES_DC_FIPS, target_industry=c.INDUSTRY_CODE),
         }
-
-    for stem in TARGETS:
-        if layouts[stem]["filename"] is None:
-            raise RuntimeError(
-                f"target file for stem {stem!r} not found under {ydir}; cannot derive "
-                "state-level findings without it"
-            )
 
     detailed = layouts["us_state_naics_detailedsizes"]
     six = layouts["us_state_6digitnaics"]

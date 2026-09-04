@@ -263,6 +263,30 @@ def test_choose_file_ignores_a_zip_candidate():
     assert m.choose_file(["some_file_2022.zip"]) is None
 
 
+# --- require_chosen_file (fix round 1, finding 3) ---------------------------------------------
+
+
+def test_require_chosen_file_returns_the_chosen_filename_when_one_matches():
+    candidates = ["us_state_naics_detailedsizes_2022.txt"]
+    assert m.require_chosen_file(candidates, stem="us_state_naics_detailedsizes", ydir="X/") == (
+        "us_state_naics_detailedsizes_2022.txt"
+    )
+
+
+def test_require_chosen_file_raises_immediately_when_no_candidate_matches():
+    """Fix round 1, finding 3: `main()` used to build a `{"filename": None, "note": "not
+    obtainable -- ..."}` placeholder for exactly this case, then raise on it in a second loop
+    before `write_summary` was ever reached -- dead code, since nothing could ever read `note`.
+    `require_chosen_file` raises here directly instead; this is the reachable replacement for
+    that dead branch, not the branch itself."""
+    try:
+        m.require_chosen_file([], stem="us_state_6digitnaics", ydir="https://example/2022/")
+        raise AssertionError("expected RuntimeError")
+    except RuntimeError as exc:
+        assert "us_state_6digitnaics" in str(exc)
+        assert "https://example/2022/" in str(exc)
+
+
 # --- decode_susb_text / read_table (.txt branch only -- no fastexcel) --------------------------
 
 
