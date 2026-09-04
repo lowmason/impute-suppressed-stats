@@ -64,6 +64,14 @@ QUARTER_COLUMNS = ("year", "qtr", "national_estabs", "states_dc_estabs", "other_
 MONTH_COLUMNS = ("year", "month", "national_emp", "states_dc_emp", "other_emp", "emp_gap",
                  "emp_gap_after_other", "n_states_suppressed")
 
+# What gets persisted: the rule's columns plus the as-published non-state amount. `other_estabs`
+# and `other_emp` are containment-adjusted (see `comparison_tables`), so on an `outside` verdict
+# they are 0 in every row even where a non-state area published a count. Persisting the adjusted
+# column alone would tell a Stage 3 reader of `quarter_table` that the panel carries no non-state
+# establishments at all, which is false; the sibling column carries what was actually published.
+QUARTER_PERSISTED_COLUMNS = (*QUARTER_COLUMNS, "other_estabs_published")
+MONTH_PERSISTED_COLUMNS = (*MONTH_COLUMNS, "other_emp_published")
+
 SUPPRESSION_CODE_MEANING = "suppressed"
 
 # Where a non-state area sits relative to the national total, as measured from establishments.
@@ -365,8 +373,9 @@ def comparison_tables(panel: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame, 
     `other_estabs` and `other_emp` as handed to the rule are the non-state amounts *inside the
     national total*: the published amount where containment measured `inside` (or could not be
     settled, which leaves the gap to fail the rule's first gate rather than be quietly closed),
-    and 0 where it measured `outside`. The as-published amounts are preserved in the
-    `non_state_area_containment` finding, so zeroing here hides nothing.
+    and 0 where it measured `outside`. Both tables also carry an `*_published` sibling column
+    holding the amount as published, so the zeroing is visible in the tables themselves and not
+    only in the `non_state_area_containment` finding.
     """
     estabs = quarterly_estabs(panel)
     raw = raw_quarter_table(estabs)
@@ -378,7 +387,8 @@ def comparison_tables(panel: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame, 
             other_estabs=pl.col("other_published") if subtract else pl.lit(0, pl.Int64)
         )
         .with_columns(estab_gap_after_other=pl.col("estab_gap") - pl.col("other_estabs"))
-        .select(QUARTER_COLUMNS)
+        .rename({"other_published": "other_estabs_published"})
+        .select(QUARTER_PERSISTED_COLUMNS)
         .sort(QUARTER_KEYS)
     )
 
@@ -406,7 +416,8 @@ def comparison_tables(panel: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame, 
         )
         .with_columns(emp_gap=pl.col("national_emp") - pl.col("states_dc_emp"))
         .with_columns(emp_gap_after_other=pl.col("emp_gap") - pl.col("other_emp"))
-        .select(MONTH_COLUMNS)
+        .rename({"other_published": "other_emp_published"})
+        .select(MONTH_PERSISTED_COLUMNS)
         .sort(MONTH_KEYS)
     )
     return quarters, months, containment
@@ -519,6 +530,33 @@ def absent_state_months_note(structural: dict, evidence: dict) -> str:
     )
 
 
+def ownership_scope() -> str:
+    """The ownership this verdict covers, read rather than asserted.
+
+    Naming the scope matters -- a verdict about the national identity is a verdict about one
+    ownership slice of it -- but writing the word into the sentence would state a scope fact this
+    run never checked: a re-run against a panel built on a different ownership filter would print
+    it unchanged. So the code comes from `qcew_codes.findings.private_own_code`, the title from
+    the ownership titles file that task fetched (which carries an extract hash), and the pairing
+    is checked against the predicate the panel actually applied before either is used.
+    """
+    codes = c.load_summary("qcew_codes")
+    own_code = codes["findings"]["private_own_code"]
+    titles_path = next(e["path"] for e in codes["extracts"]
+                       if e["path"].endswith("titles/own_code.csv"))
+    titles = pl.read_csv(titles_path, infer_schema_length=0)
+    title = dict(zip(titles[titles.columns[0]].to_list(),
+                     titles[titles.columns[1]].to_list(), strict=True))[own_code]
+
+    predicates = c.load_summary("qcew_panel")["findings"]["filter_predicates"]
+    if not any(p.startswith(f"own_code == '{own_code}'") for p in predicates):
+        raise ValueError(
+            f"qcew_codes gives private_own_code {own_code!r}, but no qcew_panel filter predicate "
+            f"applied it; the ownership scope of this verdict cannot be stated"
+        )
+    return f"own_code {own_code} ('{title}')"
+
+
 def geography_reading(result: dict, quarters: pl.DataFrame) -> str:
     """`geography_universe_explains_gap` is a conjunction, so it is false both when geography
     fails to explain a gap and when there is no gap for geography to explain. Those are opposite
@@ -539,16 +577,22 @@ def geography_reading(result: dict, quarters: pl.DataFrame) -> str:
     )
 
 
-def _clean_month_clause(evidence: dict, structural: dict) -> str:
+def _clean_month_clause(evidence: dict, months: pl.DataFrame) -> str:
     """The employment clause of the verdict, stating counts rather than an outcome so that no
-    wording is shared between two branches that would read as a claim in one of them."""
+    wording is shared between two branches that would read as a claim in one of them.
+
+    The suppressed-cell range is taken over the *testable* months, because that is what the
+    clause attributes it to. `panel_structure.states_dc_suppressed_per_month` ranges over every
+    month in the panel, which is a different population whenever some month is untestable.
+    """
     if evidence["testable_months"] == 0:
         return (f"none of the {evidence['months_total']} month(s) carries both a published "
                 f"national and a published non-state employment value")
-    suppressed = structural["states_dc_suppressed_per_month"]
+    testable = months.filter(pl.col("emp_gap_after_other").is_not_null())
     if evidence["clean_months"] == 0:
         return (f"each of the {evidence['testable_months']} testable month(s) carries between "
-                f"{suppressed['min']} and {suppressed['max']} {SUPPRESSION_CODE_MEANING} "
+                f"{int(testable['n_states_suppressed'].min())} and "
+                f"{int(testable['n_states_suppressed'].max())} {SUPPRESSION_CODE_MEANING} "
                 f"states+DC cells and an employment gap after non-state areas of at least "
                 f"{evidence['min_emp_gap_after_other']}")
     return (f"in {evidence['clean_months_closing']} of the {evidence['clean_months']} testable "
@@ -558,23 +602,33 @@ def _clean_month_clause(evidence: dict, structural: dict) -> str:
 
 
 def build_verdict_sentence(
-    result: dict, structural: dict, containment: dict, span: str
+    result: dict, structural: dict, containment: dict, months: pl.DataFrame,
+    span: str, ownership: str
 ) -> str:
-    """One sentence, every figure in it interpolated from this run's tables."""
+    """One sentence, every figure in it interpolated from this run's tables.
+
+    `quarters_closing` counts quarters where `estab_gap_after_other` is 0, so the sentence says
+    "after subtracting" exactly when a subtraction was applied. Stating it unconditionally would
+    be false on an `outside` verdict, and omitting it unconditionally would be false on an
+    `inside` one.
+    """
     evidence = result["evidence"]
     others = structural["other_state_level_areas"]
     names = ", ".join(o["area_title"] or o["area_fips"] for o in others) or "none"
+    subtracted = (" after subtracting the non-state amount measured inside it"
+                  if containment["subtraction_applied"] else "")
     return (
         f"{result['branch']}: across the {evidence['quarters_total']} quarter(s) and "
         f"{evidence['months_total']} month(s) the panel covers ({span}), the national "
-        f"{c.INDUSTRY_CODE} private establishment count equals the states+DC published sum in "
-        f"{evidence['quarters_closing']} of {evidence['quarters_evaluable']} evaluable "
-        f"quarter(s), with {evidence['quarters_unevaluable']} unevaluable and "
+        f"{c.INDUSTRY_CODE} establishment count for {ownership} equals the states+DC published "
+        f"sum{subtracted} in {evidence['quarters_closing']} of "
+        f"{evidence['quarters_evaluable']} evaluable quarter(s), with "
+        f"{evidence['quarters_unevaluable']} unevaluable and "
         f"{structural['states_dc_unpublished_estab_cells']} states+DC establishment cell(s) "
         f"unpublished; the panel carries {len(others)} non-state area(s) ({names}) across "
         f"{sum(o['area_months'] for o in others)} area-month(s), measured as "
         f"{containment['verdict']} on {containment['quarters_discriminating']} discriminating "
-        f"quarter(s); {_clean_month_clause(evidence, structural)}; {result['reason']}."
+        f"quarter(s); {_clean_month_clause(evidence, months)}; {result['reason']}."
     )
 
 
@@ -608,7 +662,8 @@ def main() -> None:
     result = classify_identity(quarters, months)
     structural = structural_findings(panel, quarterly_estabs(panel))
 
-    sentence = build_verdict_sentence(result, structural, containment, _period_label(months))
+    sentence = build_verdict_sentence(result, structural, containment, months,
+                                      _period_label(months), ownership_scope())
     assert_one_sentence(sentence)
 
     c.write_summary(

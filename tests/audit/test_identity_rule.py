@@ -31,6 +31,7 @@ from qcew_identity import (
     INSIDE,
     NO_OTHER_AREA,
     OUTSIDE,
+    _clean_month_clause,
     classify_identity,
     comparison_tables,
     measure_containment,
@@ -181,19 +182,35 @@ def test_missing_column_raises_rather_than_returning_a_branch():
 
 def test_every_reason_is_free_of_sentence_breaks():
     """`reason` is interpolated into `verdict_sentence`, which the exit criterion reads as one
-    sentence, so no reason may contain a sentence break."""
+    sentence, so no reason may contain a sentence break.
+
+    One case per branch, in `classify_identity`'s own order. `assert_one_sentence` *raises*, so a
+    reason that grew a sentence break would crash the script inside a decline path with nothing
+    to catch it -- which is why the unevaluable-quarter and no-testable-month branches are
+    covered here too, and why the distinct-reason count below fails if a branch is added without
+    a case.
+    """
+    clean_q = quarters([(2017, 1, 100, 100, 0, 0, 0)])
     cases = [
+        # unevaluable quarters: a reference establishment count was never published
+        (quarters([(2017, 1, None, 100, 0, None, None)]),
+         months([(2017, 1, 500, 500, 0, 0, 0, 0)])),
         (quarters([(2017, 1, 120, 100, 10, 20, 10)]), months([(2017, 1, 550, 500, 50, 50, 0, 0)])),
-        (quarters([(2017, 1, 100, 100, 0, 0, 0)]), months([(2017, 1, 500, 520, 0, -20, -20, 1)])),
-        (quarters([(2017, 1, 100, 100, 0, 0, 0)]), months([(2017, 1, 500, 400, 0, 100, 100, 3)])),
-        (quarters([(2017, 1, 100, 100, 0, 0, 0)]), months([(2017, 1, 505, 500, 0, 5, 5, 0)])),
+        (clean_q, months([(2017, 1, 500, 520, 0, -20, -20, 1)])),
+        # no testable month: every month is missing a reference employment value
+        (clean_q, months([(2017, 1, None, 500, 0, None, None, 0)])),
+        (clean_q, months([(2017, 1, 500, 400, 0, 100, 100, 3)])),
+        (clean_q, months([(2017, 1, 505, 500, 0, 5, 5, 0)])),
         (quarters([(2017, 1, 110, 100, 10, 10, 0)]), months([(2017, 1, 550, 500, 50, 50, 0, 0)])),
-        (quarters([(2017, 1, 100, 100, 0, 0, 0)]), months([(2017, 1, 500, 500, 0, 0, 0, 0)])),
+        (clean_q, months([(2017, 1, 500, 500, 0, 0, 0, 0)])),
     ]
+    reasons = []
     for q, m in cases:
         reason = classify_identity(q, m)["reason"]
         assert ". " not in reason
         assert not reason.endswith(".")
+        reasons.append(reason)
+    assert len(set(reasons)) == 8, "one case per branch; extend this test when a branch is added"
 
 
 # --- containment: is a non-state area a component of the national total? ----------------------
@@ -328,3 +345,25 @@ def test_qtrly_estabs_disagreeing_within_a_quarter_raises():
             for month, estabs in ((1, 100), (2, 101), (3, 100))]
     with pytest.raises(ValueError, match="qtrly_estabs varies"):
         comparison_tables(panel(rows))
+
+
+def test_the_as_published_non_state_amount_survives_the_containment_adjustment():
+    """Zeroing `other_estabs`/`other_emp` must not erase what the source actually published, or
+    a reader of the persisted tables alone concludes the panel carries no non-state areas."""
+    quarters, months, _ = comparison_tables(outside_containment_panel())
+    assert quarters["other_estabs"].to_list() == [0]
+    assert quarters["other_estabs_published"].to_list() == [1]
+    assert months["other_emp"].to_list() == [0, 0, 0]
+    # withheld, so null rather than 0 -- "not published" stays distinct from "published zero"
+    assert months["other_emp_published"].to_list() == [None, None, None]
+
+
+def test_the_suppressed_range_is_taken_over_testable_months_only():
+    """The clause attributes the range to testable months, so an untestable month's count must
+    not widen it."""
+    m = months([(2017, 1, 500, 400, 0, 100, 100, 5),
+                (2017, 2, None, 400, 0, None, None, 99)])
+    q = quarters([(2017, 1, 100, 100, 0, 0, 0), (2017, 2, 100, 100, 0, 0, 0)])
+    clause = _clean_month_clause(classify_identity(q, m)["evidence"], m)
+    assert "between 5 and 5" in clause
+    assert "99" not in clause
