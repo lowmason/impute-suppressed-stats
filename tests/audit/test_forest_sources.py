@@ -943,7 +943,9 @@ def test_compose_pagination_note_reports_an_exact_match():
         {"probed_year": "2024", "files_listed_this_page": 13,
          "filescount_per_box_metadata": 13})
     assert "exactly" in note
-    assert "page-capped" not in note
+    # The caveat that a *different* year could still be page-capped is kept; what must not
+    # appear is a claim that this year was.
+    assert "page-capped for at least this year" not in note
 
 
 def test_compose_pagination_note_does_not_claim_an_exact_match_when_listed_exceeds_claimed():
