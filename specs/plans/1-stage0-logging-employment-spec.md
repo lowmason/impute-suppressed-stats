@@ -3119,6 +3119,10 @@ QCEW unless a concrete file extract proves otherwise."* This task is that proof-
   - `size_codes_with_titles` — the `size_code` values present, joined to the titles file
     fetched in Task 3.
   - `years_checked` — list of ints.
+  - `quarter_probe` — the per-year, per-quarter result of probing the non-Q1 by-size URLs.
+    `coverage_span.uncovered` is written from this rather than asserting "the by-size product
+    is Q1-only": the Q1-only shape is a claim about what BLS publishes, so it is measured each
+    run and the persisted sentence names the probe count it rests on.
   - `stage6_reroute_required` — bool, mirroring `simultaneous_state_industry_size`.
 
 - [ ] **Step 1: Write the failing predicate test**
@@ -3203,6 +3207,7 @@ import io
 import re
 import zipfile
 
+import httpx
 import polars as pl
 
 import _common as c
@@ -3270,6 +3275,23 @@ def read_zip(path: str) -> pl.DataFrame:
         return pl.read_csv(io.BytesIO(zf.read(member)), infer_schema_length=0)
 
 
+def probe_other_quarters(client: httpx.Client, years: tuple[int, ...]) -> list[dict]:
+    """Probe Q2-Q4 of every window year for a by-size file, so the coverage_span's "Q1-only"
+    claim is measured this run rather than asserted from memory. The illustrative brief wrote
+    that claim as a typed string with no request behind it -- the Global Constraints' rule on
+    persisted prose says a factual sentence must be interpolated from data in scope during the
+    run, and "no other quarter is published" is exactly the kind of claim a later BLS schedule
+    change could falsify. A 404 across the board is what the by-size product's Q1-only design
+    would produce; any 200 means it is not Q1-only and the note below must say so instead."""
+    rows = []
+    for year in years:
+        for qtr in (2, 3, 4):
+            url = f"https://data.bls.gov/cew/data/files/{year}/csv/{year}_q{qtr}_by_size.zip"
+            status, nbytes = c.probe(client, url)
+            rows.append({"year": year, "qtr": qtr, "http_status": status, "bytes": nbytes})
+    return rows
+
+
 def main() -> None:
     client = c.build_client()
     extracts, frames = [], []
@@ -3279,6 +3301,9 @@ def main() -> None:
         extracts.append(rec)
         frames.append(read_zip(rec.path).with_columns(pl.lit(year).alias("ref_year")))
     df = pl.concat(frames, how="vertical")
+
+    quarter_probe = probe_other_quarters(client, c.WINDOW_YEARS)
+    other_quarters_served = any(row["http_status"] == 200 for row in quarter_probe)
 
     # The titles file is loaded BEFORE the verdict because the verdict depends on it: the
     # aggregate size_code the predicate excludes is derived from it, not assumed.
@@ -3319,7 +3344,13 @@ def main() -> None:
             "published_end": f"{max(c.WINDOW_YEARS)}-Q1",
             "window_start": c.WINDOW_START, "window_end": c.WINDOW_END,
             "covered": "first quarter of each window year only",
-            "uncovered": "Q2-Q4 of every window year: the by-size product is Q1-only",
+            "uncovered": (
+                f"Q2-Q4 of every window year: probed ({len(quarter_probe)} requests) and none "
+                "returned a by-size file, so the product is Q1-only for every year checked"
+                if not other_quarters_served else
+                "Q2-Q4 of every window year: NOT purely Q1-only -- at least one non-Q1 by-size "
+                "file was found this run; see findings.quarter_probe for which year/quarter"
+            ),
         },
         access={"route": SIZE_URL, "status": "verified", "reason": None},
         extracts=extracts,
@@ -3334,6 +3365,7 @@ def main() -> None:
             ],
             "years_checked": list(c.WINDOW_YEARS),
             "stage6_reroute_required": verdict,
+            "quarter_probe": quarter_probe,
         },
     )
     print(f"SRC-QSIZE-002 simultaneous state x 113310 x size: {verdict}")
