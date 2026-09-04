@@ -279,25 +279,65 @@ def test_broader_code_note_derives_the_near_miss_level_not_supersector_literal()
     assert "'supersector'" not in note
 
 
-# --- window_coverage_note ---------------------------------------------------------------------
+# --- _month_grain ------------------------------------------------------------------------------
 
 
-def _series_df(rows: list[tuple[str, str, str]]) -> pl.DataFrame:
-    return pl.DataFrame(rows, schema=["series_id", "begin_year", "end_year"], orient="row")
+def test_month_grain_strips_the_m_prefix_and_joins_on_a_dash():
+    assert m._month_grain("2017", "M01") == "2017-01"
+    assert m._month_grain("2024", "M12") == "2024-12"
+
+
+# --- window_coverage_note -----------------------------------------------------------------------
+#
+# Fix round 1: `qualifying_series` selects on begin_year/end_year overlap only, but the
+# persisted `coverage_span.covered` claim is about the *full* D1 window, which needs month
+# grain -- a series with begin_year=2017, begin_period="M06" passes the year-level filter
+# while not actually covering January 2017. sm.series carries begin_period/end_period
+# (columns 11 and 13); window_coverage_note now reads them instead of asserting full coverage
+# from begin_year/end_year alone.
+
+
+def _series_df(rows: list[tuple[str, str, str, str, str]]) -> pl.DataFrame:
+    return pl.DataFrame(
+        rows,
+        schema=["series_id", "begin_year", "begin_period", "end_year", "end_period"],
+        orient="row",
+    )
 
 
 def test_window_coverage_note_true_when_every_series_spans_the_full_window():
-    df = _series_df([("A", "1990", "2026"), ("B", "2017", "2024")])
+    df = _series_df([
+        ("A", "1990", "M01", "2026", "M07"),
+        ("B", "2017", "M01", "2024", "M12"),
+    ])
     covered, note = m.window_coverage_note(df)
     assert covered is True
-    assert "latest begin_year observed: 2017" in note
-    assert "earliest end_year observed: 2024" in note
+    assert "latest start observed" in note
+    assert "2017-01" in note
+    assert "2024-12" in note
+
+
+def test_window_coverage_note_false_when_a_series_starts_mid_year_after_window_start():
+    """The exact gap the year-only check missed: begin_year=2017 alone would have passed
+    qualifying_series' overlap filter, but begin_period="M06" means this series does not
+    cover January 2017 -- window_coverage_note must catch what the year-grain check cannot."""
+    df = _series_df([
+        ("FULL", "1990", "M01", "2026", "M07"),
+        ("MID_YEAR_START", "2017", "M06", "2026", "M07"),
+    ])
+    covered, note = m.window_coverage_note(df)
+    assert covered is False
+    assert "MID_YEAR_START" in note
+    assert "FULL" not in note
 
 
 def test_window_coverage_note_false_and_names_a_partially_overlapping_series():
     """The branch this task's dispatch flagged as unchecked in the brief's illustrative code:
     a series that only overlaps part of D1 must not be silently counted as full coverage."""
-    df = _series_df([("FULL", "1990", "2026"), ("LATE_START", "2020", "2026")])
+    df = _series_df([
+        ("FULL", "1990", "M01", "2026", "M07"),
+        ("LATE_START", "2020", "M01", "2026", "M07"),
+    ])
     covered, note = m.window_coverage_note(df)
     assert covered is False
     assert "LATE_START" in note
@@ -309,6 +349,70 @@ def test_window_coverage_note_false_when_series_is_empty():
     covered, note = m.window_coverage_note(df)
     assert covered is False
     assert "no qualifying series exist" in note
+
+
+# --- select_candidates ---------------------------------------------------------------------
+#
+# Fix round 1: the line that actually builds the candidate set in `main()` -- the exact
+# defect this task found and fixed -- had no test that did not depend on a live network fetch.
+# Extracted to `select_candidates` so it does now.
+
+
+def _industry_df(rows: list[tuple[str, str]]) -> pl.DataFrame:
+    return pl.DataFrame(rows, schema=["industry_code", "industry_name"], orient="row")
+
+
+def _candidate_codes(industry: pl.DataFrame, supersector: str) -> set[str]:
+    return set(m.select_candidates(industry, supersector)["industry_code"].to_list())
+
+
+def test_select_candidates_excludes_the_broader_mining_logging_construction_code():
+    industry = _industry_df([
+        ("10000000", "Mining and Logging"),
+        ("10113300", "Logging"),
+        ("15000000", "Mining, Logging and Construction"),
+        ("10212100", "Coal Mining"),
+    ])
+    assert _candidate_codes(industry, supersector="10000000") == {"10000000", "10113300"}
+
+
+def test_select_candidates_keeps_every_embedded_113_code_regardless_of_supersector():
+    industry = _industry_df([
+        ("10113300", "Logging"),
+        ("99113100", "Some Sibling Under 113"),
+    ])
+    assert _candidate_codes(industry, supersector="10000000") == {"10113300", "99113100"}
+
+
+def test_select_candidates_keeps_only_the_anchored_supersector_not_a_broader_one():
+    industry = _industry_df([
+        ("10000000", "Mining and Logging"),
+        ("15000000", "Mining, Logging and Construction"),
+    ])
+    assert _candidate_codes(industry, supersector="10000000") == {"10000000"}
+
+
+# --- states_dc_level_tally -----------------------------------------------------------------
+#
+# Fix round 1: `level_by_state.get(st) == lvl` returns None (matching no branch) for a
+# states_dc code missing from `level_by_state`, silently under-counting it out of every
+# bucket while `denominator_note` kept asserting the full 51-code count.
+
+
+def test_states_dc_level_tally_sums_to_the_full_states_dc_universe():
+    level_by_state = {"01": "supersector", "10": "none", "11": "none"}
+    tally = m.states_dc_level_tally(level_by_state, ("01", "10", "11"))
+    assert tally == {"113310": 0, "1133": 0, "113": 0, "supersector": 1, "other": 0, "none": 2}
+    assert sum(tally.values()) == 3
+
+
+def test_states_dc_level_tally_raises_when_a_states_dc_code_is_missing():
+    """The branch no real run has taken -- every states_dc code has always been present in
+    the fetched sm.state file. A future run where one is missing must raise, not silently
+    drop it from every bucket."""
+    level_by_state = {"01": "supersector"}  # "11" (DC) missing
+    with pytest.raises(RuntimeError, match="absent from level_by_state"):
+        m.states_dc_level_tally(level_by_state, ("01", "11"))
 
 
 # --- granularity_note --------------------------------------------------------------------------
