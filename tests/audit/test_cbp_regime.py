@@ -86,16 +86,16 @@ def test_flag_evidence_suppressed_share_counts_only_non_null_emp_f():
     assert ev["suppressed_share"] == pytest.approx(0.25)
 
 
-def test_flag_evidence_noise_flagged_share_excludes_the_string_zero():
+def test_flag_evidence_emp_n_present_and_nonzero_share_excludes_the_string_zero():
     body = [_row("Alabama", None, "0", "01"), _row("Alaska", None, "5", "02")]
     ev = m.flag_evidence(HEADER, body)
-    assert ev["noise_flagged_share"] == pytest.approx(0.5)
+    assert ev["emp_n_present_and_nonzero_share"] == pytest.approx(0.5)
 
 
 def test_flag_evidence_empty_body_gives_zero_shares_not_a_division_error():
     ev = m.flag_evidence(HEADER, [])
     assert ev["suppressed_share"] == 0.0
-    assert ev["noise_flagged_share"] == 0.0
+    assert ev["emp_n_present_and_nonzero_share"] == 0.0
     assert ev["EMP_F"] == {}
     assert ev["EMP_N"] == {}
 
