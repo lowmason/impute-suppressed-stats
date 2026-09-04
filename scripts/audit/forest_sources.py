@@ -193,7 +193,7 @@ def scannable_text_page(res: dict) -> bool:
     body would otherwise be counted in a sentence no extract backs. The implication runs one
     way only, and the composed sentences say so: `retain_body` is called on routes this gate is
     never offered (`other_route_*`), so being fetched and hashed does not put a page in the
-    corpus -- in the run of record one such extract carries a 200 and is not scanned."""
+    corpus, and such a route answering 200 is hashed without ever being scanned."""
     return answered_with_body(res) and res["http_status"] == 200
 
 
@@ -533,14 +533,14 @@ def box_shared_folder_items(html: str) -> dict:
 
 def box_legacy_download_url(shared_name: str, file_id: int | str) -> str:
     """Box's back-compat `rm=box_download_shared_file` redirect -- the only route this run
-    found that returns raw file bytes for a Box-hosted public share with a plain GET. That the
-    `authenticated_download_url` embedded in the modern share page's JSON 401s without a
-    browser session, and that this legacy endpoint exists at all, both come from the
-    investigation that shaped this script rather than from any run: no probe here requests
-    that `authenticated_download_url`, and the endpoint is undocumented anywhere on Box's or
-    USDA's pages -- it was found by reading the share page's own JS bundle. What each run does
-    establish about the modern share URL (discovered via `discover_box_share_url`) is recorded
-    as that run's own probe of it in `route_probes`, not asserted here."""
+    found that returns raw file bytes for a Box-hosted public share with a plain GET. Two
+    statements here are carried over from the investigation that shaped this script and are
+    re-established by no run: how this route was found -- it is undocumented anywhere on Box's
+    or USDA's pages and turned up only by reading the share page's own JS bundle -- and that
+    the `authenticated_download_url` embedded in that page's JSON was observed to answer 401
+    without a browser session, which no probe here requests. What this endpoint and the modern
+    share URL (discovered via `discover_box_share_url`) actually answer is a different question,
+    left to each run's own probes of them in `route_probes` rather than asserted here."""
     return (
         f"{BOX_LEGACY_DOWNLOAD_BASE}?rm=box_download_shared_file"
         f"&shared_name={shared_name}&file_id=f_{file_id}"

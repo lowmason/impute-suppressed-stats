@@ -1019,7 +1019,8 @@ def test_compose_fia_uncovered_empty_scan_does_not_deny_that_anything_was_fetche
     # `scanned_pages` stays empty -- so "No FIA page was fetched and hashed this run" is false
     # on exactly the branch it is written for. The sentence must name the 200-gate the scan
     # actually turns on, and must scope itself to the scan's own corpus: `other_route_*`
-    # bodies are fetched and hashed too (one of them at 200) and never reach the scan.
+    # bodies are fetched and hashed too -- at any status, 200 included -- and never reach the
+    # scan, so a sentence about what the run fetched cannot stand in for one about the corpus.
     text = m.compose_fia_uncovered(
         industry_scan={"pages_scanned": [], "industry_classification_terms": {"NAICS": 0},
                        "fia_taxonomy_terms": {"species": 0}},
@@ -1029,9 +1030,9 @@ def test_compose_fia_uncovered_empty_scan_does_not_deny_that_anything_was_fetche
 
 
 def test_compose_fia_uncovered_names_the_scan_corpus_not_every_hashed_extract():
-    # Same fix, the live half: today's artifact scans 5 pages while `extracts[]` holds 7
-    # hashed entries (statuses 200 x5, 403, 200), so "the 5 FIA page(s) this run fetched and
-    # hashed" misdescribes the set it counts. The count phrase names the scan corpus.
+    # Same fix, the live half: the scan corpus is a proper subset of `extracts[]` on any run
+    # where an `other_route_*` fetch answers with a body, so "the N FIA page(s) this run
+    # fetched and hashed" misdescribes the set it counts. The count phrase names the corpus.
     text = m.compose_fia_uncovered(
         industry_scan=INDUSTRY_SCAN, dc_has_evaluation=True, wc_row_count=1138)
     assert "fetched and hashed" not in text
