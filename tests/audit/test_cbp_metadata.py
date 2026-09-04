@@ -14,15 +14,29 @@ confirmed absence).
 The `MISSING_KEY_PREFIX` / `INVALID_KEY_PREFIX` fixtures are real byte prefixes captured from
 live GET requests to `https://api.census.gov/data/2021/cbp` -- one with no `key` param at all,
 one with the actual (invalid) `CENSUS_API_KEY` from this repo's `.env`. Both came back HTTP 200
-with `content-type: text/html` after redirect-following, never 4xx. `REAL_EMPSZES_DOC`,
-`REAL_GROUPS_DOC` and `REAL_GROUP_DETAIL_DOC_TRIMMED` are real captured bodies from live GETs
-to `/2021/cbp/variables/EMPSZES.json`, `/2021/cbp/groups.json` and
+with `content-type: text/html` after redirect-following, never 4xx.
+
+Fix round 2 (spec review): whether CBP's metadata publishes an EMPSZES code/label crosswalk
+turned out to vary by vintage, not to be uniformly absent as fix round 1 assumed from checking
+only 2021 by hand. `crosswalk_items_from_payload` was added to extract the actual `{code:
+label}` dict (not just a yes/no) from whichever of three candidate shapes carries one; that
+function is what both `crosswalk_present_in_payload` (a boolean convenience wrapper around it)
+and this test file's crosswalk fixtures below exercise. `REAL_EMPSZES_DOC`, `REAL_GROUPS_DOC`
+and `REAL_GROUP_DETAIL_DOC_TRIMMED` are real captured bodies from live GETs to
+`/2021/cbp/variables/EMPSZES.json`, `/2021/cbp/groups.json` and
 `/2021/cbp/groups/CB2100CBP.json` respectively (the last trimmed to 3 of ~28 variable entries --
-noted where used). None of the three carries a `values` key for EMPSZES, which is the evidence
-behind this script's "CBP publishes no EMPSZES crosswalk in metadata" finding.
-`SYNTHETIC_DOC_WITH_CROSSWALK` is fabricated to exercise the positive case, since no keyless
-CBP endpoint this task checked carries one to capture -- labelled synthetic, not asserted as a
-real Census response.
+noted where used); none of these three 2021 documents carries a `values` key for EMPSZES.
+`REAL_2017_EMPSZES_DOC_TRIMMED` is a real captured body from `/2017/cbp/variables/EMPSZES.json`,
+trimmed from 44 real code/label pairs to 5 -- and DOES carry one, which is why the two
+`crosswalk_present_in_payload`/`crosswalk_items_from_payload` positive-case tests below no
+longer need a fabricated fixture (an earlier `SYNTHETIC_DOC_WITH_CROSSWALK` served that purpose
+before a real example was found; it has been removed, not merely renamed). Together these
+fixtures ground the corrected, year-varying finding: CBP's real 2017 metadata publishes the
+official EMPSZES enumeration in the flat variable document, and real 2021 metadata does not
+carry it anywhere the three candidate routes were checked. Whether every OTHER available year
+matches 2021 or 2017 is not a claim this docstring makes or needs to -- that is measured fresh
+each run in `empszes_metadata_crosswalk_probe_by_year`, never asserted from a year checked once
+and generalized, which is the mistake fix round 1 made and fix round 2 corrected.
 """
 
 from __future__ import annotations
