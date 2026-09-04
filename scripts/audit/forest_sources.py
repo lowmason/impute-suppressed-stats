@@ -633,9 +633,13 @@ def compose_retention_rule(extract_statuses: list[int]) -> dict:
             "404 page, a 403 page and an empty 200 are three different verdicts and only the "
             "retained bytes tell them apart. A transport failure produces no body and so "
             "registers no extract; its evidence is the probe record's outcome field instead. "
-            "Reader's caution: this rule is this script's, and the absence of a non-200 extract "
-            "under another source in this audit is not evidence that no non-200 response "
-            "occurred there."
+            "The counters below therefore say which statuses were retained and nothing more: a "
+            "retained status 200 means the endpoint answered, not that the body is usable data "
+            "-- an application error page can arrive with status 200, and which retained bodies "
+            "are usable is recorded per probe in findings, never inferable from an extract's "
+            "http_status. Reader's caution: this rule is this script's, and the absence of a "
+            "non-200 extract under another source in this audit is not evidence that no "
+            "non-200 response occurred there."
         ),
         "extracts_recorded": len(extract_statuses),
         "extracts_with_non_200_status": sum(1 for s in extract_statuses if s != 200),
@@ -758,8 +762,9 @@ def compose_fia_uncovered(
     text = (
         "no monthly resolution: SRC-FOR-004 forbids interpolating to months. Also measured, "
         f"over the {len(pages)} FIA page(s) this run fetched and hashed "
-        f"({', '.join(pages)}): word-boundary hits for industry-classification terms are "
-        f"{industry}, while hits for the concepts those same pages do use are {taxonomy}. "
+        f"({', '.join(pages)}): word-boundary hits for the classification codes and measures an "
+        f"industry-coded source would carry are {industry}, while hits for the concepts those "
+        f"same pages do use are {taxonomy}. "
         "INFERENCE MARKER, OPENING: what follows to the closing marker is a reading of those "
         "counts, not a further measurement; it is supplied by hand, carries no extract hash and "
         "is re-checked by no later run. Zero industry-term hits across those pages is read here "
