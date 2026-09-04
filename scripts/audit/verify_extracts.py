@@ -53,11 +53,21 @@ summaries and this repository rather than assumed:
    `path` column to repo-root-relative and reports a path outside the repository as a failure
    rather than raising. Hashing still runs against the recorded absolute path.
 
-7. **The empty-value test is `value in (None, "", [], {})`, and must stay that way.** The
+7. **The empty-value test is wrong in both of the obvious directions, so it is neither.** The
    natural tidy-up to `if not value:` would reject `qcew_identity.clean_months` (`0`),
    `qcew_size.simultaneous_state_industry_size` (`false`), `bds.six_digit_logging_available`
    (`false`), `fia.tpo_mentions_on_fia_doc_page` (`0`) and several more -- every one a measured
-   finding, and several of them the answer that decides a later stage's routing.
+   finding, and several of them the answer that decides a later stage's routing. The opposite
+   error is testing the container and never its contents: `cbp_metadata.lfo_by_year` is a dict
+   of eight window years whose every value is `null`, and a shape test read it as filled, so
+   E1 printed PASS for a roadmap-named field that was neither filled nor declared. `is_empty`
+   therefore also calls a container empty when every entry in it is. Across the twelve shipped
+   summaries that flags exactly two findings values -- `qcew_routes.bulk_years_required` (`[]`)
+   and `cbp_metadata.lfo_by_year` -- and both are declared in `LEGITIMATELY_EMPTY_FINDINGS`,
+   so the deepening creates no new failure today and closes the hole for the next all-null
+   mapping. A *lone* `null` per year stays filled: `cbp_metadata.naics_predicate_by_year` and
+   `empszes_by_year` each carry `"2024": null` against seven filled years, which is a measured
+   absence for one year, not an unfilled field.
 
 The gate is a pure-function core (`check_*`/`find_*`/`verify_*`, each taking what it inspects
 as an argument) with `main` as the wiring that supplies the real paths, so the tests exercise
@@ -93,15 +103,24 @@ EXPECTED_SOURCES = frozenset({
     "qcew_panel", "qcew_routes", "qcew_size", "susb", "tpo",
 })
 
-# Findings keys the plan itself declares may legitimately come back empty or null. An empty
-# value at one of these is a finding, not a missing one, and a gate that rejected it would push
-# someone to fabricate a value -- the exact failure this stage exists to prevent. Keyed by
-# (source, key), not by key alone: the allowance is granted to the script that earned it.
+# Findings keys whose empty value is a recorded finding, not a missing one. A gate that
+# rejected these would push someone to fabricate a value -- the exact failure this stage exists
+# to prevent. Keyed by (source, key), not by key alone: the allowance is granted to the script
+# that earned it. The first four are declared by the plan; the fifth is declared here so that
+# E1's pass names the field rather than passing it by accident of container shape.
 LEGITIMATELY_EMPTY_FINDINGS = frozenset({
     ("qcew_routes", "bulk_years_required"),  # plan: "[] is a legitimate finding, not a failure"
     ("cbp_regime", "unknown_years"),         # plan: list of years whose regime is `unknown`
     ("fia", "sampling_error_field"),         # plan: the field name, or null
     ("tpo", "chosen_route"),                 # plan: the URL, or `null`
+    # `null` for all eight window years, because LFO was only ever sent as a filter (`LFO=001`)
+    # and never selected as an output column, so no code list came back. The field is marked
+    # "not obtainable -- why" in two places, neither of them the value: `cbp_metadata.findings
+    # .notes` records the reason year by year, and the §1.2 table in
+    # `specs/findings/source-audit-notes.md` carries it as the row routing the fix to Stage 1
+    # with a dedicated `LFO,LFO_LABEL` query. Declared rather than left to `is_empty`'s shape
+    # test, which passed it before this entry existed.
+    ("cbp_metadata", "lfo_by_year"),
 })
 
 # The roadmap's Stage 0 `Exit:` line, split into its five criteria and quoted from it. `main`
@@ -188,12 +207,25 @@ class Failure(NamedTuple):
 
 
 def is_empty(value: Any) -> bool:
-    """A findings value counts as unfilled only when it is null or an empty container.
+    """A findings value counts as unfilled when it is null, an empty container, or a container
+    whose every entry is itself unfilled.
 
-    Deliberately not `not value`: `0`, `0.0` and `False` are measurements this audit shipped
-    (see this module's docstring, point 7), and every one of them is a filled field.
+    Two rules correcting opposite errors, both set out in this module's docstring, point 7.
+    Deliberately not `not value`: `0`, `0.0` and `False` are measurements this audit shipped,
+    and every one of them is a filled field. And deliberately not the container test alone: a
+    mapping of eight years to eight nulls is an unfilled field wearing a filled field's shape.
+
+    The recursion covers lists as well as mappings. The ruling that prompted it named mappings;
+    "a container whose entries are all empty" is the same rule without the special case, and no
+    list in the twelve shipped summaries is affected either way (checked).
     """
-    return value in (None, "", [], {})
+    if value in (None, "", [], {}):
+        return True
+    if isinstance(value, dict):
+        return all(is_empty(entry) for entry in value.values())
+    if isinstance(value, list):
+        return all(is_empty(entry) for entry in value)
+    return False
 
 
 def enumerate_sources(audit_root: Path) -> list[str]:
@@ -418,8 +450,8 @@ def parse_appendix_a_sources(spec_text: str) -> dict[str, bool]:
 
 
 def check_findings_filled(summaries: dict[str, dict]) -> list[Failure]:
-    """E1, over what shipped: every findings value is filled, or is one of the four the plan
-    declares may legitimately be empty."""
+    """E1, over what shipped: every findings value is filled, or is one of the five declared in
+    `LEGITIMATELY_EMPTY_FINDINGS` whose emptiness is itself the recorded finding."""
     failures: list[Failure] = []
     for name, payload in summaries.items():
         for key, value in sorted(payload["findings"].items()):

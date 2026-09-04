@@ -16,7 +16,8 @@ version, defect by defect:
 3. `check_env_untracked` anchored at the repository root and matched on basename, exercised
    against a real throwaway git index rather than a stub;
 4. the manifest's repo-root-relative `path` column and its LF line endings;
-5. `is_empty`, which must keep accepting `0` and `False` as filled findings;
+5. `is_empty`, which must keep accepting `0` and `False` as filled findings while rejecting a
+   mapping whose every value is null -- and must keep accepting one with a lone null year;
 6. `check_document(None, ...)` failing E1, E2 and C together, so no criterion whose checks did
    not run can print PASS;
 7. `parse_classification_record` anchored to the `### 3.1` heading and the fence under it, so
@@ -83,11 +84,11 @@ def write_extract(root, source: str, name: str, body: bytes, *, sidecar=True):
     return target, digest
 
 
-# --- is_empty: the guard against a "cleanup" to `if not value` ------------------------------
+# --- is_empty: wrong in both obvious directions, so it is neither ---------------------------
 
 
 @pytest.mark.parametrize("value", [None, "", [], {}])
-def test_is_empty_true_only_for_null_and_empty_containers(value):
+def test_is_empty_true_for_null_and_empty_containers(value):
     assert m.is_empty(value) is True
 
 
@@ -95,8 +96,54 @@ def test_is_empty_true_only_for_null_and_empty_containers(value):
 def test_is_empty_false_for_measured_zeroes_and_falses(value):
     """`qcew_identity.clean_months` is `0`, `qcew_size.simultaneous_state_industry_size` is
     `false`, and both are findings that decide a later stage. A gate that read them as unfilled
-    would demand a fabricated value."""
+    would demand a fabricated value. `[0]` and `{"a": 0}` are here for the recursion too: a
+    container of measured zeroes is filled, because each entry is."""
     assert m.is_empty(value) is False
+
+
+def test_is_empty_true_for_a_mapping_whose_every_value_is_null():
+    """The hole this closes. `cbp_metadata.lfo_by_year` is eight window years mapped to eight
+    nulls; testing the container and never its contents read it as filled, and E1 printed PASS
+    for a roadmap-named field that was neither filled nor declared."""
+    assert m.is_empty({str(year): None for year in range(2017, 2025)}) is True
+
+
+def test_is_empty_false_for_a_mapping_with_a_lone_null_year():
+    """`naics_predicate_by_year` and `empszes_by_year` each carry `"2024": null` against seven
+    filled years. That is a measured absence for one year, not an unfilled field, and it must
+    keep passing -- deepening the check must not fail a partial mapping."""
+    partial = {str(year): "NAICS2017" for year in range(2017, 2024)} | {"2024": None}
+    assert m.is_empty(partial) is False
+
+
+def test_is_empty_recurses_through_nested_containers():
+    assert m.is_empty({"a": {"b": [None, ""]}, "c": []}) is True
+    assert m.is_empty({"a": {"b": [None, ""]}, "c": [False]}) is False
+
+
+def test_is_empty_flags_exactly_the_two_declared_findings_over_the_shipped_shapes():
+    """The blast radius, pinned as a shape rather than read off `data/` (gitignored). The two
+    values the deepened check flags across the twelve summaries are both declared in
+    `LEGITIMATELY_EMPTY_FINDINGS`, so E1 still passes and its pass now names them."""
+    assert ("cbp_metadata", "lfo_by_year") in m.LEGITIMATELY_EMPTY_FINDINGS
+    assert ("qcew_routes", "bulk_years_required") in m.LEGITIMATELY_EMPTY_FINDINGS
+    summaries = {
+        "cbp_metadata": summary("cbp_metadata", findings={
+            "lfo_by_year": {str(year): None for year in range(2017, 2025)},
+            "naics_predicate_by_year": {"2023": "NAICS2017", "2024": None}}),
+        "qcew_routes": summary("qcew_routes", findings={"bulk_years_required": [],
+                                                        "bulk_years_fetched": [2017]}),
+    }
+    assert m.check_findings_filled(summaries) == []
+
+
+def test_an_undeclared_all_null_mapping_is_a_failure():
+    """The latent hole, for the next one: the same shape under a source with no declaration
+    fails E1 instead of passing on container shape."""
+    summaries = {"bds": summary("bds", findings={"lfo_by_year": {"2017": None, "2018": None}})}
+    failures = m.check_findings_filled(summaries)
+    assert [f.criterion for f in failures] == ["E1"]
+    assert "lfo_by_year" in failures[0].detail
 
 
 # --- source enumeration, both directions ----------------------------------------------------
