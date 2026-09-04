@@ -84,6 +84,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 
 import httpx
 
@@ -279,6 +280,30 @@ def fetch_variable_doc(client: httpx.Client, year: int, variable: str, extracts:
     return None
 
 
+def fetch_json_or_none(
+    client: httpx.Client, source: str, url: str, rel_path: str, extracts: list
+) -> tuple[int, dict | None]:
+    """GET `url`, record the extract on success, and parse the body as JSON -- returning
+    `(status, None)` on an `httpx.HTTPStatusError` instead of raising.
+
+    Fix round 3, Minor 2: `probe_empszes_metadata_crosswalk`'s `groups.json`/group-document
+    fetches and the inline `EMPSZES.json` fetch in `main()` used to call `c.request` and
+    `.json()` directly, unguarded -- the same shape of request that crashed the live run in
+    fix round 1 (2018's comma-separated `group` field producing a 404 on the literal comma).
+    Splitting the field fixed that one trigger; it did not fix the pattern. Any of these
+    keyless metadata routes returning a 404 or 5xx crashes mid-run, after some of this run's
+    extracts have already been appended to the list and before `write_summary` is ever called
+    -- exactly the unregistered-files problem Minor 1 and fix round 2's Finding 2 are about,
+    from a third angle. This function is what the two request sites route through now, so a
+    metadata-route hiccup becomes a documented gap in the probe record instead of a crash."""
+    try:
+        resp = c.request(client, url)
+    except httpx.HTTPStatusError as exc:
+        return exc.response.status_code, None
+    extracts.append(c.record_extract(source, url, rel_path, resp.content))
+    return resp.status_code, resp.json()
+
+
 def probe_empszes_metadata_crosswalk(
     client: httpx.Client, year: int, empszes_doc: dict, empszes_status: int, extracts: list
 ) -> tuple[list[dict], dict[str, str] | None]:
@@ -303,12 +328,17 @@ def probe_empszes_metadata_crosswalk(
     official = ez_items
 
     groups_url = f"{BASE.format(year=year)}/groups.json"
-    gresp = c.request(client, groups_url)
-    extracts.append(c.record_extract(SOURCE, groups_url, f"{year}/groups.json", gresp.content))
-    groups_items = crosswalk_items_from_payload(gresp.json(), "EMPSZES")
+    groups_status, groups_payload = fetch_json_or_none(
+        client, SOURCE, groups_url, f"{year}/groups.json", extracts)
+    groups_items = (
+        crosswalk_items_from_payload(groups_payload, "EMPSZES")
+        if groups_payload is not None else None
+    )
     probe.append({
-        "url": groups_url, "status": gresp.status_code,
-        "carries_values_crosswalk": groups_items is not None,
+        "url": groups_url, "status": groups_status,
+        # None (not False) when the fetch itself failed -- "not measured" must not read as
+        # "measured absent" here any more than it does for empszes_by_year itself.
+        "carries_values_crosswalk": None if groups_payload is None else groups_items is not None,
     })
     official = official or groups_items
 
@@ -318,13 +348,15 @@ def probe_empszes_metadata_crosswalk(
     # just the first -- treating the field as a single name 404s on the literal comma.
     for group in group_names_from_field(empszes_doc.get("group")):
         group_url = f"{BASE.format(year=year)}/groups/{group}.json"
-        gdresp = c.request(client, group_url)
-        extracts.append(c.record_extract(
-            SOURCE, group_url, f"{year}/groups_{group}.json", gdresp.content))
-        group_items = crosswalk_items_from_payload(gdresp.json(), "EMPSZES")
+        group_status, group_payload = fetch_json_or_none(
+            client, SOURCE, group_url, f"{year}/groups_{group}.json", extracts)
+        group_items = (
+            crosswalk_items_from_payload(group_payload, "EMPSZES")
+            if group_payload is not None else None
+        )
         probe.append({
-            "url": group_url, "status": gdresp.status_code,
-            "carries_values_crosswalk": group_items is not None,
+            "url": group_url, "status": group_status,
+            "carries_values_crosswalk": None if group_payload is None else group_items is not None,
         })
         official = official or group_items
     return probe, official
@@ -345,6 +377,24 @@ def main() -> None:
     any_keyed_success = False
 
     for year in c.WINDOW_YEARS:
+        # Clear this year's ENTIRE directory before this run says anything about it, whether
+        # the year turns out available this run or not (fix round 3, Minor 1). Fix round 2
+        # only cleared the one canonical filename, and only inside the status==200 branch --
+        # so a year available in a past run (full extract set + canonical file on disk) that
+        # regresses to non-200 THIS run (a real 404, or probe()'s (0,0) transport sentinel)
+        # skipped that unlink entirely, leaving its whole directory on disk unregistered in
+        # this run's summary.json -- the same orphan problem Minor 5/Finding 2 fixed, just
+        # triggered by a probe failure instead of a pull failure. Wiping unconditionally, every
+        # year, before the probe, means this run's disk state can never be a mix of this run's
+        # writes and some earlier run's leftovers: whatever survives to write_summary is
+        # exactly what this run itself fetched. A transient probe-failure (0) year loses its
+        # previously-fetched files too -- the accepted cost of a simple, single invariant
+        # rather than a partial-merge-across-runs model this codebase has nowhere else; the
+        # existing guidance to re-run this task on a 0 status still applies and refetches it.
+        year_dir = c.AUDIT_ROOT / SOURCE / f"{year}"
+        if year_dir.exists():
+            shutil.rmtree(year_dir)
+
         status, _ = c.probe(client, f"{BASE.format(year=year)}.json")
         probe_status[str(year)] = status
         if status != 200:
@@ -355,16 +405,6 @@ def main() -> None:
             # every window year gets an explicit entry rather than only years_available.
             continue
         years.append(year)
-
-        # Clear any stale canonical data_113310.json this year's own writer might not
-        # overwrite (fix round 2). A writer that only writes the canonical file on a real
-        # success does not unwrite what an earlier, less careful run already wrote at this
-        # path -- if this run's every exit path this year is a failure or an early `continue`,
-        # a pre-fix run's HTML error page would otherwise keep sitting at the canonical name
-        # looking current, with nothing in this run's manifest to contradict it.
-        canonical_path = c.AUDIT_ROOT / SOURCE / f"{year}" / "data_113310.json"
-        canonical_path.unlink(missing_ok=True)
-        (canonical_path.parent / f"{canonical_path.name}.sha256").unlink(missing_ok=True)
 
         meta = c.request(client, f"{BASE.format(year=year)}.json")
         extracts.append(c.record_extract(
@@ -384,12 +424,18 @@ def main() -> None:
         official_crosswalk: dict[str, str] | None = None
         if has_empszes:
             ez_url = f"{BASE.format(year=year)}/variables/EMPSZES.json"
-            ez_resp = c.request(client, ez_url)
-            extracts.append(c.record_extract(
-                SOURCE, ez_url, f"{year}/empszes.json", ez_resp.content))
-            crosswalk_records, official_crosswalk = probe_empszes_metadata_crosswalk(
-                client, year, ez_resp.json(), ez_resp.status_code, extracts)
-            crosswalk_probe[str(year)] = crosswalk_records
+            ez_status, ez_payload = fetch_json_or_none(
+                client, SOURCE, ez_url, f"{year}/empszes.json", extracts)
+            if ez_payload is not None:
+                crosswalk_records, official_crosswalk = probe_empszes_metadata_crosswalk(
+                    client, year, ez_payload, ez_status, extracts)
+                crosswalk_probe[str(year)] = crosswalk_records
+            else:
+                crosswalk_probe[str(year)] = None
+                notes.append(
+                    f"{year}: EMPSZES variable document fetch failed (HTTP {ez_status}) -- "
+                    "metadata-crosswalk probe could not run"
+                )
         else:
             crosswalk_probe[str(year)] = None
             notes.append(
