@@ -19,8 +19,11 @@ whose failure would put a false or missing value into it:
    source Appendix A ships, including the ones this audit never touched;
 6. `machine_path_disclosure` counts what it names, and is not fooled by `extracts[].path`,
    which is absolute for every source by construction;
-7. the shipped disclosure paragraph names what each exit criterion's PASS is worth -- including
-   criterion C's, which it previously left out while calling the list closed.
+7. the shipped disclosure paragraph names two of the criteria's limits -- E1's hand-authored
+   field mapping and criterion C's substring matches -- and no longer closes the list after
+   naming only the first. E2 to E5 and S get no worth-statement there, and the test below
+   asserts two clauses of criterion C's limit plus the absence of the phrase that closed the
+   list, not one claim per criterion.
 
 `assemble_finding` is imported bare, like `_common`, per `tests/conftest.py`. Importing it is
 inert: the module's only side effects sit behind `if __name__ == "__main__"`.
