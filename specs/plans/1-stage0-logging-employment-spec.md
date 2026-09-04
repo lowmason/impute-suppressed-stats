@@ -5428,12 +5428,13 @@ reproduce a reliable raw TPO URL, and Appendix A already ships `tpo.enabled: fal
     bounded, spaced retry attempts per DataMart URL and the elapsed span, kept separate from
     the `/fullreport` verdict per the plan's three-outcome distinction: a transport failure
     (`_common.probe`'s `(0, 0)`) is not a 404, and neither is a `200`. `other_routes_probed`
-    uses `probe_url` rather than `_common.probe` so the non-200 body `Evalidator/evalidator.jsp`
-    answers with is retained (see `raw_retention_rule`) — that body is the evidence of *how*
-    the route is closed, and `_common.probe` discards bodies by construction. Which non-200
-    status that route serves is not stable: it answered 403 to one run and 500 to the next, and
-    both within seconds on a hand check, so the retained extract's own `http_status` is the
-    only reliable statement of what any given run met there.
+    uses `probe_url` rather than `_common.probe` so that whichever of these routes answers with
+    a body has those bytes retained whatever the status (see `raw_retention_rule`), and the
+    retained bytes rather than the prose say what a run met there; `_common.probe` discards
+    bodies by construction. `Evalidator/evalidator.jsp` answered 403 to one run and 500 to the
+    next, both within seconds on a hand check — a route closed to this client and a fault at
+    the server read differently — so which of them a given run met is read back off that run's
+    own extract and its `http_status`, never transcribed into a comment or a plan bullet.
   - `snum_estimate_attributes` — added by the implementation. The parsed
     `/fullreport/parameters/snum` catalog: how many estimate attributes `/fullreport` can
     return at all, which of them sit in *harvest*-removals estimate groups (kept distinct from
@@ -5450,14 +5451,20 @@ reproduce a reliable raw TPO URL, and Appendix A already ships `tpo.enabled: fal
   - `industry_concept_scan` — added by the implementation: word-boundary hit counts for
     industry-classification terms (`NAICS`, `SIC`, `industry`, `establishment`, `employment`)
     and for FIA's own organising concepts (`species`, `land use`, `product`) across every FIA
-    page this run fetched and hashed, named per page. A page joins that corpus only if it also
-    became a registered extract (`scannable_text_page`: the retention gate *and* a 200), so the
-    "fetched and hashed" phrase names artifacts a reader can re-grep and a status-200 empty body
-    is counted by neither. `coverage_span.uncovered`'s industry-concept sentence is interpolated
-    from these counts, and whichever reading those counts support is delimited by the
+    page in this run's scan corpus, named per page. A page joins that corpus only if it answered
+    with a status-200 body and so also became a registered extract (`scannable_text_page`: the
+    retention gate *and* a 200), so the corpus names artifacts a reader can re-grep and a
+    status-200 empty body is counted by neither. The implication runs one way only and the
+    composed sentences say so, because `retain_body` keeps any answered body whatever its
+    status and is called on routes `scannable_text_page` never sees (`other_route_*`): being
+    fetched and hashed does not put a page in the corpus, and in the run of record one such
+    extract carries a 200 and is not scanned. `coverage_span.uncovered`'s industry-concept
+    sentence is interpolated from these counts, and whichever reading those counts support is
+    delimited by the
     `INFERENCE MARKER, OPENING`/`CLOSING` convention rather than stated as a further
     measurement. Three cases are distinct there and none borrows another's sentence: a scan over
-    zero pages (every FIA fetch non-200) reports that it examined nothing rather than that it
+    zero pages (no page offered to the gate answered with a status-200 body) reports that it
+    examined nothing rather than that it
     found nothing; a nonzero industry count withholds the zero-hit reading; and the taxonomy
     counts are reported, never asserted nonzero. The D.C. clause likewise separates "absent from
     a parsed index" from "no index was read".
@@ -5700,10 +5707,13 @@ def retain_body(extracts: list, source: str, res: dict, rel_path: str) -> None:
 
 def scannable_text_page(res: dict) -> bool:
     """Whether a probe's body joins the term-scan corpus. Deliberately the retention gate AND
-    a 200, not the status alone: `industry_concept_scan` names its corpus as the pages this run
-    "fetched and hashed", so every page it counts must also be a registered extract, and
-    `retain_body` refuses an empty body. A status-200 response with no body would otherwise be
-    counted in a sentence no extract backs."""
+    a 200, not the status alone: `industry_concept_scan` names its corpus as the pages that
+    "answered with a status-200 body and [are] hashed", so every page it counts must also be a
+    registered extract, and `retain_body` refuses an empty body. A status-200 response with no
+    body would otherwise be counted in a sentence no extract backs. The implication runs one
+    way only, and the composed sentences say so: `retain_body` is called on routes this gate is
+    never offered (`other_route_*`), so being fetched and hashed does not put a page in the
+    corpus -- in the run of record one such extract carries a 200 and is not scanned."""
     return answered_with_body(res) and res["http_status"] == 200
 
 
@@ -6043,11 +6053,14 @@ def box_shared_folder_items(html: str) -> dict:
 
 def box_legacy_download_url(shared_name: str, file_id: int | str) -> str:
     """Box's back-compat `rm=box_download_shared_file` redirect -- the only route this run
-    found that returns raw file bytes for a Box-hosted public share with a plain GET. The
-    modern share URL (discovered via `discover_box_share_url`) serves a 200 HTML app shell,
-    and the `authenticated_download_url` embedded in that shell's JSON 401s without a browser
-    session (both verified live this run) -- this legacy endpoint is undocumented anywhere on
-    Box's or USDA's pages; it was found by reading the share page's own JS bundle."""
+    found that returns raw file bytes for a Box-hosted public share with a plain GET. That the
+    `authenticated_download_url` embedded in the modern share page's JSON 401s without a
+    browser session, and that this legacy endpoint exists at all, both come from the
+    investigation that shaped this script rather than from any run: no probe here requests
+    that `authenticated_download_url`, and the endpoint is undocumented anywhere on Box's or
+    USDA's pages -- it was found by reading the share page's own JS bundle. What each run does
+    establish about the modern share URL (discovered via `discover_box_share_url`) is recorded
+    as that run's own probe of it in `route_probes`, not asserted here."""
     return (
         f"{BOX_LEGACY_DOWNLOAD_BASE}?rm=box_download_shared_file"
         f"&shared_name={shared_name}&file_id=f_{file_id}"
@@ -6361,8 +6374,12 @@ def compose_fia_uncovered(
     is itself measured and therefore sits outside the marker.
 
     Three outcomes are kept apart that one string used to run together. A scan over zero pages
-    -- what every FIA fetch returning non-200 produces -- examined nothing, and a scan that
-    examined nothing must not read as a scan that found nothing. A scan over pages that DID
+    -- what a run produces when no page offered to `scannable_text_page` answers with a
+    status-200 body -- examined nothing, and a scan that examined nothing must not read as a
+    scan that found nothing. That empty corpus is NOT the same as nothing having been fetched
+    and hashed: `retain_body` keeps any answered body whatever its status, and the
+    `other_route_*` bodies are never offered to the scan at all, so the sentences below name
+    the corpus and the 200-gate rather than the extract set. A scan over pages that DID
     turn up industry terms cannot carry the zero-hit reading either. And the count of FIA's own
     taxonomy terms is reported, never asserted to be nonzero, since the function does not
     branch on it. The same distinction governs D.C.: `dc_has_evaluation` is False both when the
@@ -6376,7 +6393,8 @@ def compose_fia_uncovered(
     text = "no monthly resolution: SRC-FOR-004 forbids interpolating to months. "
     if not pages:
         text += (
-            "No FIA page was fetched and hashed this run, so the industry-term scan ran over "
+            "No FIA page entered this scan's corpus this run -- none of the pages offered to "
+            "it answered with a status-200 body -- so the industry-term scan ran over "
             "no pages and reports nothing about FIA: a scan that examined no pages is not a "
             "scan that found no industry terms, and whether FIA carries an industry concept a "
             "Logging (113310) slice could be selected on is unestablished here."
@@ -6398,7 +6416,8 @@ def compose_fia_uncovered(
             "established by a count."
         )
         text += (
-            f"Also measured, over the {len(pages)} FIA page(s) this run fetched and hashed "
+            f"Also measured, over the {len(pages)} FIA page(s) in this scan's corpus -- each "
+            "of which answered with a status-200 body this run and is hashed as an extract "
             f"({', '.join(pages)}): word-boundary hits for the classification codes and "
             f"measures an industry-coded source would carry are {industry}, and hits for the "
             f"species/product/land-use concepts FIA organises its own reporting by are "
@@ -6513,8 +6532,13 @@ def compose_tpo_access(
     not a transport failure either) or answer with a body that does not parse as a Box listing,
     and on both of those nothing was entered and nothing was fetched. `year_subfolders_found`
     is set only once the share page answered with a status-200 body, and
-    `nrum_data_folder_id` only once that body parsed, so the cascade below reads those two
-    rather than the share URL's mere presence. A probed URL that never answered at all is what
+    `shared_folder_parse_error` is set exactly when the parse raised, so the cascade below
+    reads those two rather than the share URL's mere presence. It does not read
+    `nrum_data_folder_id`, which is also `None` after a parse that *succeeded* on a payload
+    carrying no `currentFolderID` -- a state in which the folder was listed and asserting the
+    body "did not parse" would be false. The two keys are ordered, not independent: neither is
+    set unless the share page answered, so the unanswered branch is tested first and an absent
+    `shared_folder_parse_error` never reads on its own as a successful parse. A probed URL that never answered at all is what
     `classify_probe`'s docstring calls the weakest possible basis for `not_obtainable`, and the
     sentence says so rather than letting a network failure read as a finding about the source.
 
@@ -6550,8 +6574,8 @@ def compose_tpo_access(
             if counties and volumes:
                 header_clause += (
                     " A county identifier and volume measures therefore share that header row: "
-                    "the workbook carries county-resolved volume columns, measured from the "
-                    "header row itself rather than read off a sheet name. Which county those "
+                    "the workbook carries county-resolved volume columns, read from the header "
+                    "row's own column names rather than off a sheet name. Which county those "
                     "identifiers name -- the county a harvest came from, or the county a mill "
                     "sits in -- is not settled by a column name."
                 )
@@ -6583,10 +6607,10 @@ def compose_tpo_access(
 
     share_url = box_navigation.get("share_url_discovered")
     share_page_answered = "year_subfolders_found" in box_navigation
-    folder_parsed = box_navigation.get("nrum_data_folder_id") is not None
+    parse_error = box_navigation.get("shared_folder_parse_error")
+    folder_parsed = "shared_folder_parse_error" not in box_navigation
     year_folders = box_navigation.get("year_subfolders_found", [])
     probed_year = box_navigation.get("probed_year")
-    parse_error = box_navigation.get("shared_folder_parse_error")
     inspection_error = box_navigation.get("sample_file_inspection_error")
     if share_url is None:
         stopped = (
@@ -6721,13 +6745,13 @@ def run_fia(client: httpx.Client) -> None:
             wait_seconds=FIA_DATAMART_WAIT_SECONDS)
         for url in FIA_DATAMART_CANDIDATES
     ]
-    # `probe_url`, not `_common.probe`: these two routes answer with a real status, and the
-    # non-200 one answers with a body that is itself the evidence of *how* it is closed
-    # (ruling D-B). Which non-200 status that is has moved between runs -- `Evalidator/
-    # evalidator.jsp` served 403 to one run and 500 to the next, and answered both within
-    # seconds of each other on a hand check -- which is the case for retaining the bytes
-    # rather than trusting a status transcribed into a comment: the run's own extract says
-    # which it was. `_common.probe` discards bodies by construction, so it cannot retain that.
+    # `probe_url`, not `_common.probe`: every one of these routes that answers with a body has
+    # those bytes retained whatever the status (ruling D-B), and the retained bytes -- not this
+    # comment -- say what a run met there. `Evalidator/evalidator.jsp` served 403 to one run
+    # and 500 to the next, answering both within seconds on a hand check; those are not the
+    # same finding, since a route closed to this client and a fault at the server read
+    # differently, so which of them a run met is read back off that run's own extract and its
+    # `http_status`. `_common.probe` discards bodies by construction, so it cannot retain them.
     other_route_probes = []
     for i, url in enumerate(FIA_OTHER_ROUTES):
         res = probe_url(client, url)
