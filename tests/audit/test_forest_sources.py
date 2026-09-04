@@ -490,6 +490,107 @@ def test_xlsx_header_row_on_missing_row_one_returns_empty_list():
     assert m.xlsx_header_row(empty_sheet, []) == []
 
 
+# --- xlsx_first_sheet_part -----------------------------------------------------------------
+
+# The real xl/_rels/workbook.xml.rels of Alabama_2024.xlsx, trimmed to two relationships and
+# left in the order the file stores them (rId8 first) -- relationship order in the rels part
+# is not sheet order, which is exactly why the r:id has to be followed rather than assumed.
+WORKBOOK_RELS_XML = (
+    '<?xml version="1.0"?><Relationships>'
+    '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/'
+    'relationships/worksheet" Target="worksheets/sheet3.xml"/>'
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/'
+    'relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+    "</Relationships>"
+)
+
+
+def test_xlsx_first_sheet_part_resolves_the_first_sheet_through_its_relationship_id():
+    assert m.xlsx_first_sheet_part(WORKBOOK_XML, WORKBOOK_RELS_XML) == (
+        "County Production", "xl/worksheets/sheet1.xml")
+
+
+def test_xlsx_first_sheet_part_follows_the_rel_id_not_the_sheet_file_numbering():
+    # Finding 1: reading xl/worksheets/sheet1.xml and calling it "the first sheet" is an
+    # assumption about a mapping the workbook states explicitly. Here rId1 points at sheet7.
+    rels = WORKBOOK_RELS_XML.replace(
+        'Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+        'worksheet" Target="worksheets/sheet1.xml"',
+        'Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+        'worksheet" Target="worksheets/sheet7.xml"',
+    )
+    assert m.xlsx_first_sheet_part(WORKBOOK_XML, rels) == (
+        "County Production", "xl/worksheets/sheet7.xml")
+
+
+def test_xlsx_first_sheet_part_returns_none_when_the_relationship_is_absent():
+    assert m.xlsx_first_sheet_part(WORKBOOK_XML, "<Relationships/>") is None
+
+
+def test_xlsx_first_sheet_part_returns_none_when_there_are_no_sheets():
+    assert m.xlsx_first_sheet_part("<workbook><sheets/></workbook>", WORKBOOK_RELS_XML) is None
+
+
+# --- classify_header_row --------------------------------------------------------------------
+
+# The real 22-column header row of Alabama_2024.xlsx's first sheet, as recorded in
+# box_navigation.sample_file_first_sheet_headers by the run that fetched it.
+REAL_FIRST_SHEET_HEADERS = [
+    "REGION", "STATECD", "STATE_NAME", "COUNTYCD", "COUNTY_NAME", "YEAR", "OWNCD",
+    "OWNER_MEANING", "SPGRPCD", "SPGRP_NAME", "REMCLASSCD", "REMCLASSCD_MEANING", "SOURCECD",
+    "SOURCECD_MEANING", "PRODCD", "PRODCD_MEANING", "MCFVOL", "RPA_STD_AMOUNT",
+    "RPA_STD_AMOUNT_UOM_CODE", "RPA_STD_AMOUNT_UOM_MEANING", "SAWREMVOL", "GREEN_TONS",
+]
+
+
+def test_classify_header_row_names_the_county_identifier_columns():
+    classes = m.classify_header_row(REAL_FIRST_SHEET_HEADERS)
+    assert classes["county_identifier_headers"] == ["COUNTYCD", "COUNTY_NAME"]
+
+
+def test_classify_header_row_names_the_volume_measure_columns():
+    classes = m.classify_header_row(REAL_FIRST_SHEET_HEADERS)
+    assert classes["volume_measure_headers"] == ["MCFVOL", "SAWREMVOL", "GREEN_TONS"]
+
+
+def test_classify_header_row_does_not_count_a_uom_code_column_as_a_measure():
+    # RPA_STD_AMOUNT_UOM_CODE names a unit of measure, not a measured volume.
+    classes = m.classify_header_row(REAL_FIRST_SHEET_HEADERS)
+    assert "RPA_STD_AMOUNT_UOM_CODE" not in classes["volume_measure_headers"]
+
+
+def test_classify_header_row_on_an_unread_header_row_reports_empty_lists():
+    assert m.classify_header_row([]) == {
+        "county_identifier_headers": [], "volume_measure_headers": []}
+
+
+# --- scannable_text_page ---------------------------------------------------------------------
+
+
+def test_scannable_text_page_accepts_a_200_with_a_body():
+    assert m.scannable_text_page(
+        {"http_status": 200, "body": b"<html>x</html>"})
+
+
+def test_scannable_text_page_rejects_a_200_with_an_empty_body():
+    # Finding 3, second bullet: `retain_body` refuses an empty body, so a page gated on the
+    # status alone would be counted among the pages "fetched and hashed" with no extract
+    # behind it.
+    res = {"http_status": 200, "body": b""}
+    assert not m.scannable_text_page(res)
+    assert not m.answered_with_body(res)
+
+
+def test_scannable_text_page_rejects_a_retained_non_200_body():
+    res = {"http_status": 403, "body": b"<html>denied</html>"}
+    assert m.answered_with_body(res)
+    assert not m.scannable_text_page(res)
+
+
+def test_scannable_text_page_rejects_a_transport_failure():
+    assert not m.scannable_text_page({"http_status": 0, "body": b""})
+
+
 # --- distinguishes_harvest_origin_from_mill_receipts ---------------------------------------
 
 # The real sheet names from Ohio_2021.xlsx, fetched via the legacy Box download route this
@@ -799,10 +900,56 @@ def test_compose_fia_access_is_not_verified_when_no_harvest_attribute_is_catalog
     assert "none of them is a harvest-removals attribute" in access["reason"]
 
 
+MEASURE_WITHOUT_A_NUMBER = {
+    "num_est_desc": "Area of sampled land and water, in acres",
+    "est_meta": "Area estimate for land and water based on all sampled plots.",
+    "attribute_nbr": "",
+}
+
+
+def test_compose_fia_access_verified_does_not_claim_a_named_measure_when_none_was_named():
+    # Fix round 2, finding 2 site A: the fixed prefix read "Verified for retrieval, with the
+    # retrieved measure named: {measured}" while `measured` on this branch says the response
+    # named no measure. `real_probe_parsed` only requires non-empty estimates and metadata, so
+    # this branch is reachable, and both existing tests over it asserted only truthiness.
+    access = _fia_access(measure_proved=None)
+    assert access["status"] == "verified"
+    assert "with the retrieved measure named" not in access["reason"]
+    assert "no numEstDesc/estMeta metadata naming the measure it returned" in access["reason"]
+
+
+def test_compose_fia_access_verified_without_a_named_measure_refers_back_to_no_measure():
+    # The two compounding clauses: "That attribute number is not one of those harvest-removals
+    # attributes" and "retrieval of the one measure named above" -- both referents to a measure
+    # this branch never named.
+    reason = _fia_access(measure_proved=None)["reason"]
+    assert "That attribute number" not in reason
+    assert "the one measure named above" not in reason
+    assert "cannot be checked against those harvest-removals attribute numbers" in reason
+
+
+def test_compose_fia_access_verified_says_which_measure_when_the_number_is_unreadable():
+    # `proved_estimate_measure` returns a record whenever EITHER metadata field is present, so
+    # `attribute_nbr` can be "" -- an f-string reading "the request sent snum=" with nothing
+    # after it, and a membership test that can never match.
+    reason = _fia_access(measure_proved=MEASURE_WITHOUT_A_NUMBER)["reason"]
+    assert "Area of sampled land and water" in reason
+    assert "no leading attribute number" in reason
+    assert "That attribute number" not in reason
+
+
+def test_compose_fia_access_documented_branch_does_not_name_an_unnamed_measure():
+    reason = _fia_access(
+        measure_proved=None, snum_index=SNUM_INDEX_UNREADABLE)["reason"]
+    assert "could not be read this run" in reason
+    assert "no numEstDesc/estMeta metadata naming the measure it returned" in reason
+
+
 def test_compose_fia_access_reason_is_never_none():
     for kwargs in ({}, {"doc_params_parsed": False}, {"real_probe_parsed": False},
                    {"snum_index": SNUM_INDEX_UNREADABLE},
-                   {"snum_index": SNUM_INDEX_NO_HARVEST}, {"measure_proved": None}):
+                   {"snum_index": SNUM_INDEX_NO_HARVEST}, {"measure_proved": None},
+                   {"measure_proved": MEASURE_WITHOUT_A_NUMBER}):
         assert _fia_access(**kwargs)["reason"]
 
 
@@ -851,15 +998,94 @@ def test_compose_fia_uncovered_omits_the_dc_clause_when_dc_has_an_evaluation():
     assert "NAICS=0" in text
 
 
+def test_compose_fia_uncovered_does_not_read_an_empty_scan_as_a_zero_hit_finding():
+    # Fix round 2, finding 3: `scanned_pages` is empty whenever every FIA fetch returns
+    # non-200, and this composer is called unconditionally. "Zero industry-term hits across
+    # those pages" over zero pages is a vacuous zero presented as a substantive finding.
+    text = m.compose_fia_uncovered(
+        industry_scan={"pages_scanned": [], "industry_classification_terms": {"NAICS": 0},
+                       "fia_taxonomy_terms": {"species": 0}},
+        dc_has_evaluation=False, wc_row_count=0)
+    assert "Zero industry-term hits" not in text
+    assert "no industry concept to join on at all" not in text
+    assert "fetched and hashed ()" not in text
+    assert "is not a scan that found no industry terms" in text
+
+
+def test_compose_fia_uncovered_does_not_draw_the_zero_reading_when_terms_were_found():
+    text = m.compose_fia_uncovered(
+        industry_scan=INDUSTRY_SCAN | {
+            "industry_classification_terms": {"NAICS": 0, "SIC": 0, "industry": 4}},
+        dc_has_evaluation=True, wc_row_count=1138)
+    assert "industry=4" in text
+    assert "Zero industry-term hits" not in text
+    assert "no industry concept to join on at all" not in text
+    assert "not itself an industry concept" in text
+    assert text.count("INFERENCE MARKER, OPENING") == 1
+    assert text.count("INFERENCE MARKER, CLOSING") == 1
+
+
+def test_compose_fia_uncovered_does_not_assert_the_taxonomy_terms_are_used():
+    # The clause "hits for the concepts those same pages do use are {taxonomy}" names an
+    # outcome the function never branches on: an all-zero taxonomy count contradicts it.
+    text = m.compose_fia_uncovered(
+        industry_scan=INDUSTRY_SCAN | {
+            "fia_taxonomy_terms": {"land use": 0, "product": 0, "species": 0}},
+        dc_has_evaluation=True, wc_row_count=1138)
+    assert "do use" not in text
+    assert "species=0" in text
+
+
+def test_compose_fia_uncovered_does_not_place_dc_outside_an_index_that_was_never_read():
+    # Same class as the vacuous zero: `dc_has_evaluation` is False both when D.C. is absent
+    # from a parsed index and when no index parsed at all.
+    text = m.compose_fia_uncovered(
+        industry_scan=INDUSTRY_SCAN, dc_has_evaluation=False, wc_row_count=0)
+    assert "no FIA evaluation unit for the District of Columbia" not in text
+    assert "was not read this run" in text
+
+
 # --- compose_tpo_access -----------------------------------------------------------------------
 
 BOX_NAV_VERIFIED = {
     "share_url_discovered": "https://usfs-public.app.box.com/s/abc",
+    "nrum_data_folder_id": 121486946349,
+    "year_subfolders_found": ["2023", "2024"],
     "probed_year": "2024",
     "sample_file": "Alabama_2024.xlsx",
     "sample_file_sheet_names": [
         "County Production", "State Production", "Receipts", "Mill Locations",
     ],
+    "sample_file_first_sheet_name": "County Production",
+    "sample_file_first_sheet_headers": REAL_FIRST_SHEET_HEADERS,
+}
+BOX_NAV_VERIFIED_NO_HEADER_ROW = {
+    k: v for k, v in BOX_NAV_VERIFIED.items()
+    if k not in ("sample_file_first_sheet_name", "sample_file_first_sheet_headers")
+}
+# The Box share page answered non-200 (a 5xx outage is not a transport failure), so nothing
+# behind the share URL was ever read -- `year_subfolders_found` is set only once a status-200
+# body arrives, and `nrum_data_folder_id` only once that body parses as a folder listing.
+BOX_NAV_SHARE_PAGE_UNREAD = {
+    "share_url_discovered": "https://usfs-public.app.box.com/s/abc",
+}
+BOX_NAV_SHARE_PAGE_UNPARSED = {
+    "share_url_discovered": "https://usfs-public.app.box.com/s/abc",
+    "nrum_data_folder_id": None,
+    "year_subfolders_found": [],
+    "shared_folder_parse_error": "marker not found: sharedFolder",
+}
+BOX_NAV_NO_YEAR_SELECTED = {
+    "share_url_discovered": "https://usfs-public.app.box.com/s/abc",
+    "nrum_data_folder_id": 121486946349,
+    "year_subfolders_found": ["1997", "1999"],
+}
+BOX_NAV_NO_WORKBOOK_INSPECTED = BOX_NAV_NO_YEAR_SELECTED | {
+    "probed_year": "2024",
+    "sample_file_inspection_error": "File is not a zip file",
+}
+BOX_NAV_WORKBOOK_WITHOUT_BOTH_SHEET_KINDS = BOX_NAV_VERIFIED | {
+    "sample_file_sheet_names": ["County Production", "State Production"],
 }
 PROBES_ALL_ANSWERED = [
     {"url": "https://a/1", "outcome": "reachable"},
@@ -881,12 +1107,15 @@ def _tpo_access(**overrides):
 def test_compose_tpo_access_verified_marks_the_sheet_name_reading_as_an_inference():
     # Folded-in minor: `harvest_origin_available: true` is a regex match on sheet names from
     # one workbook. The inference that a sheet named "County Production" carries harvest-origin
-    # attribution is drawn from a quotation and must be marked.
+    # attribution is drawn from a quotation and must be marked. Fix round 2 adds a second
+    # marked span (the carried-over route provenance), so each span must carry the
+    # no-extract-hash disclosure itself rather than borrowing the other's.
     access = _tpo_access()
     assert access["status"] == "verified"
-    assert access["reason"].count("INFERENCE MARKER, OPENING") == 1
-    assert access["reason"].count("INFERENCE MARKER, CLOSING") == 1
-    assert "carries no extract hash" in access["reason"]
+    assert access["reason"].count("INFERENCE MARKER, OPENING") == 2
+    assert access["reason"].count("INFERENCE MARKER, CLOSING") == 2
+    assert access["reason"].count("carries no extract hash") == 2
+    assert "the origin/receipt split rests on the sheet names alone" in access["reason"]
 
 
 def test_compose_tpo_access_verified_names_the_one_workbook_the_reading_rests_on():
@@ -907,10 +1136,51 @@ def test_compose_tpo_access_not_obtainable_without_a_share_url_claims_no_folder_
     assert "discovered this run" not in access["reason"]
 
 
-def test_compose_tpo_access_not_obtainable_with_a_share_url_says_the_folder_was_entered():
-    access = _tpo_access(harvest_origin_available=False)
+def test_compose_tpo_access_not_obtainable_says_the_folder_was_entered_only_once_it_parsed():
+    # Fix round 2, finding 2 site B: the "was entered ... but no file fetched from it" clause
+    # was selected by `share_url is not None` alone, which establishes only that a URL was
+    # found in the page markup. `nrum_data_folder_id` / `year_subfolders_found` are the
+    # signals that the folder page actually answered and parsed.
+    access = _tpo_access(harvest_origin_available=False,
+                         box_navigation=BOX_NAV_NO_YEAR_SELECTED)
     assert "was entered" in access["reason"]
     assert "no Box share link" not in access["reason"]
+    assert "none of which this run selected to probe" in access["reason"]
+
+
+def test_compose_tpo_access_not_obtainable_claims_no_entry_when_the_share_page_never_answered():
+    access = _tpo_access(harvest_origin_available=False,
+                         box_navigation=BOX_NAV_SHARE_PAGE_UNREAD)
+    reason = access["reason"]
+    assert "was entered" not in reason
+    assert "no file fetched from it" not in reason
+    assert "did not answer this run with a status-200 body" in reason
+    assert "https://usfs-public.app.box.com/s/abc" in reason
+
+
+def test_compose_tpo_access_not_obtainable_names_the_folder_parse_failure():
+    reason = _tpo_access(harvest_origin_available=False,
+                         box_navigation=BOX_NAV_SHARE_PAGE_UNPARSED)["reason"]
+    assert "did not parse as a Box folder listing" in reason
+    assert "marker not found: sharedFolder" in reason
+    assert "was entered" not in reason
+
+
+def test_compose_tpo_access_not_obtainable_when_no_workbook_was_inspected():
+    reason = _tpo_access(harvest_origin_available=False,
+                         box_navigation=BOX_NAV_NO_WORKBOOK_INSPECTED)["reason"]
+    assert "2024 subfolder" in reason
+    assert "both fetched and inspected" in reason
+    assert "File is not a zip file" in reason
+
+
+def test_compose_tpo_access_not_obtainable_names_the_sheets_the_inspected_workbook_had():
+    reason = _tpo_access(
+        harvest_origin_available=False,
+        box_navigation=BOX_NAV_WORKBOOK_WITHOUT_BOTH_SHEET_KINDS)["reason"]
+    assert "Alabama_2024.xlsx" in reason
+    assert "State Production" in reason
+    assert "do not include both" in reason
 
 
 def test_compose_tpo_access_not_obtainable_names_a_transport_failure_as_the_weakest_basis():
@@ -926,6 +1196,47 @@ def test_compose_tpo_access_not_obtainable_names_a_transport_failure_as_the_weak
 def test_compose_tpo_access_not_obtainable_omits_the_transport_clause_when_every_route_answered():
     access = _tpo_access(harvest_origin_available=False, probes=PROBES_ALL_ANSWERED)
     assert "transport_failure" not in access["reason"]
+
+
+def test_compose_tpo_access_verified_derives_the_county_and_volume_columns_from_the_headers():
+    # Fix round 2, finding 1: the captured header row is derived evidence bearing on
+    # harvest-origin attribution and was going unused inside the marked inference.
+    reason = _tpo_access()["reason"]
+    assert "COUNTYCD" in reason
+    assert "SAWREMVOL" in reason
+    assert "county-resolved volume columns" in reason
+    assert reason.index("COUNTYCD") < reason.index("INFERENCE MARKER, OPENING")
+
+
+def test_compose_tpo_access_verified_does_not_claim_no_cell_values_were_read():
+    # The one sentence in either artifact that was false today: `inspect_xlsx` reads the first
+    # sheet's header row, and box_navigation records 22 cell values from it.
+    reason = _tpo_access()["reason"]
+    assert "no cell values were read" not in reason
+    assert "no data-row cells were read or compared across sheets" in reason
+
+
+def test_compose_tpo_access_verified_keeps_the_whose_county_caveat_outside_the_marker():
+    reason = _tpo_access()["reason"]
+    assert "is not settled by a column name" in reason
+    assert reason.index("is not settled by a column name") < reason.index(
+        "INFERENCE MARKER, OPENING")
+
+
+def test_compose_tpo_access_verified_says_so_when_no_header_row_was_read():
+    reason = _tpo_access(box_navigation=BOX_NAV_VERIFIED_NO_HEADER_ROW)["reason"]
+    assert "No header row was read" in reason
+    assert "county-resolved volume columns" not in reason
+
+
+def test_compose_tpo_access_verified_marks_the_carried_over_route_provenance():
+    # Fix round 2, finding 4: "(401 without a browser session)" was carried over from the
+    # shaping investigation -- no probe in `route_probes` produced a 401 this run.
+    reason = _tpo_access()["reason"]
+    assert "401" in reason
+    opened = reason.index("INFERENCE MARKER, OPENING", reason.index("INFERENCE MARKER, CLOSING"))
+    assert opened < reason.index("401")
+    assert "No probe in this run requested that URL" in reason
 
 
 # --- compose_pagination_note ------------------------------------------------------------------
@@ -1054,6 +1365,8 @@ def _summary_payload(access: dict) -> dict:
     {"snum_index": SNUM_INDEX_UNREADABLE},
     {"snum_index": SNUM_INDEX_NO_HARVEST},
     {"measure_proved": None},
+    {"measure_proved": MEASURE_WITHOUT_A_NUMBER},
+    {"measure_proved": None, "snum_index": SNUM_INDEX_UNREADABLE},
 ])
 def test_every_composed_fia_access_passes_the_summary_schema(overrides):
     # `_common.validate_summary` raises unless a non-verified status carries a truthy reason.
@@ -1065,8 +1378,15 @@ def test_every_composed_fia_access_passes_the_summary_schema(overrides):
 
 @pytest.mark.parametrize("overrides", [
     {},
+    {"box_navigation": BOX_NAV_VERIFIED_NO_HEADER_ROW},
     {"harvest_origin_available": False},
     {"harvest_origin_available": False, "box_navigation": {"share_url_discovered": None}},
+    {"harvest_origin_available": False, "box_navigation": BOX_NAV_SHARE_PAGE_UNREAD},
+    {"harvest_origin_available": False, "box_navigation": BOX_NAV_SHARE_PAGE_UNPARSED},
+    {"harvest_origin_available": False, "box_navigation": BOX_NAV_NO_YEAR_SELECTED},
+    {"harvest_origin_available": False, "box_navigation": BOX_NAV_NO_WORKBOOK_INSPECTED},
+    {"harvest_origin_available": False,
+     "box_navigation": BOX_NAV_WORKBOOK_WITHOUT_BOTH_SHEET_KINDS},
     {"harvest_origin_available": False, "probes": PROBES_WITH_TRANSPORT_FAILURE},
 ])
 def test_every_composed_tpo_access_passes_the_summary_schema(overrides):
