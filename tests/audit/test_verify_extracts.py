@@ -18,15 +18,20 @@ version, defect by defect:
 4. the manifest's repo-root-relative `path` column and its LF line endings;
 5. `is_empty`, which must keep accepting `0` and `False` as filled findings while rejecting a
    mapping whose every value is null -- and must keep accepting one with a lone null year;
-6. `check_document(None, ...)` failing E1, E2 and C together, so no criterion whose checks did
-   not run can print PASS;
+6. `check_document`'s two unreadable-document branches -- absent and empty -- each failing E1,
+   E2 and C together, so no criterion whose checks did not run can print PASS, and
+   `check_year_boundary` (E3) running outside the document guard for the same reason;
 7. `parse_classification_record` anchored to the `### 3.1` heading and the fence under it, so
    `=`-form assignments for these names elsewhere in the file cannot stand in for a §3.1 that
    moved. The real spec carries no such assignments outside §3.1: where three of the four names
    appear again, they are YAML or a bare word, so the specs below construct the case;
 8. `classification_block` bounding the block by the fence it locates rather than by a heading
    scan over raw lines, so a `#`-prefixed line inside the fence is block content rather than a
-   heading that truncates the section and makes the block look unclosed.
+   heading that truncates the section and makes the block look unclosed;
+9. the `PASS <criterion>:` / `FAIL <criterion>:` lines `main` prints. That report is the gate's
+   entire user-facing output and nothing asserted on one until `run_gate` below: both of the
+   defects item 6 names printed PASS, and neither was reachable by a test that only calls the
+   check functions with the arguments `main` would have passed them.
 
 `verify_extracts` is imported bare, like `_common`, per `tests/conftest.py`. Importing it is
 inert: the module's only side effects sit behind `if __name__ == "__main__"`.
@@ -36,6 +41,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 import subprocess
 
 import pytest
@@ -87,6 +93,50 @@ def write_extract(root, source: str, name: str, body: bytes, *, sidecar=True):
     if sidecar:
         (directory / f"{name}.sha256").write_text(f"{digest}  {name}\n")
     return target, digest
+
+
+def build_audit_root(root, **overrides) -> None:
+    """A synthetic audit root carrying one schema-valid summary per expected source.
+
+    Every expected source is present and nothing but `summary.json` is on disk, so criterion S
+    (source set, schema, manifest in both directions) is clean and a `main()` run's remaining
+    PASS/FAIL lines are about the criteria under test rather than about a half-built tree."""
+    for name in sorted(m.EXPECTED_SOURCES):
+        directory = root / name
+        directory.mkdir(parents=True, exist_ok=True)
+        payload = overrides.get(name, summary(name))
+        (directory / "summary.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
+def criterion_verdicts(out: str) -> dict[str, str]:
+    """`main`'s per-criterion report, parsed back into `{criterion: "PASS" | "FAIL"}`.
+
+    Matches only the report lines (`PASS E3: ...`), never the per-failure detail lines, which
+    carry the criterion in brackets (`FAIL [E3] ...`) and are a different statement: one says a
+    check fired, the other is the summary a reader of this gate acts on."""
+    return {match[2]: match[1]
+            for match in (re.match(r"^(PASS|FAIL) ([A-Z]\d?): ", line)
+                          for line in out.splitlines())
+            if match}
+
+
+def run_gate(tmp_path, monkeypatch, capsys, *, doc_text: str | None, **overrides):
+    """Drive `main()` against a synthetic audit root and return `(exit_code, verdicts)`.
+
+    `FINDING_DOC` and `MANIFEST` are both redirected under `tmp_path`: the first so the
+    document can be made absent or empty without touching the shipped deliverable, the second
+    so no run of this suite can ever write over the tracked manifest."""
+    root = tmp_path / "audit"
+    root.mkdir()
+    build_audit_root(root, **overrides)
+    doc_path = tmp_path / "source-audit.md"
+    if doc_text is not None:
+        doc_path.write_text(doc_text, encoding="utf-8")
+    monkeypatch.setattr(m.c, "AUDIT_ROOT", root)
+    monkeypatch.setattr(m, "FINDING_DOC", doc_path)
+    monkeypatch.setattr(m, "MANIFEST", tmp_path / "manifest.csv")
+    code = m.main()
+    return code, criterion_verdicts(capsys.readouterr().out)
 
 
 # --- is_empty: wrong in both obvious directions, so it is neither ---------------------------
@@ -595,15 +645,25 @@ def test_check_verdict_rejects_a_branch_outside_the_three():
 
 
 @pytest.mark.parametrize("year", ["2014", 2014.0, True, None])
-def test_check_verdict_rejects_a_year_boundary_that_is_not_an_integer(year):
+def test_check_year_boundary_rejects_a_year_that_is_not_an_integer(year):
     """E3: a reference year, not an approximation -- and `True` is an `int` subclass, which is
     why the check tests for `bool` first."""
-    summaries = {"qcew_identity": summary("qcew_identity",
-                                          findings={"branch": "decline",
-                                                    "verdict_sentence": GOOD_VERDICT}),
-                 "qcew_routes": summary("qcew_routes", findings={"earliest_year_served": year})}
-    failures = m.check_verdict(summaries, GOOD_VERDICT)
+    summaries = {"qcew_routes": summary("qcew_routes",
+                                        findings={"earliest_year_served": year})}
+    failures = m.check_year_boundary(summaries)
     assert [f.criterion for f in failures] == ["E3"]
+
+
+def test_check_year_boundary_accepts_a_reference_year_and_needs_no_document():
+    """E3's whole input is one findings value. It takes no `doc_text` parameter at all now, so
+    it cannot be put back behind a document guard without the signature change being visible."""
+    summaries = {"qcew_routes": summary("qcew_routes",
+                                        findings={"earliest_year_served": 2014})}
+    assert m.check_year_boundary(summaries) == []
+
+
+def test_check_year_boundary_reports_a_missing_qcew_routes_summary():
+    assert [f.criterion for f in m.check_year_boundary({})] == ["E3"]
 
 
 # --- the document checks --------------------------------------------------------------------
@@ -633,6 +693,55 @@ def test_check_document_requires_the_appendix_a_sources_and_the_section_headings
     details = " ".join(f.detail for f in failures)
     assert "'qcew'" in details and "'bea'" in details
     assert "§1.2" in details and "§21" in details
+
+
+# --- the per-criterion report `main` actually prints -------------------------------------------
+#
+# The PASS/FAIL line per criterion is this gate's entire user-facing output, and nothing
+# asserted on one until these tests. Both defects below were live and both printed PASS: a
+# criterion can only be trusted if something checks that its report line tracks its checks.
+
+
+def test_main_does_not_pass_e3_when_the_document_is_absent(tmp_path, monkeypatch, capsys):
+    """E3 (`qcew_routes.earliest_year_served` is a reference year) reads no document, but its
+    check used to sit behind `main`'s `if doc_text is not None` guard along with E2's. With the
+    document absent the gate printed `FAIL E1`, `FAIL E2`, `FAIL C` -- and `PASS E3`, with
+    nothing having looked at `earliest_year_served` at all. Here it is a string, so an E3 that
+    ran must fail."""
+    code, verdicts = run_gate(
+        tmp_path, monkeypatch, capsys, doc_text=None,
+        qcew_routes=summary("qcew_routes", findings={"earliest_year_served": "2017"}))
+    assert code == 1
+    assert verdicts["E3"] == "FAIL"
+    assert verdicts["E1"] == "FAIL"
+
+
+def test_main_passes_e3_on_a_real_reference_year_with_the_document_absent(
+        tmp_path, monkeypatch, capsys):
+    """The other direction, so the fix above is a check that ran and not a criterion wired to
+    fail: the same document-absent run passes E3 when the year is an `int`."""
+    _, verdicts = run_gate(
+        tmp_path, monkeypatch, capsys, doc_text=None,
+        qcew_routes=summary("qcew_routes", findings={"earliest_year_served": 2017}))
+    assert verdicts["E3"] == "PASS"
+
+
+def test_main_does_not_pass_c_for_an_empty_finding_document(tmp_path, monkeypatch, capsys):
+    """Criterion C's only failures come from the `REQUIRED_DOC_TEXT` and Appendix A checks,
+    which `check_document`'s empty-file early return skipped -- so an empty deliverable printed
+    `FAIL E1` and `PASS C`, vouching for §1.2 and §21 sections that are not there."""
+    code, verdicts = run_gate(tmp_path, monkeypatch, capsys, doc_text="   \n")
+    assert code == 1
+    assert verdicts["C"] == "FAIL"
+    assert verdicts["E1"] == "FAIL"
+
+
+def test_main_reports_a_criterion_line_for_every_declared_criterion(
+        tmp_path, monkeypatch, capsys):
+    """The report is only readable as a whole: a criterion silently dropped from the output is
+    as bad as one printing an unchecked PASS."""
+    _, verdicts = run_gate(tmp_path, monkeypatch, capsys, doc_text=None)
+    assert set(verdicts) == set(m.CRITERIA)
 
 
 # --- the manifest -----------------------------------------------------------------------------

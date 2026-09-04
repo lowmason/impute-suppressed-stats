@@ -521,8 +521,26 @@ def check_roadmap_fields(summaries: dict[str, dict], doc_text: str) -> list[Fail
     return failures
 
 
+def check_year_boundary(summaries: dict[str, dict]) -> list[Failure]:
+    """E3, on `qcew_routes`'s year boundary. Separate from `check_verdict`, and called
+    unconditionally, because it reads no document: while it lived inside `check_verdict` it
+    sat behind `main`'s `if doc_text is not None` guard, so an absent finding document made
+    the gate print `PASS E3` with `earliest_year_served` never looked at -- the exact "a
+    criterion whose checks never ran must not appear as passing" rule `check_document`'s
+    absent-document branch exists to honour."""
+    routes = summaries.get("qcew_routes")
+    if routes is None:
+        return [Failure("E3", "qcew_routes has no valid summary")]
+    earliest = routes["findings"].get("earliest_year_served")
+    if isinstance(earliest, bool) or not isinstance(earliest, int):
+        return [Failure("E3", "earliest_year_served must be an integer reference "
+                              f"year; it is {earliest!r}")]
+    return []
+
+
 def check_verdict(summaries: dict[str, dict], doc_text: str) -> list[Failure]:
-    """E2, on `qcew_identity`'s recorded verdict, and E3 on `qcew_routes`'s year boundary."""
+    """E2, on `qcew_identity`'s recorded verdict. E3 is `check_year_boundary`'s, which runs
+    whether or not the document exists."""
     failures: list[Failure] = []
     identity = summaries.get("qcew_identity")
     if identity is None:
@@ -537,14 +555,6 @@ def check_verdict(summaries: dict[str, dict], doc_text: str) -> list[Failure]:
         if sentence and sentence not in doc_text:
             failures.append(Failure("E2", "the verdict sentence is not present in the finding "
                                           "document"))
-    routes = summaries.get("qcew_routes")
-    if routes is None:
-        failures.append(Failure("E3", "qcew_routes has no valid summary"))
-    else:
-        earliest = routes["findings"].get("earliest_year_served")
-        if isinstance(earliest, bool) or not isinstance(earliest, int):
-            failures.append(Failure("E3", "earliest_year_served must be an integer reference "
-                                          f"year; it is {earliest!r}"))
     return failures
 
 
@@ -594,7 +604,15 @@ def check_document(
                 Failure("E2", absent + "look for the verdict sentence in it did not run"),
                 Failure("C", absent + "look for the §1.2 and §21 sections in it did not run")]
     if not doc_text.strip():
-        return [Failure("E1", "the finding file is empty")]
+        # Same criterion set as the absent branch above, for the same reason: the §3.1,
+        # REQUIRED_DOC_TEXT and Appendix A checks below are criterion C's only source of
+        # failures, so early-returning E1 alone printed `PASS C` for a deliverable with no
+        # §1.2 or §21 sections in it at all. The message stays specific to emptiness -- an
+        # empty file and a file missing four sections are different things to fix.
+        empty = "the finding file is empty, so the checks that "
+        return [Failure("E1", empty + "read it did not run"),
+                Failure("E2", empty + "look for the verdict sentence in it did not run"),
+                Failure("C", empty + "look for the §1.2 and §21 sections in it did not run")]
     failures = [Failure("E1", f"the §3.1 classification record is missing {key}={value!r} from "
                               "the finding document")
                 for key, value in classification.items() if value not in doc_text]
@@ -652,6 +670,9 @@ def main() -> int:
     failures += check_gitignore(read_optional(GITIGNORE))
     failures += check_findings_filled(summaries)
     failures += check_document(doc_text, classification, appendix_a)
+    # Unguarded: E3 reads only `qcew_routes.earliest_year_served`, so putting it behind the
+    # document guard would print PASS for a check that never ran.
+    failures += check_year_boundary(summaries)
     if doc_text is not None:
         failures += check_roadmap_fields(summaries, doc_text)
         failures += check_verdict(summaries, doc_text)
