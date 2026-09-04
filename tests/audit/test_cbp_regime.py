@@ -232,6 +232,37 @@ def test_regime_by_year_non_unknown_years_each_name_their_own_year_in_their_evid
         )
 
 
+def test_no_year_specific_doc_evidence_2020_reports_a_wrong_product_file_not_no_file_at_all():
+    """Finding 1 (fix round 3): 2020 is one of the two window years (2018, 2020) that DOES have
+    a year-labeled record-layout file archived at the Census record-layouts index -- just of the
+    wrong product (state ALL-NAICS totals, not the state-by-NAICS product this task's own
+    extracts use). The template shared with 2019/2021/2022/2023 said 'no year-labeled
+    record-layout file for {year} is archived ... at all: only 2017, 2018 and 2020 have one' for
+    every year it renders -- true for 2019/2021/2022/2023, but self-contradictory when rendered
+    for 2020 itself (it denies a file exists for 2020 in the same clause that lists 2020 among
+    the years that have one). This pins that 2020's own evidence instead states affirmatively
+    that a 2020-labeled file exists, of the wrong product, and therefore does not corroborate a
+    NAICS-level regime for 2020."""
+    evidence = m._no_year_specific_doc_evidence(2020)
+    assert "a 2020-labeled record-layout file is archived" in evidence
+    assert "no year-labeled record-layout file for 2020 is archived" not in evidence
+    assert "does not corroborate a NAICS-level regime for 2020" in evidence
+    # 2018 is the sibling wrong-product year and 2017 is the only right-product year -- both
+    # still named so the reader keeps the full three-way landscape, not just this year's slice.
+    assert "2018" in evidence
+    assert "2017 has a year-specific file of the right product" in evidence
+
+
+def test_no_year_specific_doc_evidence_years_with_no_layout_file_still_say_so():
+    """2019, 2021, 2022 and 2023 genuinely have no year-labeled record-layout file of either
+    product -- unlike 2020, this claim is actually true for them, and fix round 3 must not
+    disturb it while fixing 2020's self-contradiction."""
+    for year in (2019, 2021, 2022, 2023):
+        evidence = m._no_year_specific_doc_evidence(year)
+        assert f"no year-labeled record-layout file for {year} is archived" in evidence
+        assert f"a {year}-labeled record-layout file is archived" not in evidence
+
+
 def test_no_year_specific_doc_evidence_marks_the_banner_scope_reading_as_inference():
     """Finding 1 (fix round 1): methodology.html's 'no longer current' banner does not itself
     distinguish a prospective/current-approach scope from a retraction of the dated 2007-2018
