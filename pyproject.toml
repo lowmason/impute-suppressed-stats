@@ -48,6 +48,12 @@ line-length = 100
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# importlib import mode, not pytest's default prepend: with no `__init__.py` under `tests/`,
+# prepend mode keys test modules by bare basename, so `tests/unit/test_qcew_routes.py` and
+# `tests/audit/test_qcew_routes.py` collide with "import file mismatch" on a full-suite run.
+# The unit suite tests the package; the audit suite tests the Stage 0 scripts. Both earn the
+# same name, and importlib gives each its own module identity.
+addopts = "--import-mode=importlib"
 markers = [
     "network: hits a live source endpoint; excluded from the default run",
     "slow: takes more than a few seconds",
