@@ -215,3 +215,150 @@ def solve_bounds_command(
         f"flagged {flags['narrow_feasible_interval_flag'].sum()} narrow, "
         f"{flags['exact_reconstruction_flag'].sum()} exact"
     )
+
+
+@app.command("run-baselines")
+def run_baselines_command(
+    config: Path = typer.Option(..., "--config", exists=True, dir_okay=False),
+) -> None:
+    """Run every §10 transparent baseline and persist the results under this run's directory."""
+    import json
+
+    import polars as pl
+
+    from .baselines.runner import (
+        preferred_estimator,
+        preferred_estimator_by_month,
+        run_baselines,
+    )
+    from .build import write_parquet_deterministic
+    from .contracts import (
+        ANCHOR_AUDIT_SCHEMA,
+        BASELINE_RESULT_SCHEMA,
+        HarmonizedData,
+        schema_fingerprint,
+    )
+    from .runs import run_dir, run_id
+
+    cfg = load_config(config)
+    data = HarmonizedData.load(Path(cfg.storage.staged_uri))
+    run = run_dir(cfg, run_id(cfg, _input_digests(cfg)))
+    manifest_path = run / "schema_manifest.json"
+    if not manifest_path.exists():
+        raise typer.BadParameter(
+            f"{manifest_path} is missing: no `build-constraints` run matches the harmonized "
+            "inputs currently in the staged directory. Run `build-constraints` first"
+        )
+    results, audit = run_baselines(
+        data, cfg, constraint_set_hash=json.loads(manifest_path.read_text())["constraint_set_hash"]
+    )
+
+    out = run / "baseline_results"
+    out.mkdir(parents=True, exist_ok=True)
+    hashes = {
+        "baseline_results": write_parquet_deterministic(results, out / "baseline_results.parquet"),
+        "anchor_audit": write_parquet_deterministic(audit, out / "anchor_audit.parquet"),
+    }
+
+    ran = results.filter(pl.col("reconciliation_status") == "anchored_and_reconciled")
+    # Nested by estimator, not pooled. A single pooled count cannot answer "what fraction of
+    # THIS estimator's cells took the fallback", which is the number §10.8's ranking turns on and
+    # the one Task 19 reads back off this command.
+    basis_counts: dict[str, dict[str, int]] = {}
+    for row in ran.group_by(["estimator_id", "weight_basis"]).len().iter_rows(named=True):
+        basis_counts.setdefault(row["estimator_id"], {})[row["weight_basis"]] = row["len"]
+    declines = {
+        row["estimator_id"]: row["len"]
+        for row in results.filter(pl.col("reconciliation_status") == "declined")
+        .group_by("estimator_id")
+        .len()
+        .iter_rows(named=True)
+    }
+    # A SIBLING manifest. `schema_manifest.json` is `solve-bounds`'s precondition gate and an
+    # idempotence test pins its bytes, so nothing here may write to it.
+    (run / "baseline_manifest.json").write_text(
+        json.dumps(
+            {
+                "preferred_estimator": preferred_estimator(results),
+                "preferred_estimator_by_month": preferred_estimator_by_month(results),
+                "output_hashes": hashes,
+                "schema_fingerprints": {
+                    "baseline_results": schema_fingerprint(BASELINE_RESULT_SCHEMA),
+                    "anchor_audit": schema_fingerprint(ANCHOR_AUDIT_SCHEMA),
+                },
+                "weight_basis_counts": basis_counts,
+                "declines": declines,
+                "anchor": {
+                    "basis": "declared_national_total",
+                    "months_gated": audit.height,
+                    "months_anchored": int(audit["anchored"].sum()),
+                    "establishment_gap_max": int(audit["establishment_gap"].abs().max()),
+                },
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    typer.echo(f"preferred {preferred_estimator(results)}")
+    for estimator_id, counts in sorted(basis_counts.items()):
+        for basis, count in sorted(counts.items()):
+            typer.echo(f"{estimator_id} {basis} {count}")
+    for estimator_id, count in sorted(declines.items()):
+        typer.echo(f"declined {estimator_id} {count}")
+
+
+@app.command("reconcile")
+def reconcile_command(
+    config: Path = typer.Option(..., "--config", exists=True, dir_okay=False),
+) -> None:
+    """Re-reconcile the persisted baseline estimates and report any drift.
+
+    Stage 3 reconciles inside `run-baselines`, so this command verifies rather than produces: it
+    re-sums the persisted estimates against each month's recorded residual and reports the largest
+    difference. It does NOT re-run the allocation. Stage 5 makes it load-bearing, when posterior
+    draws reconcile separately from the estimators that seeded them.
+    """
+    import hashlib
+    import json
+
+    import polars as pl
+
+    from .runs import run_dir, run_id
+
+    cfg = load_config(config)
+    run = run_dir(cfg, run_id(cfg, _input_digests(cfg)))
+    path = run / "baseline_results" / "baseline_results.parquet"
+    if not path.exists():
+        raise typer.BadParameter(
+            f"{path} is missing: no `run-baselines` run matches the harmonized inputs currently "
+            "in the staged directory. Run `run-baselines` first"
+        )
+    results = pl.read_parquet(path)
+    ran = results.filter(pl.col("reconciliation_status") == "anchored_and_reconciled")
+    drift = (
+        ran.group_by(["estimator_id", "reference_month"])
+        .agg(pl.col("estimate").sum().alias("total"), pl.col("residual").first().alias("residual"))
+        .with_columns((pl.col("total") - pl.col("residual")).abs().alias("drift"))
+    )
+    worst = float(drift["drift"].max()) if drift.height else 0.0
+    within_tolerance = worst <= cfg.reconciliation.tolerance
+    # §16.1: "Every command MUST write a machine-readable manifest and MUST be idempotent for the
+    # same inputs." A verifier that only echoes leaves nothing for §18.1 to reproduce against, so
+    # the verdict and the digest of what was checked are persisted beside the results.
+    (run / "reconcile_manifest.json").write_text(
+        json.dumps(
+            {
+                "checked_pairs": drift.height,
+                "max_residual_drift": worst,
+                "tolerance": cfg.reconciliation.tolerance,
+                "within_tolerance": within_tolerance,
+                "baseline_results_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    typer.echo(f"checked {drift.height} (estimator, month) pairs")
+    typer.echo(f"max residual drift {worst:.3e}")
+    if not within_tolerance:
+        raise typer.Exit(code=1)
