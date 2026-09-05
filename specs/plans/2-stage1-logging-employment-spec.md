@@ -2472,7 +2472,7 @@ aggregation level carries state, 113310 and size simultaneously". Write the asse
 that predicate, and name the function for it. The file is **first quarter only**: all 24 Q2–Q4
 probes across the eight window years returned 404.
 
-- [ ] **Step 1: Copy the fixture**
+- [x] **Step 1: Copy the fixture**
 
 ```bash
 mkdir -p tests/fixtures/qcew_size
@@ -2482,7 +2482,7 @@ shasum -a 256 tests/fixtures/qcew_size/2017_q1_by_size.zip
 
 Compare the digest against `specs/findings/source-audit-extracts.csv` as in Task 7.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `tests/unit/test_qcew_size.py`:
 
@@ -2552,12 +2552,12 @@ def test_the_march_reference_is_recorded_on_every_row() -> None:
     assert out["reference_quarter"].unique().to_list() == ["2017Q1"]
 ```
 
-- [ ] **Step 3: Run to verify it fails**
+- [x] **Step 3: Run to verify it fails**
 
 Run: `uv run pytest tests/unit/test_qcew_size.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'logging_employment.ingest.qcew_size'`.
 
-- [ ] **Step 4: Write `ingest/qcew_size.py`**
+- [x] **Step 4: Write `ingest/qcew_size.py`**
 
 ```python
 """QCEW establishment-size ingestion: a national six-digit benchmark, first quarter only."""
@@ -2667,12 +2667,35 @@ def parse_qcew_national_size(
     )
 ```
 
-- [ ] **Step 5: Run to verify it passes**
+- [x] **Step 5: Run to verify it passes**
 
 Run: `uv run pytest tests/unit/test_qcew_size.py -v`
 Expected: PASS, 5 passed.
 
-- [ ] **Step 6: Confirm the March employment column choice against the file**
+> **DEVIATION (2026-09-05): Step 4 has three defects, all visible on opening the file.**
+> Shipped at **11 passed**, not 5.
+>
+> 1. **The by-size file speaks the *bulk* column vocabulary.** It ships `qtrly_estabs_count`, not
+>    `qtrly_estabs`, plus all five bulk-only title columns. Step 4's parser reads
+>    `pl.col("qtrly_estabs")` and raises `ColumnNotFoundError`. `read_by_size_zip` now reuses
+>    Task 8's `BULK_TO_SLICE_COLUMNS` / `BULK_ONLY_TITLE_COLUMNS`.
+> 2. **`SIZE_CLASS_BOUNDS` stopped at 7; BLS titles 0–9.** With `replace_strict(default=None)`,
+>    the 2,893 rows at codes 8–9 — **16.3% of this parser's output** — silently carried null
+>    bounds. Step 4's stated reason ("codes 8 and 9 … carry no 113310 rows") is also wrong: code
+>    **7** carries no 113310 rows either (113310 has codes 1–6 only) and was included anyway.
+>    Bounds now cover 1–9, `9` open-ended; the `default=` is removed and `UnknownSizeCodeError`
+>    (new, in `errors.py`) catches an unmapped code first.
+> 3. **`assert_no_state_industry_size` is never called from the build path** — it appears in this
+>    plan only in the interface list, two unit tests and its own definition. `SRC-QSIZE-002` binds
+>    *the parser*, so `parse_qcew_national_size` now calls it, taking `industry` as a keyword
+>    defaulting to `constants.INDUSTRY_CODE` so Task 14's call site is unchanged.
+>
+> Bounds are no longer typed: the file carries its own `size_title` column and a test re-derives
+> the table from it. Code `0` ("All establishment sizes") is excluded — a total, not a range.
+> Measured: **no emitted row has zero establishments**, which is why the binary
+> observed/suppressed status is safe here where `qcew_monthly` needs a true-zero rule.
+
+- [x] **Step 6: Confirm the March employment column choice against the file**
 
 `parse_qcew_national_size` reads `month3_emplvl` as the March level for a Q1 file. Verify that
 against the fixture rather than assuming it:
@@ -2691,7 +2714,7 @@ print(f.filter(f['industry_code']=='113310').select(
 Expected: the three monthly columns are present and 113310 rows appear at one aggregation level
 with a national `area_fips`. Record the observed aggregation level in your implementer report.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/logging_employment/ingest/qcew_size.py tests/fixtures/qcew_size/ \
