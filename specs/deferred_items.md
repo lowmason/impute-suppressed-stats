@@ -131,3 +131,27 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       few bytes, so `forest_sources.py` re-runs are not byte-stable either.
 - [ ] **Repo-wide pre-existing `ruff I001` import-order noise**, untouched by this
       stage.
+
+## 2-stage1-logging-employment-spec — 2026-09-05
+
+### Raised during Tasks 7–8
+
+- [ ] **`probe_slice_boundary` probes every candidate year rather than stopping at
+      the first one served.** Ascending sort makes `served[0]` and an early exit
+      return the same value, so this is cost, not correctness — but Task 16's live
+      run pays it as ~17 sequential `data.bls.gov` requests where ~5 would settle
+      the boundary. Left as the plan specifies it; revisit if the live run is slow
+      or if BLS rate-limits. The full sweep does buy one thing an early exit would
+      not: a complete per-year record of what the route served that run.
+- [ ] **`tests/audit/` also fails `black`, not just `ruff I001`.** The existing
+      repo-wide I001 item above undercounts the debt: 14 files under `tests/audit/`
+      would be reformatted. `src/logging_employment/` and `tests/unit/` are clean
+      under both, so a `black`/`ruff` gate can be enforced on the package today and
+      on `tests/audit/` only after a dedicated sweep.
+- [ ] **The bulk-route branch is exercised only under a synthetic boundary.**
+      Stage 0 measured `bulk_years_required = []`, so with the boundary where it
+      sits today no window year routes to bulk and no live run will ever take that
+      path. `route_for_year` is tested by passing `earliest_slice_year=2020`, and
+      `read_bulk_zip` by a reduced fixture. Neither is a substitute for the branch
+      having run end-to-end against a real bulk download; if the boundary ever moves
+      past a window year, treat that path as unproven in production.
