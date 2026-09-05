@@ -55,14 +55,25 @@ def write_parquet_deterministic(frame: pl.DataFrame, path: Path) -> str:
     assembled by `concat` chunks differently than the same rows read back in one pass.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    # Natural key first, remaining columns as tiebreak: the same determinism as sorting on every
-    # column, but the file reads in a sensible order rather than a hash order.
+    ordered = deterministic_order(frame).rechunk()
+    ordered.write_parquet(path, compression="uncompressed", statistics=False)
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def deterministic_order(frame: pl.DataFrame) -> pl.DataFrame:
+    """The row order `write_parquet_deterministic` writes in.
+
+    Natural key first, remaining columns as tiebreak: the same determinism as sorting on every
+    column, but the file reads in a sensible order rather than a hash order.
+
+    Public so a golden test can put an in-memory frame into the same order as the file it is
+    compared against. A test that re-implemented this sort would pass until the two drifted, and
+    then fail for a reason that has nothing to do with the values.
+    """
     natural = [
         c for c in ("area_fips", "state_fips", "reference_month", "size_code") if c in frame.columns
     ]
-    ordered = frame.sort(by=natural + [c for c in frame.columns if c not in natural]).rechunk()
-    ordered.write_parquet(path, compression="uncompressed", statistics=False)
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return frame.sort(by=natural + [c for c in frame.columns if c not in natural])
 
 
 def predicate_from_stored_metadata(cbp_raw_dir: Path, year: int) -> str:
