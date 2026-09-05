@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
+from pathlib import Path
 
 import polars as pl
 
@@ -161,3 +163,135 @@ def validate_frame(frame: pl.DataFrame, schema: dict[str, pl.DataType], name: st
     ]
     if wrong:
         raise SchemaMismatchError(f"{name}: dtype mismatches {wrong}")
+
+
+# §7.8's five constraint classes, in the spec's own order. The order is load-bearing: §7.8 says
+# "Only the first two may have is_hard=true", so `HARD_ELIGIBLE_CLASSES` is a slice of this tuple
+# rather than a second literal that could drift away from it.
+CONSTRAINT_CLASSES: tuple[str, ...] = (
+    "public_accounting_fact",
+    "definitional_support",
+    "empirical_measurement",
+    "modeling_assumption",
+    "sensitivity_assumption",
+)
+HARD_ELIGIBLE_CLASSES: tuple[str, ...] = CONSTRAINT_CLASSES[:2]
+
+# §7.8 does not enumerate `relation`, so these five are this package's decision. `integrality` is
+# not a relation in the algebraic sense; it is here because INV-004 requires *every* restriction to
+# carry a label, and a restriction recorded only as a column attribute would carry none.
+RELATIONS: tuple[str, ...] = ("eq", "le", "ge", "range", "integrality")
+
+# §7.10's suggested `bound_status` values, verbatim. Stage 2 emits five of the seven: it never
+# emits `model_estimable` or `model_only`, because deciding that a cell is estimable requires a
+# model and §9.1 forbids one at this stage.
+BOUND_STATUSES: tuple[str, ...] = (
+    "observed",
+    "exactly_recoverable",
+    "partially_identified",
+    "model_estimable",
+    "model_only",
+    "unbounded",
+    "infeasible",
+)
+
+# What licenses a constraint, as a closed set rather than free prose. §7.8 has no column for it, so
+# the row factory writes it into `provenance_text` behind an `evidence_kind=` prefix. It exists so
+# that §9.3's forbidden forms can be refused *by name*: a restriction whose warrant is an assumed
+# disclosure threshold can never be hard, whatever class a caller asks for.
+EVIDENCE_KINDS: tuple[str, ...] = (
+    "published_value",
+    "class_definition",
+    "unit_definition",
+    "rounding_documentation",
+    "empirical_fit",
+    "assumed_threshold",
+)
+EVIDENCE_PREFIX = "evidence_kind="
+
+TARGET_CELL_SCHEMA: dict[str, pl.DataType] = {
+    "cell_id": pl.String,
+    "state_fips": pl.String,
+    "reference_month": pl.String,
+    "size_concept": pl.String,
+    "size_class": pl.String,
+    "ownership_code": pl.String,
+    "industry_code": pl.String,
+    "naics_vintage": pl.String,
+    "observation_status": pl.String,
+    "observed_value": pl.Int64,
+    "source_snapshot_id": pl.String,
+    "qcew_disclosure_code": pl.String,
+}
+
+CONSTRAINT_ROW_SCHEMA: dict[str, pl.DataType] = {
+    "constraint_id": pl.String,
+    "component_id": pl.String,
+    "constraint_class": pl.String,
+    "relation": pl.String,
+    "rhs_lower": pl.Float64,
+    "rhs_upper": pl.Float64,
+    "is_hard": pl.Boolean,
+    "period_scope": pl.String,
+    "geography_scope": pl.String,
+    "industry_scope": pl.String,
+    "ownership_scope": pl.String,
+    "source_snapshot_ids": pl.String,
+    "provenance_text": pl.String,
+    "vintage_compatibility_status": pl.String,
+}
+
+CONSTRAINT_COEFFICIENT_SCHEMA: dict[str, pl.DataType] = {
+    "constraint_id": pl.String,
+    "cell_id": pl.String,
+    "coefficient": pl.Float64,
+}
+
+DETERMINISTIC_BOUNDS_SCHEMA: dict[str, pl.DataType] = {
+    "cell_id": pl.String,
+    "component_id": pl.String,
+    "rank": pl.Int64,
+    "nullity": pl.Int64,
+    "lp_lower": pl.Float64,
+    "lp_upper": pl.Float64,
+    "milp_lower": pl.Float64,
+    "milp_upper": pl.Float64,
+    "selected_lower": pl.Float64,
+    "selected_upper": pl.Float64,
+    "bound_status": pl.String,
+    "exactly_identified": pl.Boolean,
+    "integer_exactly_identified": pl.Boolean,
+    "solver_status": pl.String,
+    "solver_tolerance": pl.Float64,
+    "constraint_set_hash": pl.String,
+}
+
+_HARMONIZED_TABLES = ("qcew_monthly", "qcew_national_size", "cbp_state_size", "bridge")
+
+
+@dataclass(frozen=True)
+class HarmonizedData:
+    """The Stage 1 harmonized layer, as §16.2's `build_constraint_system` receives it.
+
+    Every downstream stage reads only this layer, never a source endpoint. Loading is eager and
+    fails on the first missing file rather than deferring to a Polars error at first use, so a run
+    started before `build-harmonized` halts with the path it wanted.
+    """
+
+    qcew_monthly: pl.DataFrame
+    qcew_national_size: pl.DataFrame
+    cbp_state_size: pl.DataFrame
+    bridge: pl.DataFrame
+
+    @classmethod
+    def load(cls, staged_root: Path) -> HarmonizedData:
+        """Read the four Stage 1 tables from a `data/staged`-shaped directory."""
+        frames = {}
+        for name in _HARMONIZED_TABLES:
+            path = staged_root / f"{name}.parquet"
+            if not path.exists():
+                raise FileNotFoundError(
+                    f"{path} is missing; run `logging-estimates build-harmonized` first"
+                )
+            frames[name] = pl.read_parquet(path)
+        return cls(**frames)
