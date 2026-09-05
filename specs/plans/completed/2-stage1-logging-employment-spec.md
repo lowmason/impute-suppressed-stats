@@ -111,8 +111,15 @@ verbatim has produced a failure or a defect in nine of the ten tasks executed so
 | 15 | `apply_universe_filter` is created and called by nothing — REQ-002 ships as a helper, not a pipeline guarantee. Step 3 also names a test that lives in another file | asking what calls it |
 | 16 | Each `fetch` overwrites the whole manifest, so it describes only the last source; and the build stacks every stored snapshot of a year, which for CBP means duplicates — 1,856 doubled keys | running the documented commands, then re-running them |
 
-**Six of those nine passed the task's own tests.** A green run here means the plan's assertions
-held, not that the code is right. Task 11 sharpens the point: its defect was invisible not because
+**Whether a block's defect would surface in its own tests, per task — derived, not tallied.**
+Green as written: **Task 9** (18 hash collisions, 11 tests green), **Task 11** (four INV-003 rows,
+9 green), **Task 15** (uncalled universe filter, 9 green), **Task 16** (manifest overwrite and
+snapshot stacking, 4 green). Red as written: **Tasks 7, 10, 13, 14** — a forbidden literal, a
+`ColumnNotFoundError`, a `ComputeError`, a `FileNotFoundError`. **Task 8** could not be set up at
+all. Earlier revisions of this note said "three of four" and then "six of nine"; both were
+incremented rather than recounted and neither survives the per-task check above — which is the
+same defect the note itself warns about. A green run here means the plan's assertions held, not
+that the code is right. Task 11 sharpens the point: its defect was invisible not because
 the tests were weak but because **the plan's fixture list excluded the data that exhibits it**.
 Check what a fixture set cannot show you, not only what it does.
 
@@ -123,8 +130,10 @@ What has actually found them, every time:
 2. **After the task goes green**, mutate the one thing the task exists to get right and confirm a
    test dies. If nothing dies, the behaviour is untested regardless of the pass count.
 
-Deviations are annotated inline at the step they affect, marked **DEVIATION**. Ticked boxes on
-Tasks 8 through 16 do **not** mean "done as written" — read the annotation. Items raised and
+Deviations from Task 8 on are annotated inline at the step they affect, marked **DEVIATION**;
+Task 7's is recorded only in the table above, because the note was written after Task 7 shipped.
+Ticked boxes on Tasks 7 through 16 do **not** mean "done as written" — read the annotation, and
+for Task 7 the table row. Items raised and
 deliberately not fixed are in `specs/deferred_items.md`.
 
 ---
@@ -4693,8 +4702,10 @@ Run: `uv run pytest -q` — expect all green; report the count.
 Run: `PYTHONPATH=scripts/audit uv run --no-project pytest tests/audit -q` — expect Stage 0 green.
 Run: `uv run ruff check src tests && uv run black --check src tests && uv run interrogate src`
 
-> **832 unit + integration tests pass; Stage 0's 666 audit tests pass unchanged.** `src/`,
-> `tests/unit/` and `tests/integration/` are clean under ruff, black and interrogate.
+> **166 unit + integration tests pass (152 unit, 14 integration); 832 in the full suite, which
+> includes Stage 0's 666 audit tests, unchanged.** `src/`, `tests/unit/` and `tests/integration/`
+> are clean under ruff and black; `src/` is at 100% under interrogate, which excludes `tests/` by
+> configuration.
 > `tests/audit/` is not, for the pre-existing reasons already in `specs/deferred_items.md`.
 
 - [x] **Step 7: Commit**
@@ -4741,8 +4752,9 @@ clauses, with the check that discharges it.
       `test_manifest_matches_the_snapshot_schema`, `test_manifest_writing_is_deterministic`.
 - [x] **`git ls-files` shows no `.env`.** Run `git ls-files | grep -c '^\.env$'` — expect `0`. Returns `0`; `.env` is gitignored.
 
-**All sixteen tasks complete, 2026-09-05.** 832 unit and integration tests pass, Stage 0's 666
-audit tests pass unchanged, and all 18 tests this checklist names by name exist and pass.
+**All sixteen tasks complete, 2026-09-05.** The full suite is 832 tests: 166 unit and
+integration (152 + 14) plus Stage 0's 666 audit tests, which are unchanged. All 18 tests this
+checklist names by name exist and pass.
 
 ## Plan Completion Protocol
 

@@ -68,10 +68,14 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       records 2017–2023 and omits 2024, so `regime_for_year(2024)` raises
       `UnknownDisclosureRegimeError`; `build_harmonized` additionally refuses to
       persist the `"unknown"` label even when config permits a report to carry it.
-      Confirmed against the live API: the 2024 CBP dataset returns a non-200, the
-      fetch skipped the year, and the window pull produced 7 CBP snapshot rows
-      rather than 8 — so the fail-closed path is the one the real run took, not
-      only the one a test takes. Re-open when a 2024 vintage ships.
+      Confirmed against the live API: `variables.json` for 2024 returns 404, the
+      fetch skipped the year on a bare non-200 `continue`, and the window pull
+      produced 7 CBP snapshot rows rather than 8. **Note what that does and does not
+      show.** No 2024 bytes entered the store, so `regime_for_year` — whose only
+      non-test call site is `build.py`, on the build path — was never reached. The
+      fail-closed guard is proven by an injected-snapshot test, not by this run; the
+      run demonstrates only that the year is absent upstream. Re-open when a 2024
+      vintage ships, at which point the guard becomes reachable for real.
 
 ### Reviewer Minors triaged as defer
 
