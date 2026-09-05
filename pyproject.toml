@@ -38,6 +38,11 @@ packages = ["src/logging_employment"]
 line-length = 100
 src = ["src", "tests"]
 
+# `typer.Option(...)` / `typer.Argument(...)` in a parameter default is Typer's API, not the
+# mutable-default bug B008 exists to catch. Every CLI command in this package uses that form.
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["typer.Option", "typer.Argument"]
+
 [tool.black]
 line-length = 100
 
