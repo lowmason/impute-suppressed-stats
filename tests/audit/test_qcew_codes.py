@@ -13,6 +13,10 @@ the module's only side effects sit behind `if __name__ == "__main__"`.
 
 from __future__ import annotations
 
+import pathlib
+
+import pytest
+
 import _common
 import qcew_codes
 
@@ -240,3 +244,107 @@ def test_geography_universe_note_keeps_marking_the_hand_authored_composition_arg
         assert "hand-authored in all three of its parts" in note
         assert "Unquoted premise, supplied by hand" in note
         assert _common.INDUSTRY_CODE in note
+
+
+# --- _period_basis -------------------------------------------------------------------------
+
+# The nine columns the live QCEW slice header builds on the same `monthN_emplvl` stem without
+# being monthly employment levels: three location quotients and six over-the-year changes.
+# Present in every fixture below so each test is a real test of the anchoring, not of a header
+# that had nothing to over-collect.
+DECOYS = [
+    "lq_month1_emplvl", "lq_month2_emplvl", "lq_month3_emplvl",
+    "oty_month1_emplvl_chg", "oty_month1_emplvl_pct_chg",
+    "oty_month2_emplvl_chg", "oty_month2_emplvl_pct_chg",
+    "oty_month3_emplvl_chg", "oty_month3_emplvl_pct_chg",
+]
+LIVE_HEADER = ["area_fips", "own_code", "industry_code", "year", "qtr", "qtrly_estabs",
+               "month1_emplvl", "month2_emplvl", "month3_emplvl", *DECOYS]
+
+QUOTED_REFERENCE_SENTENCE = (
+    "QCEW monthly employment counts covered workers who worked during, or received pay for, "
+    "the pay period including the 12th day of the month."
+)
+
+
+def _measured_half(basis: str) -> str:
+    """Everything before the documented half begins. The split token is the label the artifact
+    itself uses, so a rewording that dropped the label would fail here rather than silently
+    hand these tests the whole string to search."""
+    assert "Documented, not measured:" in basis
+    return basis.split("Documented, not measured:")[0]
+
+
+def test_period_basis_counts_only_the_bare_monthly_employment_columns():
+    """The anchoring test. An unanchored 'month'/'emplvl' match over this header collects all
+    twelve columns; the derivation must report the three that are monthly employment levels."""
+    basis = qcew_codes._period_basis(LIVE_HEADER)
+    assert "Monthly employment level columns present: 3 (month1_emplvl, month2_emplvl, " \
+           "month3_emplvl)" in basis
+    for decoy in DECOYS:
+        assert decoy not in basis
+
+
+def test_period_basis_reports_zero_when_only_decoy_columns_carry_the_stem():
+    """The discriminating case: a header with every lq_/oty_ column but no bare monthly
+    employment column at all. A predicate that over-collects would report nine here."""
+    basis = qcew_codes._period_basis(["area_fips", "year", "qtr", *DECOYS])
+    assert "Monthly employment level columns present: 0 (none)" in basis
+    # And with no column to read the documented statement onto, it must not claim one does.
+    assert "so there is no column here for that statement to be read onto" in basis
+    assert "read here as the QCEW monthly employment counts" not in basis
+
+
+def test_period_basis_reports_what_it_finds_rather_than_a_typed_three():
+    """A future QCEW layout with a fourth monthly column must say four. The replaced string
+    typed 'three monthly employment columns'; a derivation that still hardcodes three would
+    pass the live-header test above and fail here."""
+    basis = qcew_codes._period_basis([*LIVE_HEADER, "month4_emplvl"])
+    assert "Monthly employment level columns present: 4 (month1_emplvl, month2_emplvl, " \
+           "month3_emplvl, month4_emplvl)" in basis
+    assert "The 4 column(s) named above are read here" in basis
+
+
+def test_period_basis_reports_the_period_keying_columns_it_actually_finds():
+    assert "of 'year' and 'qtr': year, qtr" in qcew_codes._period_basis(LIVE_HEADER)
+    stripped = [col for col in LIVE_HEADER if col != "qtr"]
+    assert "of 'year' and 'qtr': year." in qcew_codes._period_basis(stripped)
+    assert "of 'year' and 'qtr': (none)." in qcew_codes._period_basis(DECOYS)
+
+
+def test_period_basis_keeps_the_reference_period_out_of_the_measured_half():
+    """The separation this work item exists for. The header establishes column names and
+    nothing about a reference period, so no '12th' claim may appear in the measured half --
+    and the reading that attaches it to these columns must sit inside the marker pair."""
+    for header in (LIVE_HEADER, [*LIVE_HEADER, "month4_emplvl"], DECOYS):
+        basis = qcew_codes._period_basis(header)
+        assert "12th" not in _measured_half(basis)
+        opening = basis.index("INFERENCE MARKER, OPENING")
+        closing = basis.index("INFERENCE MARKER, CLOSING")
+        attached = "12th day of its own month"
+        if attached in basis:
+            assert opening < basis.index(attached) < closing
+        assert basis.count("INFERENCE MARKER, OPENING") == 1
+        assert basis.count("INFERENCE MARKER, CLOSING") == 1
+        assert opening < closing
+        # The quotation is attribution, not inference, so it stays outside the marked span --
+        # the same placement `_geography_universe_note` gives its BLS quotation.
+        assert basis.index(QUOTED_REFERENCE_SENTENCE) < opening
+
+
+def test_period_basis_quotes_the_reference_verbatim_where_the_reference_is_readable():
+    """Truth, not presence: the quoted sentence must actually be in the file the artifact cites.
+    The reference is a personal skill outside this repo, so a clone without it skips rather
+    than failing -- but on a machine that has it, this is what stops the quotation drifting."""
+    ref = pathlib.Path(
+        "~/.claude/skills/bls-data-context/references/qcew.md").expanduser()
+    if not ref.exists():
+        pytest.skip(f"{ref} not present; nothing to check the quotation against")
+    text = ref.read_text(encoding="utf-8")
+    assert QUOTED_REFERENCE_SENTENCE in text
+    assert "### Employment concept" in text
+    assert "## Source pages reviewed" in text
+    basis = qcew_codes._period_basis(LIVE_HEADER)
+    assert QUOTED_REFERENCE_SENTENCE in basis
+    assert "references/qcew.md" in basis
+    assert "'Employment concept'" in basis

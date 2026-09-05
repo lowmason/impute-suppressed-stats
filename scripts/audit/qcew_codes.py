@@ -8,12 +8,21 @@ record the SRC-QCEW-007 national/state alignment statement."""
 from __future__ import annotations
 
 import io
+import re
 
 import polars as pl
 
 import _common as c
 
 SOURCE = "qcew_codes"
+# Anchored on purpose, and the anchoring is the point. The slice header carries three
+# families built on the same stem: the monthly employment levels themselves
+# (`month1/2/3_emplvl`), their location quotients (`lq_month1/2/3_emplvl`), and six
+# over-the-year change columns (`oty_month{1,2,3}_emplvl_chg` / `_pct_chg`). An unanchored
+# "month" or "emplvl" substring test collects all twelve, and a sentence derived from it
+# would report twelve monthly employment columns -- a predicate over-collecting the set it
+# names, which is the defect the derivation below exists to avoid, not to commit.
+MONTHLY_EMPLOYMENT_COLUMN = re.compile(r"^month(\d+)_emplvl$")
 TITLES = {
     "agglvl_code": "https://data.bls.gov/cew/doc/titles/agglevel/agglevel_titles.csv",
     "own_code": "https://data.bls.gov/cew/doc/titles/ownership/ownership_titles.csv",
@@ -280,6 +289,76 @@ def _geography_universe_note(
     )
 
 
+def _period_basis(slice_columns: list[str]) -> str:
+    """`alignment_srcqcew007.period_basis`, in two halves a reader can tell apart.
+
+    The first half is measured this run. It comes from the header of the concatenated slice
+    frame `load_slices()` already returns -- no extra fetch, and no re-read of anything: the
+    column names are in hand by the time this is called. Both the period-keying columns and
+    the monthly employment level columns are reported as found, never as a typed "three", so a
+    future QCEW layout carrying two or four of them says two or four here.
+
+    The second half is not measured and cannot be. A column *named* `month1_emplvl` fixes a
+    column name; it says nothing about which days of the month the value in it counts. No byte
+    this script fetches states that reference period -- not the titles CSVs, not the slice
+    files -- so it is quoted from documentation, labelled as fetched by nothing here, and the
+    step from that general statement onto these particular columns is delimited by the
+    `INFERENCE MARKER, OPENING`/`CLOSING` pair `qcew_identity.absent_state_months_note`
+    established. The quotation itself sits outside the marker, as in
+    `_geography_universe_note`: transcribing a documented sentence is not the same act as
+    reading it onto this run's columns, and only the second is an inference.
+    """
+    period_cols = [col for col in ("year", "qtr") if col in slice_columns]
+    monthly = sorted(col for col in slice_columns
+                     if MONTHLY_EMPLOYMENT_COLUMN.fullmatch(col))
+    measured = (
+        "Measured this run, from the header of the concatenated slice frame load_slices() "
+        "returns -- pl.concat(how='vertical') raises on a schema mismatch, so that one header "
+        "is the header every slice CSV qcew_routes recorded carries. Period-keying columns "
+        f"present, of 'year' and 'qtr': {', '.join(period_cols) or '(none)'}. Monthly "
+        f"employment level columns present: {len(monthly)} "
+        f"({', '.join(monthly) or 'none'}), matched on the anchored pattern "
+        "^month(\\d+)_emplvl$, which is what keeps the location-quotient (lq_) and "
+        "over-the-year (oty_) columns built on those same names out of the count. That is the "
+        "whole of what the header establishes here: which columns exist and what they are "
+        "called."
+    )
+    if monthly:
+        reading = (
+            f"The {len(monthly)} column(s) named above are read here as the QCEW monthly "
+            "employment counts that statement describes, so each is taken to count over the "
+            "pay period including the 12th day of its own month. The fetched slice files do "
+            "not say so: their header supplies column names and their rows supply counts, and "
+            "neither records a reference period."
+        )
+    else:
+        reading = (
+            "No column in this run's header matches ^month(\\d+)_emplvl$, so there is no "
+            "column here for that statement to be read onto, and none is claimed to count "
+            "over that pay period. The quotation is retained as the program-wide "
+            "documentation it is, describing QCEW monthly employment rather than anything "
+            "this run measured."
+        )
+    documented = (
+        "Documented, not measured: the reference period a monthly employment column counts "
+        "over. Hand-transcribed from the local bls-data-context skill's QCEW reference "
+        "(~/.claude/skills/bls-data-context/references/qcew.md, section 'Employment "
+        "concept'), which reads: 'QCEW monthly employment counts covered workers who worked "
+        "during, or received pay for, the pay period including the 12th day of the month.' "
+        "That reference is itself hand-authored and carries no per-section citation -- its "
+        "own 'Source pages reviewed' header lists the BLS Handbook of Methods QCEW pages it "
+        "drew on without tying any one of them to this sentence -- so no single BLS page is "
+        "named for it here. The quotation is not among this run's own fetches: this script's "
+        "extracts are the code/title CSVs TITLES names, and none of them states a reference "
+        "period. So the quotation carries no extract hash and no later run re-checks it. "
+        "INFERENCE MARKER, OPENING: what follows to the closing marker is a "
+        "reading of that general statement onto the columns measured above, not a further "
+        "measurement; it is supplied by hand, carries no extract hash and is re-checked by no "
+        f"later run. {reading} INFERENCE MARKER, CLOSING."
+    )
+    return f"{measured} {documented}"
+
+
 def main() -> None:
     client = c.build_client()
     extracts: list[c.ExtractRecord] = []
@@ -520,8 +599,9 @@ def main() -> None:
                 "own_code": private_own,
                 "industry_code": c.INDUSTRY_CODE,
                 "naics_vintage_by_year": naics_vintage,
-                "period_basis": "quarterly file, three monthly employment columns "
-                                "(month1/2/3_emplvl), pay period including the 12th",
+                # `loaded`, not `df`: the industry_code filter changes which rows are present,
+                # never which columns are, and the header is what this derivation reads.
+                "period_basis": _period_basis(loaded.columns),
                 "aligned": aligned,
                 "notes": notes,
             },
