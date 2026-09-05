@@ -9,7 +9,7 @@ from pathlib import Path
 import polars as pl
 
 from .config import Config
-from .errors import UnknownDisclosureRegimeError
+from .errors import AmbiguousSnapshotError, UnknownDisclosureRegimeError
 from .harmonize import bridge, disclosure
 from .harmonize.naics import vintage_for_year
 from .ingest import cbp, qcew, qcew_size
@@ -81,8 +81,71 @@ def predicate_from_stored_metadata(cbp_raw_dir: Path, year: int) -> str:
     return cbp.discover_naics_predicate(json.loads(candidates[0].read_text()))
 
 
+def snapshot_paths(
+    source_id: str,
+    raw_root: Path,
+    pattern: str,
+    *,
+    manifest_path: Path | None = None,
+) -> list[Path]:
+    """The stored files this build should read for one source, one per reference key.
+
+    The content-addressed store keys objects by their sha256, so a source that answers the same
+    request with different bytes lands a second object beside the first. CBP does exactly that:
+    its responses are set-identical across fetches but arrive in a different row order, so every
+    re-fetch stores another copy of the same year. A build that globbed the tree would then
+    concatenate both, and INV-007 forbids that silent stacking. The filename carries the reference
+    key (`2023.json`, `2017q1.csv`) while the hash is the directory, so grouping by name groups by
+    key.
+
+    `manifest_path` resolves the ambiguity when it can: the run manifest records the `raw_path` of
+    each snapshot that belongs to the run, which is what makes "the bytes this run was built from"
+    a recoverable fact rather than a guess. Without it, an ambiguous store halts rather than
+    picking a copy by sort order.
+    """
+    if manifest_path is not None and manifest_path.exists():
+        listed = [
+            Path(p)
+            for p in pl.read_parquet(manifest_path)
+            .filter(pl.col("source_id") == source_id)["raw_path"]
+            .to_list()
+        ]
+        if listed:
+            missing = sorted(str(p) for p in listed if not p.exists())
+            if missing:
+                raise FileNotFoundError(
+                    f"{manifest_path} lists {len(missing)} {source_id} snapshot(s) absent from the "
+                    f"store, starting with {missing[0]}; fetch again or build without a manifest"
+                )
+            return sorted(listed)
+
+    candidates = [
+        p
+        for p in (raw_root / source_id).rglob(pattern)
+        if not (source_id == "cbp" and cbp.is_metadata_path(p))
+    ]
+    by_key: dict[str, list[Path]] = {}
+    for path in candidates:
+        by_key.setdefault(path.name, []).append(path)
+    ambiguous = {k: sorted(str(p) for p in v) for k, v in by_key.items() if len(v) > 1}
+    if ambiguous:
+        key = min(ambiguous)
+        raise AmbiguousSnapshotError(
+            f"{source_id} has {len(ambiguous)} reference key(s) with more than one stored "
+            f"snapshot, e.g. {key} -> {ambiguous[key]}; concatenating them would stack two "
+            "vintages of the same cell (INV-007). Build with the run manifest, which records "
+            "which snapshot the run used."
+        )
+    return [by_key[k][0] for k in sorted(by_key)]
+
+
 def build_harmonized(
-    cfg: Config, *, raw_root: Path, out_root: Path, allow_network: bool = False
+    cfg: Config,
+    *,
+    raw_root: Path,
+    out_root: Path,
+    allow_network: bool = False,
+    manifest_path: Path | None = None,
 ) -> dict[str, str]:
     """Assemble every harmonized table from stored bytes and return their output hashes.
 
@@ -106,7 +169,7 @@ def build_harmonized(
                 naics_vintage=vintage_for_year(int(path.stem[:4])),
             )
         )
-        for path in sorted((raw_root / "qcew").rglob("*.csv"))
+        for path in snapshot_paths("qcew", raw_root, "*.csv", manifest_path=manifest_path)
     ]
     hashes["qcew_monthly"] = write_parquet_deterministic(
         pl.concat(qcew_frames), out_root / "qcew_monthly.parquet"
@@ -119,7 +182,7 @@ def build_harmonized(
             reference_year=int(path.stem[:4]),
             naics_vintage=vintage_for_year(int(path.stem[:4])),
         )
-        for path in sorted((raw_root / "qcew_size").rglob("*.zip"))
+        for path in snapshot_paths("qcew_size", raw_root, "*.zip", manifest_path=manifest_path)
     ]
     hashes["qcew_national_size"] = write_parquet_deterministic(
         pl.concat(size_frames), out_root / "qcew_national_size.parquet"
@@ -129,9 +192,7 @@ def build_harmonized(
     # Metadata is skipped by name, not by luck: `fetch` writes `{year}_variables.json` into this
     # same tree, it matches `*.json`, and its stem's first four characters are the same reference
     # year as the data file's.
-    for path in sorted(
-        p for p in (raw_root / "cbp").rglob("*.json") if not cbp.is_metadata_path(p)
-    ):
+    for path in snapshot_paths("cbp", raw_root, "*.json", manifest_path=manifest_path):
         year = int(path.stem[:4])
         regime = disclosure.regime_for_year(
             year, fail_on_unknown=cfg.sources.cbp.fail_on_unknown_disclosure_regime

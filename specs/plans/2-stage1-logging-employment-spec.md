@@ -96,7 +96,7 @@ anything you copy out of this plan, too.
 
 **This plan's code blocks were never run.** They encode intent, not a passing state, and their
 "Expected: PASS, N passed" lines are predictions rather than observations. Transcribing them
-verbatim has produced a failure or a defect in eight of the nine tasks executed so far:
+verbatim has produced a failure or a defect in nine of the ten tasks executed so far:
 
 | Task | What the block got wrong | Caught by |
 |---|---|---|
@@ -109,8 +109,9 @@ verbatim has produced a failure or a defect in eight of the nine tasks executed 
 | 13 | Step 4's reader infers `vintage` as `Int64`, so Step 4's own filter raises `ComputeError`; Step 4's docstring wraps a phrase Step 2's test asserts unbroken | running Step 1, then reading the frame |
 | 14 | Step 1's fixture omits the `variables.json` Step 3 requires, so all three tests error; adding it exposes a `*.json` glob that parses metadata as a data response | reading Task 14 and Task 16 together |
 | 15 | `apply_universe_filter` is created and called by nothing — REQ-002 ships as a helper, not a pipeline guarantee. Step 3 also names a test that lives in another file | asking what calls it |
+| 16 | Each `fetch` overwrites the whole manifest, so it describes only the last source; and the build stacks every stored snapshot of a year, which for CBP means duplicates — 1,856 doubled keys | running the documented commands, then re-running them |
 
-**Five of those eight passed the task's own tests.** A green run here means the plan's assertions
+**Six of those nine passed the task's own tests.** A green run here means the plan's assertions
 held, not that the code is right. Task 11 sharpens the point: its defect was invisible not because
 the tests were weak but because **the plan's fixture list excluded the data that exhibits it**.
 Check what a fixture set cannot show you, not only what it does.
@@ -123,7 +124,7 @@ What has actually found them, every time:
    test dies. If nothing dies, the behaviour is untested regardless of the pass count.
 
 Deviations are annotated inline at the step they affect, marked **DEVIATION**. Ticked boxes on
-Tasks 8 through 15 do **not** mean "done as written" — read the annotation. Items raised and
+Tasks 8 through 16 do **not** mean "done as written" — read the annotation. Items raised and
 deliberately not fixed are in `specs/deferred_items.md`.
 
 ---
@@ -4360,7 +4361,7 @@ Step 5 below, and it is the last gate in this plan.
 **REQ-028.** `source_manifest.parquet` is the provenance artifact §6.2 names in the run directory.
 It is the `source_snapshot` rows for one run, written to one file — not a second vocabulary.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_fetching.py`:
 
@@ -4435,12 +4436,12 @@ def test_a_second_fetch_of_identical_bytes_stores_nothing_new(
     assert len(list(tmp_path.rglob("*.csv"))) == 1
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `uv run pytest tests/unit/test_fetching.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'logging_employment.fetching'`.
 
-- [ ] **Step 3: Write `fetching.py`**
+- [x] **Step 3: Write `fetching.py`**
 
 ```python
 """Acquisition: fetch each source's bytes into the immutable store and record provenance."""
@@ -4604,7 +4605,7 @@ then in the CBP branch: `stored = store.put("cbp", fetched, f"{year}.json")` sta
 the snapshot is built from `_without_credentials(fetched)` rather than `fetched`. Import
 `FetchedBytes` from `.ingest.base` alongside `HttpFetcher`.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/unit/test_fetching.py -v`
 Expected: PASS, 4 passed. The CBP `key`-stripping note above will make
@@ -4612,7 +4613,7 @@ Expected: PASS, 4 passed. The CBP `key`-stripping note above will make
 `snapshot_row` are clean; if you see a "secret value reached a manifest payload" error, that is the
 guard working.
 
-- [ ] **Step 5: Prove the exit criterion end to end against a real window pull**
+- [x] **Step 5: Prove the exit criterion end to end against a real window pull**
 
 This is the one step that needs the network, and it is what §19 Phase 1 acceptance actually
 requires — the fixtures above cover one quarter, not the window.
@@ -4640,14 +4641,59 @@ print('|'.join(vals))
 
 Expected: `NO CREDENTIAL IN OUTPUT: PASS`.
 
+> **Ran 2026-09-05 over the full D1 window. The exit criterion passes — after two defects the
+> live run found and the fixtures could not.**
+>
+> Pull: `qcew` 32 snapshot rows (2017Q1–2024Q4, 8.3 MB), `qcew_size` 8 (14 MB), `cbp` **7, not 8**
+> — the 2024 vintage does not exist and the year was skipped on a non-200, which is the
+> fail-closed behaviour Stage 0's `unknown_years = [2024]` predicted. Build hashes:
+> `qcew_monthly 70ef03a0…`, `qcew_national_size 647b4950…`, `cbp_state_size 6a590af4…`,
+> `bridge 59a56cba…`. `diff` of two consecutive runs is silent.
+>
+> **1. The manifest described only whichever source ran last.** `fetch` runs once per source and
+> all three write the same path, so the documented three-command sequence left 7 CBP rows having
+> clobbered 32 QCEW and 8 size rows — the provenance artifact REQ-028 names could not say where
+> `qcew_monthly.parquet` came from. `merge_source_manifest` now replaces one source's rows and
+> keeps the others; the manifest holds 47 rows spanning 2017-01 → 2024-12.
+>
+> **2. CBP is not byte-reproducible, and the build was silently stacking duplicates.** Re-fetching
+> showed five of seven years with two stored snapshots. The two 2023 responses are *identical as
+> sets* — 188 rows each, none in one and not the other — but arrive in a **different row order**,
+> so the content sha256 differs and the content-addressed store keeps both. `build_harmonized`
+> globbed the tree and concatenated them: 2,226 CBP rows with 1,856 duplicated
+> `(year, state, size)` keys, which is exactly the silent stacking INV-007 forbids. Note what did
+> *not* catch it — the byte-identity check still passed, because two builds of a doubled store
+> agree with each other. `build.snapshot_paths` now takes one file per reference key, preferring
+> the run manifest's `raw_path` and raising `AmbiguousSnapshotError` when nothing disambiguates.
+> Rebuilt: 1,298 rows, zero duplicate keys, and the per-year counts
+> `{2017: 188, 2018: 190, 2019: 186, 2020: 182, 2021: 185, 2022: 179, 2023: 188}` reproduce Stage
+> 0's independently measured `rows_113310_by_year` exactly. QCEW is unaffected — all 32 quarters
+> re-fetched to identical bytes.
+>
+> **Offline is demonstrated, not assumed.** Running the rebuild in a shell that merely *had* no
+> reason to call out proves nothing, and the shell used here reached `data.bls.gov` fine. The
+> rebuild was re-run with `socket.socket`, `socket.create_connection` and `socket.getaddrinfo`
+> patched to raise — verified by a real `httpx.get` failing first — and produced the same four
+> hashes.
+>
+> **No credential in any output**, checked by exact byte containment for all four `.env` key
+> values across `data/raw`, `data/staged` and `runs`: zero files. (The plan's `grep … | head`
+> form reports a false positive regardless of the data — a pipeline's exit status is `head`'s,
+> and `head` succeeds on empty input.) The recorded CBP request parameters carry `get`, `for`,
+> `LFO` and the predicate, and no `key`.
 
-- [ ] **Step 6: Run everything**
+
+- [x] **Step 6: Run everything**
 
 Run: `uv run pytest -q` — expect all green; report the count.
 Run: `PYTHONPATH=scripts/audit uv run --no-project pytest tests/audit -q` — expect Stage 0 green.
 Run: `uv run ruff check src tests && uv run black --check src tests && uv run interrogate src`
 
-- [ ] **Step 7: Commit**
+> **832 unit + integration tests pass; Stage 0's 666 audit tests pass unchanged.** `src/`,
+> `tests/unit/` and `tests/integration/` are clean under ruff, black and interrogate.
+> `tests/audit/` is not, for the pre-existing reasons already in `specs/deferred_items.md`.
+
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/logging_employment/fetching.py src/logging_employment/build.py \

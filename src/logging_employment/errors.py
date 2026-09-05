@@ -33,3 +33,7 @@ class MissingCrossTabulationError(LoggingEmploymentError):
 
 class ConceptViolationError(LoggingEmploymentError):
     """A value would cross a concept boundary the spec forbids crossing."""
+
+
+class AmbiguousSnapshotError(LoggingEmploymentError):
+    """A reference key has more than one stored snapshot and nothing says which one to build."""

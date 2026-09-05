@@ -27,6 +27,22 @@ from .store import RawStore, snapshot_row
 KNOWN_SOURCES = ("qcew", "qcew_size", "cbp")
 
 
+def merge_source_manifest(rows: Sequence[dict[str, object]], path: Path, source_id: str) -> str:
+    """Fold one source's snapshot rows into the run manifest, replacing that source's rows.
+
+    `fetch` runs once per source, and all three invocations name the same artifact. Writing each
+    one straight out would leave the manifest describing whichever source ran last, so a reader
+    asking where `qcew_monthly.parquet` came from would find only CBP. Rows for the source being
+    fetched are replaced rather than appended, so re-fetching one source refreshes its provenance
+    without duplicating it or disturbing the others.
+    """
+    kept: list[dict[str, object]] = []
+    if path.exists():
+        existing = pl.read_parquet(path)
+        kept = existing.filter(pl.col("source_id") != source_id).to_dicts()
+    return write_source_manifest([*kept, *rows], path)
+
+
 def write_source_manifest(rows: Sequence[dict[str, object]], path: Path) -> str:
     """Write `source_manifest.parquet` reproducibly and return its sha256 (REQ-028, §18.1).
 
@@ -171,7 +187,7 @@ def fetch_source(
                 )
     finally:
         fetcher.close()
-    write_source_manifest(
-        rows, Path(output_root or cfg.storage.output_uri) / "source_manifest.parquet"
+    merge_source_manifest(
+        rows, Path(output_root or cfg.storage.output_uri) / "source_manifest.parquet", source
     )
     return rows

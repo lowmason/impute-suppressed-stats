@@ -79,7 +79,10 @@ def build_harmonized_command(
 
     cfg = load_config(config)
     hashes = build_harmonized(
-        cfg, raw_root=Path(cfg.storage.raw_uri), out_root=Path(cfg.storage.staged_uri)
+        cfg,
+        raw_root=Path(cfg.storage.raw_uri),
+        out_root=Path(cfg.storage.staged_uri),
+        manifest_path=Path(cfg.storage.output_uri) / "source_manifest.parquet",
     )
     for table, digest in sorted(hashes.items()):
         typer.echo(f"{table} {digest}")

@@ -11,7 +11,11 @@ import pytest
 
 from logging_employment.config import load_config
 from logging_employment.contracts import SOURCE_SNAPSHOT_SCHEMA, validate_frame
-from logging_employment.fetching import fetch_source, write_source_manifest
+from logging_employment.fetching import (
+    fetch_source,
+    merge_source_manifest,
+    write_source_manifest,
+)
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -210,3 +214,45 @@ def test_a_stored_raw_file_never_contains_the_api_key(
     for path in tmp_path.rglob("*"):
         if path.is_file():
             assert b"SECRET-CENSUS-KEY" not in path.read_bytes(), path
+
+
+def test_fetching_a_second_source_does_not_erase_the_first(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # `fetch` runs once per source against one manifest path. Overwriting would leave the
+    # provenance artifact describing whichever source ran last.
+    _serve(monkeypatch, (REPO / "tests" / "fixtures" / "qcew" / "slice_2017q1.csv").read_bytes())
+    fetch_source(
+        "qcew",
+        _cfg(),
+        env_path=None,
+        raw_root=tmp_path,
+        output_root=tmp_path,
+        years=[2017],
+        quarters=[1],
+    )
+    _serve_cbp(monkeypatch, "SECRET-CENSUS-KEY")
+    fetch_source(
+        "cbp", _cfg(), env_path=None, raw_root=tmp_path, output_root=tmp_path, years=[2023]
+    )
+    manifest = pl.read_parquet(tmp_path / "source_manifest.parquet")
+    assert sorted(manifest["source_id"].unique().to_list()) == ["cbp", "qcew"]
+
+
+def test_refetching_one_source_refreshes_rather_than_duplicates_it(tmp_path: Path) -> None:
+    path = tmp_path / "source_manifest.parquet"
+    write_source_manifest([ROW], path)
+    merge_source_manifest([{**ROW, "byte_count": 99}], path, "qcew")
+    manifest = pl.read_parquet(path)
+    assert manifest.height == 1
+    assert manifest["byte_count"].to_list() == [99]
+
+
+def test_merging_leaves_other_sources_untouched(tmp_path: Path) -> None:
+    path = tmp_path / "source_manifest.parquet"
+    other = {**ROW, "source_id": "cbp", "snapshot_id": "zzz"}
+    write_source_manifest([ROW, other], path)
+    merge_source_manifest([{**ROW, "byte_count": 99}], path, "qcew")
+    manifest = pl.read_parquet(path).sort("source_id")
+    assert manifest["source_id"].to_list() == ["cbp", "qcew"]
+    assert manifest.filter(pl.col("source_id") == "cbp")["byte_count"].to_list() == [10]

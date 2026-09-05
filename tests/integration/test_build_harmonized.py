@@ -165,3 +165,92 @@ def test_the_persisted_qcew_table_is_the_estimand_universe(
         constants.STATE_AREAS | {constants.NATIONAL_AREA}
     )
     assert frame["suppression_type"].unique().to_list() == ["unknown"]
+
+
+def test_two_snapshots_of_one_year_halt_rather_than_stacking(
+    frozen_raw: Path, tmp_path: Path
+) -> None:
+    # CBP answers the same request with the same rows in a different order, so its content hash
+    # differs on every fetch and the store keeps both copies. Concatenating them would double the
+    # year (INV-007), and the duplication is invisible in a row count nobody checks.
+    from logging_employment.errors import AmbiguousSnapshotError
+
+    second = frozen_raw / "cbp" / "other-hash"
+    second.mkdir()
+    shutil.copy(frozen_raw / "cbp" / "frozen" / "2023.json", second / "2023.json")
+    with pytest.raises(AmbiguousSnapshotError, match="2023.json"):
+        build_harmonized(_cfg(), raw_root=frozen_raw, out_root=tmp_path / "h")
+
+
+def test_the_run_manifest_resolves_which_snapshot_the_build_reads(
+    frozen_raw: Path, tmp_path: Path
+) -> None:
+    from logging_employment.build import snapshot_paths
+    from logging_employment.fetching import write_source_manifest
+
+    chosen = frozen_raw / "cbp" / "frozen" / "2023.json"
+    second = frozen_raw / "cbp" / "other-hash"
+    second.mkdir()
+    shutil.copy(chosen, second / "2023.json")
+
+    manifest = tmp_path / "source_manifest.parquet"
+    write_source_manifest(
+        [
+            {
+                "snapshot_id": "s",
+                "source_id": "cbp",
+                "request_url_or_file": "u",
+                "request_parameters_json": "{}",
+                "retrieved_at_utc": "t",
+                "source_publication_date": "",
+                "reference_start": "2023-03",
+                "reference_end": "2023-03",
+                "release_status": "final",
+                "naics_vintage": "NAICS 2022",
+                "schema_fingerprint": "f" * 64,
+                "content_sha256": "a" * 64,
+                "byte_count": 1,
+                "http_status": 200,
+                "parser_version": "cbp_state_size/1",
+                "raw_path": str(chosen),
+            }
+        ],
+        manifest,
+    )
+    assert snapshot_paths("cbp", frozen_raw, "*.json", manifest_path=manifest) == [chosen]
+    hashes = build_harmonized(
+        _cfg(), raw_root=frozen_raw, out_root=tmp_path / "i", manifest_path=manifest
+    )
+    assert len(hashes) == 4
+
+
+def test_a_manifest_naming_an_absent_snapshot_halts(frozen_raw: Path, tmp_path: Path) -> None:
+    from logging_employment.build import snapshot_paths
+    from logging_employment.fetching import write_source_manifest
+
+    manifest = tmp_path / "source_manifest.parquet"
+    write_source_manifest(
+        [
+            {
+                "snapshot_id": "s",
+                "source_id": "cbp",
+                "request_url_or_file": "u",
+                "request_parameters_json": "{}",
+                "retrieved_at_utc": "t",
+                "source_publication_date": "",
+                "reference_start": "2023-03",
+                "reference_end": "2023-03",
+                "release_status": "final",
+                "naics_vintage": "NAICS 2022",
+                "schema_fingerprint": "f" * 64,
+                "content_sha256": "a" * 64,
+                "byte_count": 1,
+                "http_status": 200,
+                "parser_version": "cbp_state_size/1",
+                "raw_path": "data/raw/cbp/gone/2023.json",
+            }
+        ],
+        manifest,
+    )
+    with pytest.raises(FileNotFoundError, match="absent from the store"):
+        snapshot_paths("cbp", frozen_raw, "*.json", manifest_path=manifest)
