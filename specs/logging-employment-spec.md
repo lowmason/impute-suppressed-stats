@@ -2198,3 +2198,54 @@ Other §21 rows keep their Appendix A defaults until a stage's plan or finding c
 >   **2024 is not available** (probe returned 404, vintage not yet published). Any Consumes
 >   block assuming CBP covers the full D1 window is wrong by one year.
 
+
+- Roadmap: specs/logging-employment-spec-roadmap.md, Stage 1 — on plan completion, tick the stage and re-validate later stages against what shipped.
+> Stage 1: COMPLETE (2026-09-05) — implemented by plan 2 (specs/plans/completed/2-stage1-logging-employment-spec.md).
+> Next: resume the roadmap.
+>
+> **§19 Phase 1 acceptance, verified over the real D1 window on 2026-09-05.** A frozen pull
+> rebuilds byte-identical harmonized Parquet offline: two consecutive `build-harmonized` runs
+> produce the same four hashes, and so does a run with the socket layer patched to raise. The
+> harmonized layer is `qcew_monthly` (4,812 rows, 96 months, 2017-01 → 2024-12),
+> `qcew_national_size` (140,343), `cbp_state_size` (1,298) and `bridge` (2), from 47 snapshots.
+>
+> **Later stages re-validated against what Stage 1 actually shipped:**
+> - **Stage 2 (what the harmonized layer hands you).** `qcew_monthly` is already
+>   universe-filtered — private ownership, states+DC and the national row only — so Stage 2 does
+>   *not* re-apply REQ-002, and a Puerto Rico or county row appearing downstream is a bug, not
+>   data. `harmonize.universe.state_universe_report` supplies the per-month facts: measured on
+>   the window, the 4,812 rows are 4,716 states+DC cells plus 96 national ones; of the
+>   states+DC cells 1,227 are `suppressed`, 27 `true_zero` and 3,462 `observed`.
+>   **1,227 / 4,716 = 0.2602** reproduces Stage 0's independently measured suppression
+>   share exactly, over the same denominator. Every suppressed cell is a state cell.
+>   `assert_definitional_alignment` (SRC-QCEW-007) must be called before any constraint is
+>   created; it is not called from the build path, by design, because it guards constraint
+>   construction rather than ingestion.
+> - **Stage 3 (allocation anchor) — ACTION STILL REQUIRED.** Unchanged by Stage 1. The
+>   `SRC-QCEW-006` `decline` stands; Stage 1 shipped the in-code universe report, not a
+>   substitute anchor.
+> - **Stage 4 (mask design).** `qcew_monthly.suppression_type` exists and is `unknown` on every
+>   real row, with `contracts.SUPPRESSION_TYPES = ("unknown", "primary_like",
+>   "complementary_like")`. INV-009 binds: Stage 4 writes the labelled values only onto synthetic
+>   masks it created, never onto an ingested row.
+> - **Stage 6 (CBP measurement model) — two things to know.** First, **CBP suppression is real in
+>   this window.** Reference year 2017 carries the EMPFLAG regime
+>   (`noise_infusion_plus_suppression`), and four of its 188 rows are withheld. In the
+>   harmonized table they carry `disclosure_status = 'suppressed'`, `employment` **null**,
+>   `establishments` 3 and `employment_flag` `'a'` -- Delaware and North Dakota, size classes
+>   `001` and `210`. The published `EMP = 0` those rows carried survives only in the raw
+>   store: INV-003 is exactly why the harmonized value is null rather than a zero, so do not
+>   look for zeros here. 2018–2023 are plain `noise_infusion` with no withheld row. Second,
+>   **the noise magnitude is not in the harmonized table.** `employment_noise_range` carries
+>   `EMP_N`, which is the literal `'0'` on every row of every year; the real per-cell flag is
+>   `EMP_N_F` (measured `G: 103, H: 51, J: 34` on 2023), which §7.5 has no column for. `fetch`
+>   selects it, so it is in the raw store — closing the gap means amending §7.5 and
+>   re-fingerprinting `CBP_STATE_SIZE_SCHEMA`. Recorded in `specs/deferred_items.md`.
+> - **Every stage that rebuilds from the raw store.** CBP responses are **not byte-reproducible**
+>   — successive fetches return set-identical rows in a different order, so each fetch stores a
+>   new content-addressed object. `build_harmonized` therefore selects one snapshot per reference
+>   key via `runs/source_manifest.parquet` and raises `AmbiguousSnapshotError` when nothing
+>   disambiguates. Build through the manifest, not by globbing `data/raw/`. QCEW is unaffected.
+> - **CBP coverage gap confirmed live.** Stage 0's probe result held: the 2024 vintage returns a
+>   non-200, the window pull produced 7 CBP snapshots rather than 8, and `regime_for_year(2024)`
+>   raises. Any `Consumes` block assuming CBP covers the full D1 window is still wrong by one year.

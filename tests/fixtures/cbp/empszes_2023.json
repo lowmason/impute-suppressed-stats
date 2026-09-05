@@ -1,0 +1,10 @@
+{
+  "name": "EMPSZES",
+  "label": "Employment size of establishments code",
+  "concept": "All Sectors: County Business Patterns, including ZIP Code Business Patterns, by Legal Form of Organization and Employment Size Class for the U.S., States, and Selected Geographies: 2023",
+  "required": "default displayed",
+  "predicateType": "string",
+  "group": "CB2300CBP",
+  "limit": 0,
+  "attributes": "EMPSZES_LABEL"
+}

@@ -1,0 +1,7 @@
+# 113310 rows extracted 2026-09-05 from the classification-codes skill's derived NAICS data:
+#   naics_2017.csv, naics_2022.csv (structure files) and naics_2017_to_2022.csv (concordance).
+# link_type is derived by that skill from code multiplicities after deduplication; it is NOT a
+# Census column. Census ships four columns and publishes no allocation weights.
+vintage,code,title,parent_code,change_indicator,link_type_to_next
+2017,113310,Logging,11331,,1:1
+2022,113310,Logging,11331,,

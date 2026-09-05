@@ -1,0 +1,656 @@
+{
+  "access": {
+    "reason": null,
+    "route": "https://www.census.gov/programs-surveys/cbp/technical-documentation/methodology.html; https://www.census.gov/programs-surveys/cbp/technical-documentation.html; https://www.census.gov/programs-surveys/cbp/technical-documentation/records-layouts.html; https://www.census.gov/programs-surveys/cbp/technical-documentation/record-layouts.html; https://www2.census.gov/programs-surveys/cbp/technical-documentation/records-layouts/2017_record_layouts/state_layout_2017.txt; https://www2.census.gov/programs-surveys/cbp/technical-documentation/records-layouts/noise-layout/state_x_lfo_layout.txt",
+    "status": "verified"
+  },
+  "coverage_span": {
+    "covered": "2017-2023",
+    "published_end": "2023",
+    "published_start": "2017",
+    "uncovered": "2024",
+    "window_end": "2024-12",
+    "window_start": "2017-01"
+  },
+  "extracts": [
+    {
+      "bytes": 371370,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/docs/methodology.html",
+      "retrieved_utc": "2026-09-04T16:25:20+00:00",
+      "sha256": "438a2ccc99b76957fd93a89662be5e111aee252d02029efdfef4addc1cc5fe2d",
+      "source": "cbp_regime",
+      "url": "https://www.census.gov/programs-surveys/cbp/technical-documentation/methodology.html"
+    },
+    {
+      "bytes": 309672,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/docs/technical-documentation.html",
+      "retrieved_utc": "2026-09-04T16:25:20+00:00",
+      "sha256": "41fcbc4e81506c0fd39c0fd8550380280a88796c923f49882732bbba88455d6d",
+      "source": "cbp_regime",
+      "url": "https://www.census.gov/programs-surveys/cbp/technical-documentation.html"
+    },
+    {
+      "bytes": 327902,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/docs/record-layouts.html",
+      "retrieved_utc": "2026-09-04T16:25:21+00:00",
+      "sha256": "1bd313c6b3d419446ed8eb5ba6f0c94c4084563fde768ea7d8eaaf898d5d3704",
+      "source": "cbp_regime",
+      "url": "https://www.census.gov/programs-surveys/cbp/technical-documentation/record-layouts.html"
+    },
+    {
+      "bytes": 9462,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/docs/2017_state_layout_2017.txt",
+      "retrieved_utc": "2026-09-04T16:25:22+00:00",
+      "sha256": "6bac5bac65442b86d1a0fddb4d0c9d883a9155bbf8adcd568e282e364903b8af",
+      "source": "cbp_regime",
+      "url": "https://www2.census.gov/programs-surveys/cbp/technical-documentation/records-layouts/2017_record_layouts/state_layout_2017.txt"
+    },
+    {
+      "bytes": 9215,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/docs/noise_state_x_lfo_layout.txt",
+      "retrieved_utc": "2026-09-04T16:25:22+00:00",
+      "sha256": "802f84396e7ce05d82779ebf0588ac1e0fcf796ed1993c28e2c19e44f25c306c",
+      "source": "cbp_regime",
+      "url": "https://www2.census.gov/programs-surveys/cbp/technical-documentation/records-layouts/noise-layout/state_x_lfo_layout.txt"
+    },
+    {
+      "bytes": 302,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2017_EMP.json",
+      "retrieved_utc": "2026-09-04T16:25:22+00:00",
+      "sha256": "4fd391fa731e69f662d14050df786274a881be1c0ba1efac56b040686d63b90d",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2017/cbp/variables/EMP.json"
+    },
+    {
+      "bytes": 344,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2017_EMP_F.json",
+      "retrieved_utc": "2026-09-04T16:25:22+00:00",
+      "sha256": "57f165b676fa5b3144fc97644979b86193c363ff26fd03eb42abb0f2965b33ad",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2017/cbp/variables/EMP_F.json"
+    },
+    {
+      "bytes": 362,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2017_EMP_N.json",
+      "retrieved_utc": "2026-09-04T16:25:22+00:00",
+      "sha256": "a788ff479e55e3ce08dee771c73c3dfdb53b33628432d722c7b5667662901913",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2017/cbp/variables/EMP_N.json"
+    },
+    {
+      "bytes": 393,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2017_EMP_N_F.json",
+      "retrieved_utc": "2026-09-04T16:25:22+00:00",
+      "sha256": "ad077046980d63fab64bf980347302484a6992e77fae70666b8366df67a9d74f",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2017/cbp/variables/EMP_N_F.json"
+    },
+    {
+      "bytes": 451,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2018_EMP.json",
+      "retrieved_utc": "2026-09-04T16:25:35+00:00",
+      "sha256": "aa11d7f19816247e76651218ac3ffa55a5550059e1920d183d90ea890ca8a203",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2018/cbp/variables/EMP.json"
+    },
+    {
+      "bytes": 493,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2018_EMP_F.json",
+      "retrieved_utc": "2026-09-04T16:25:35+00:00",
+      "sha256": "b71e5783e8ec706625b8f421502f15e6ccee30d6bd683d4c8f63b5b8e5db8e3d",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2018/cbp/variables/EMP_F.json"
+    },
+    {
+      "bytes": 471,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2018_EMP_N.json",
+      "retrieved_utc": "2026-09-04T16:25:35+00:00",
+      "sha256": "3fdee47efa76203d6bb7073b7325e7fab7c9c7a8f6e5897b9e0640be678ed928",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2018/cbp/variables/EMP_N.json"
+    },
+    {
+      "bytes": 514,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2018_EMP_N_F.json",
+      "retrieved_utc": "2026-09-04T16:25:35+00:00",
+      "sha256": "439f54ff94a1f67e3651e661a732362c1529169e6aacf7f4617ef2c971f2e0dd",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2018/cbp/variables/EMP_N_F.json"
+    },
+    {
+      "bytes": 344,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2019_EMP.json",
+      "retrieved_utc": "2026-09-04T16:25:35+00:00",
+      "sha256": "1b830990222883aa64d22aa208fa1a19671767e66259c0921d7a5f231cc40470",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2019/cbp/variables/EMP.json"
+    },
+    {
+      "bytes": 386,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2019_EMP_F.json",
+      "retrieved_utc": "2026-09-04T16:25:36+00:00",
+      "sha256": "c5829dcca50aade3755cd3102e2abb99105d883f849c37342ceaa65ea83c5a8f",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2019/cbp/variables/EMP_F.json"
+    },
+    {
+      "bytes": 364,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2019_EMP_N.json",
+      "retrieved_utc": "2026-09-04T16:25:36+00:00",
+      "sha256": "cd1022baed1da41d9f9249dfc41de5e0c45db552f3689cbb6539fda775af67d0",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2019/cbp/variables/EMP_N.json"
+    },
+    {
+      "bytes": 407,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2019_EMP_N_F.json",
+      "retrieved_utc": "2026-09-04T16:25:36+00:00",
+      "sha256": "458d5832a771ec45f391422c166df97fdf5c926012166d8b3a5105b91619f967",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2019/cbp/variables/EMP_N_F.json"
+    },
+    {
+      "bytes": 344,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2020_EMP.json",
+      "retrieved_utc": "2026-09-04T16:25:37+00:00",
+      "sha256": "5dc79ffb4a7924464d8a8a2541ea472984a31548eede5e8235491f71c6d36b5f",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2020/cbp/variables/EMP.json"
+    },
+    {
+      "bytes": 386,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2020_EMP_F.json",
+      "retrieved_utc": "2026-09-04T16:25:37+00:00",
+      "sha256": "9e11551facbe8147b04387108e3b7c32c6238cb6a66968a5a698420a17e2b508",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2020/cbp/variables/EMP_F.json"
+    },
+    {
+      "bytes": 364,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2020_EMP_N.json",
+      "retrieved_utc": "2026-09-04T16:25:37+00:00",
+      "sha256": "d688abfff30201daf0d56a04ecafeec5bf1edcedc93a860fca15e6c1cee04186",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2020/cbp/variables/EMP_N.json"
+    },
+    {
+      "bytes": 407,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2020_EMP_N_F.json",
+      "retrieved_utc": "2026-09-04T16:25:37+00:00",
+      "sha256": "38154629490e4d6ce3897f08c1e2e72c0197e8ba45d8b7519247b54f32096ea2",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2020/cbp/variables/EMP_N_F.json"
+    },
+    {
+      "bytes": 344,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2021_EMP.json",
+      "retrieved_utc": "2026-09-04T16:25:37+00:00",
+      "sha256": "c92ff7f63e85b545605d12487e256ff444dd030e219c97612003cdb47ed4697f",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2021/cbp/variables/EMP.json"
+    },
+    {
+      "bytes": 386,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2021_EMP_F.json",
+      "retrieved_utc": "2026-09-04T16:25:37+00:00",
+      "sha256": "c5b05c3d57e5fe72dcd1b2686fc29b2bb127fafebfc55983b05e3350b5cb7c1a",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2021/cbp/variables/EMP_F.json"
+    },
+    {
+      "bytes": 364,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2021_EMP_N.json",
+      "retrieved_utc": "2026-09-04T16:25:37+00:00",
+      "sha256": "559d92dfc4d0870e694d47065689125e85789030ff113bc3f45caa2df858d758",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2021/cbp/variables/EMP_N.json"
+    },
+    {
+      "bytes": 407,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2021_EMP_N_F.json",
+      "retrieved_utc": "2026-09-04T16:25:37+00:00",
+      "sha256": "5bc9e9ca787925d311611560cd4c5cec3a9016ac6a3ae01eb485d8e3e53b7db4",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2021/cbp/variables/EMP_N_F.json"
+    },
+    {
+      "bytes": 344,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2022_EMP.json",
+      "retrieved_utc": "2026-09-04T16:25:37+00:00",
+      "sha256": "d65065a4c72a2b3bdb7ee35fa60dbe96041008cdf3341b998c869f4b3ec9a0f7",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2022/cbp/variables/EMP.json"
+    },
+    {
+      "bytes": 386,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2022_EMP_F.json",
+      "retrieved_utc": "2026-09-04T16:25:37+00:00",
+      "sha256": "53c17818c619ca1f11dbdb8a445fd915b8b9d3c5575c3a54a82a9670a5856e74",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2022/cbp/variables/EMP_F.json"
+    },
+    {
+      "bytes": 364,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2022_EMP_N.json",
+      "retrieved_utc": "2026-09-04T16:25:37+00:00",
+      "sha256": "a8e0f144b72d61225e715b7f847ee516626ae676dae413cbffd07925d1d0c905",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2022/cbp/variables/EMP_N.json"
+    },
+    {
+      "bytes": 406,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2022_EMP_N_F.json",
+      "retrieved_utc": "2026-09-04T16:25:37+00:00",
+      "sha256": "5a1a47991476f14e3b3c8ce352f65c046cff3cef5bc347625a4e62326bc6e71a",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2022/cbp/variables/EMP_N_F.json"
+    },
+    {
+      "bytes": 344,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2023_EMP.json",
+      "retrieved_utc": "2026-09-04T16:25:37+00:00",
+      "sha256": "e4beb70adf07b9e5ae856f4aae46c45964d4b94605c253c3f3e22857800967f8",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2023/cbp/variables/EMP.json"
+    },
+    {
+      "bytes": 386,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2023_EMP_F.json",
+      "retrieved_utc": "2026-09-04T16:25:37+00:00",
+      "sha256": "1837367b51fc8717e7a84a1360516cd5f0fef08b2c092ac482ac371932d01186",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2023/cbp/variables/EMP_F.json"
+    },
+    {
+      "bytes": 364,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2023_EMP_N.json",
+      "retrieved_utc": "2026-09-04T16:25:37+00:00",
+      "sha256": "61aed1566b93cef735a36bdcaaf597cee24385ec2288b8057e5ce3372ad3658f",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2023/cbp/variables/EMP_N.json"
+    },
+    {
+      "bytes": 406,
+      "http_status": 200,
+      "path": "/Users/lowell/Projects/impute-suppressed-stats/data/raw/audit/cbp_regime/variables/2023_EMP_N_F.json",
+      "retrieved_utc": "2026-09-04T16:25:37+00:00",
+      "sha256": "94f9eec69936bd157a8842640b2793a591449c5abc0934fc53df4728eee4a05f",
+      "source": "cbp_regime",
+      "url": "https://api.census.gov/data/2023/cbp/variables/EMP_N_F.json"
+    }
+  ],
+  "findings": {
+    "documentation_fetched": [
+      {
+        "http_status": 200,
+        "url": "https://www.census.gov/programs-surveys/cbp/technical-documentation/methodology.html"
+      },
+      {
+        "http_status": 200,
+        "url": "https://www.census.gov/programs-surveys/cbp/technical-documentation.html"
+      },
+      {
+        "http_status": 404,
+        "url": "https://www.census.gov/programs-surveys/cbp/technical-documentation/records-layouts.html"
+      },
+      {
+        "http_status": 200,
+        "url": "https://www.census.gov/programs-surveys/cbp/technical-documentation/record-layouts.html"
+      },
+      {
+        "http_status": 200,
+        "url": "https://www2.census.gov/programs-surveys/cbp/technical-documentation/records-layouts/2017_record_layouts/state_layout_2017.txt"
+      },
+      {
+        "http_status": 200,
+        "url": "https://www2.census.gov/programs-surveys/cbp/technical-documentation/records-layouts/noise-layout/state_x_lfo_layout.txt"
+      }
+    ],
+    "emp_flag_variable_definitions_by_year": {
+      "2017": {
+        "EMP": {
+          "attribute_of": null,
+          "attribute_type": null,
+          "has_values_crosswalk": false,
+          "label": "Number of employees"
+        },
+        "EMP_F": {
+          "attribute_of": "EMP",
+          "attribute_type": "FLAG",
+          "has_values_crosswalk": false,
+          "label": "Flag for number of employees"
+        },
+        "EMP_N": {
+          "attribute_of": null,
+          "attribute_type": null,
+          "has_values_crosswalk": false,
+          "label": "Noise range for number of paid employees for pay period including March 12"
+        },
+        "EMP_N_F": {
+          "attribute_of": "EMP_N",
+          "attribute_type": "FLAG",
+          "has_values_crosswalk": false,
+          "label": "Flag for Noise range for paid employees for pay period including March 12"
+        }
+      },
+      "2018": {
+        "EMP": {
+          "attribute_of": null,
+          "attribute_type": null,
+          "has_values_crosswalk": false,
+          "label": "Number of employees"
+        },
+        "EMP_F": {
+          "attribute_of": "EMP",
+          "attribute_type": "FLAG",
+          "has_values_crosswalk": false,
+          "label": "Flag for number of employees"
+        },
+        "EMP_N": {
+          "attribute_of": null,
+          "attribute_type": null,
+          "has_values_crosswalk": false,
+          "label": "Noise range for number of employees"
+        },
+        "EMP_N_F": {
+          "attribute_of": "EMP_N",
+          "attribute_type": "FLAG",
+          "has_values_crosswalk": false,
+          "label": "Flag for Noise range for number of employees"
+        }
+      },
+      "2019": {
+        "EMP": {
+          "attribute_of": null,
+          "attribute_type": null,
+          "has_values_crosswalk": false,
+          "label": "Number of employees"
+        },
+        "EMP_F": {
+          "attribute_of": "EMP",
+          "attribute_type": "FLAG",
+          "has_values_crosswalk": false,
+          "label": "Flag for number of employees"
+        },
+        "EMP_N": {
+          "attribute_of": null,
+          "attribute_type": null,
+          "has_values_crosswalk": false,
+          "label": "Noise range for number of employees"
+        },
+        "EMP_N_F": {
+          "attribute_of": "EMP_N",
+          "attribute_type": "FLAG",
+          "has_values_crosswalk": false,
+          "label": "Flag for Noise range for number of employees"
+        }
+      },
+      "2020": {
+        "EMP": {
+          "attribute_of": null,
+          "attribute_type": null,
+          "has_values_crosswalk": false,
+          "label": "Number of employees"
+        },
+        "EMP_F": {
+          "attribute_of": "EMP",
+          "attribute_type": "FLAG",
+          "has_values_crosswalk": false,
+          "label": "Flag for number of employees"
+        },
+        "EMP_N": {
+          "attribute_of": null,
+          "attribute_type": null,
+          "has_values_crosswalk": false,
+          "label": "Noise range for number of employees"
+        },
+        "EMP_N_F": {
+          "attribute_of": "EMP_N",
+          "attribute_type": "FLAG",
+          "has_values_crosswalk": false,
+          "label": "Flag for Noise range for number of employees"
+        }
+      },
+      "2021": {
+        "EMP": {
+          "attribute_of": null,
+          "attribute_type": null,
+          "has_values_crosswalk": false,
+          "label": "Number of employees"
+        },
+        "EMP_F": {
+          "attribute_of": "EMP",
+          "attribute_type": "FLAG",
+          "has_values_crosswalk": false,
+          "label": "Flag for number of employees"
+        },
+        "EMP_N": {
+          "attribute_of": null,
+          "attribute_type": null,
+          "has_values_crosswalk": false,
+          "label": "Noise range for number of employees"
+        },
+        "EMP_N_F": {
+          "attribute_of": "EMP_N",
+          "attribute_type": "FLAG",
+          "has_values_crosswalk": false,
+          "label": "Flag for Noise range for number of employees"
+        }
+      },
+      "2022": {
+        "EMP": {
+          "attribute_of": null,
+          "attribute_type": null,
+          "has_values_crosswalk": false,
+          "label": "Number of employees"
+        },
+        "EMP_F": {
+          "attribute_of": "EMP",
+          "attribute_type": "FLAG",
+          "has_values_crosswalk": false,
+          "label": "Flag for number of employees"
+        },
+        "EMP_N": {
+          "attribute_of": null,
+          "attribute_type": null,
+          "has_values_crosswalk": false,
+          "label": "Noise range for number of employees"
+        },
+        "EMP_N_F": {
+          "attribute_of": "EMP_N",
+          "attribute_type": "FLAG",
+          "has_values_crosswalk": false,
+          "label": "Flag for Noise range for number of employees"
+        }
+      },
+      "2023": {
+        "EMP": {
+          "attribute_of": null,
+          "attribute_type": null,
+          "has_values_crosswalk": false,
+          "label": "Number of employees"
+        },
+        "EMP_F": {
+          "attribute_of": "EMP",
+          "attribute_type": "FLAG",
+          "has_values_crosswalk": false,
+          "label": "Flag for number of employees"
+        },
+        "EMP_N": {
+          "attribute_of": null,
+          "attribute_type": null,
+          "has_values_crosswalk": false,
+          "label": "Noise range for number of employees"
+        },
+        "EMP_N_F": {
+          "attribute_of": "EMP_N",
+          "attribute_type": "FLAG",
+          "has_values_crosswalk": false,
+          "label": "Flag for Noise range for number of employees"
+        }
+      },
+      "2024": null
+    },
+    "emp_n_f_caveat": "EMP_N_F (labelled 'Flag for Noise range for number of employees' in this run's fetched variable metadata) is CBP's actual per-cell noise-magnitude flag (documented in methodology.html's Noise Infusion section as low/moderate/high, G/H/J) -- distinct from EMP_N, which is labelled 'Noise range for number of employees' and is int-typed, not the flag itself. EMP_N_F does not appear in any year's 113310 x state response header this run (Task 7's query never selected it as an output column). Every observed EMP_N value in every year's extract this run is the literal string '0'. emp_n_present_and_nonzero_share in flag_evidence_by_year therefore measures only 'EMP_N present and not the string 0', not the published noise-flag distribution, and must not be read as evidence that no noise was applied in a year labelled noise_infusion above -- the regime label does not rest on this share.",
+    "flag_evidence_by_year": {
+      "2017": {
+        "EMP_F": {
+          "a": 4,
+          "null": 184
+        },
+        "EMP_N": {
+          "0": 188
+        },
+        "emp_n_f_in_response": false,
+        "emp_n_present_and_nonzero_share": 0.0,
+        "suppressed_share": 0.02127659574468085
+      },
+      "2018": {
+        "EMP_F": {
+          "null": 190
+        },
+        "EMP_N": {
+          "0": 190
+        },
+        "emp_n_f_in_response": false,
+        "emp_n_present_and_nonzero_share": 0.0,
+        "suppressed_share": 0.0
+      },
+      "2019": {
+        "EMP_F": {
+          "null": 186
+        },
+        "EMP_N": {
+          "0": 186
+        },
+        "emp_n_f_in_response": false,
+        "emp_n_present_and_nonzero_share": 0.0,
+        "suppressed_share": 0.0
+      },
+      "2020": {
+        "EMP_F": {
+          "null": 182
+        },
+        "EMP_N": {
+          "0": 182
+        },
+        "emp_n_f_in_response": false,
+        "emp_n_present_and_nonzero_share": 0.0,
+        "suppressed_share": 0.0
+      },
+      "2021": {
+        "EMP_F": {
+          "null": 185
+        },
+        "EMP_N": {
+          "0": 185
+        },
+        "emp_n_f_in_response": false,
+        "emp_n_present_and_nonzero_share": 0.0,
+        "suppressed_share": 0.0
+      },
+      "2022": {
+        "EMP_F": {
+          "null": 179
+        },
+        "EMP_N": {
+          "0": 179
+        },
+        "emp_n_f_in_response": false,
+        "emp_n_present_and_nonzero_share": 0.0,
+        "suppressed_share": 0.0
+      },
+      "2023": {
+        "EMP_F": {
+          "null": 188
+        },
+        "EMP_N": {
+          "0": 188
+        },
+        "emp_n_f_in_response": false,
+        "emp_n_present_and_nonzero_share": 0.0,
+        "suppressed_share": 0.0
+      },
+      "2024": null
+    },
+    "regime_by_year": {
+      "2017": {
+        "citation": "https://www.census.gov/programs-surveys/cbp/technical-documentation/methodology.html -- section 'Protecting Confidentiality > Noise Infusion'",
+        "evidence": "2017: fetched methodology.html (section 'Protecting Confidentiality > Noise Infusion') states CBP has used noise infusion since reference year 2007, and separately that reference year 2017 was the last year the EMPFLAG employment-size-range suppression flag was used ('The use of EMPFLAG was discontinued beginning in reference year 2018') and the first year a cell with fewer than three establishments is dropped from the release rather than published with a flag ('Beginning with reference year 2017, a cell is only published if it contains three or more establishments'). Both a noise-infusion mechanism and an EMPFLAG-based suppression mechanism are therefore documented as active for 2017, distinguishing it from every later window year. Corroborated by the year-specific layout fetched this run at https://www2.census.gov/programs-surveys/cbp/technical-documentation/records-layouts/2017_record_layouts/state_layout_2017.txt, which documents both EMPFLAG (size-range suppression codes A-M, plus 'S' for below-publication-standard withholding) and per-cell noise flags (G/H/J/N/S) as live fields on the state-by-NAICS file for this year. The 2017 113310 x state extract carries a small minority of rows with EMP_F == 'a' and no flag on the rest (a lowercase employment-size-range code, consistent with the fetched noise-layout state_x_lfo record layout's a=0-19-employee scheme; exact counts are in flag_evidence_by_year['2017'], computed fresh this run, not restated here as a number that could go stale against this static entry) -- reported as corroborating detail only, not as the basis for this regime label; the label rests on the two Census documents named above, not on this count.",
+        "regime": "noise_infusion_plus_suppression"
+      },
+      "2018": {
+        "citation": "https://www.census.gov/programs-surveys/cbp/technical-documentation/methodology.html -- section 'Protecting Confidentiality > Noise Infusion'",
+        "evidence": "2018: the same methodology.html passage cited for 2017 states 'The use of EMPFLAG was discontinued beginning in reference year 2018 and a noisy employment cell value is provided' -- naming 2018 explicitly as the year the EMPFLAG suppression flag stopped, leaving noise infusion (documented active continuously since reference year 2007) as the sole per-cell disclosure mechanism the page names for published cells from 2018 forward. The beginning-2017 rule dropping cells with fewer than three establishments from the release is not stated to have changed and remains documented as active. Every row of the 2018 113310 x state extract carries EMP_F == null (see flag_evidence_by_year['2018'], computed fresh this run), consistent with EMPFLAG's documented discontinuation -- reported as corroborating detail only, not as the basis for this label.",
+        "regime": "noise_infusion"
+      },
+      "2019": {
+        "citation": "https://www.census.gov/programs-surveys/cbp/technical-documentation/methodology.html -- section 'Protecting Confidentiality > Noise Infusion'",
+        "evidence": "No CBP documentation specific to reference year 2019 was found among the routes this script's own DOC_URLS fetches (see documentation_fetched -- only 2017 has a year-specific record-layout URL in that list). Additional manual verification while authoring this entry (live GETs against the Census record-layouts naming pattern for every window year, outside this script's own fetch list) found that unlike 2017, no year-labeled record-layout file for 2019 is archived at the Census record-layouts index at all: only 2017, 2018 and 2020 have one, and the 2018 and 2020 files describe the state ALL-NAICS-totals product rather than the state-by-NAICS product this task's own extracts use, so neither would have corroborated a NAICS-level regime for its own year even if it had been in scope. This entry therefore rests entirely on methodology.html's continuing statements -- noise infusion 'since reference year 2007' and EMPFLAG discontinued 'beginning in reference year 2018' -- read forward through 2019 with no later documented reversal found. methodology.html itself carries a banner, current as of its own June 18, 2026 revision, stating its content 'is no longer current' pending a U.S. Department of Commerce administrative order prohibiting the use of noise infusion -- a fact that by itself already means 2019's label carries less independent corroboration than 2017's or 2018's and should be weighted accordingly, not read as equally certain, regardless of how the banner's own scope is read. INFERENCE MARKER, OPENING: what follows to the closing marker is this auditor's own reading of that banner's scope, not a distinction the banner's text itself draws -- it carries no extract hash and is re-checked by no later run. The banner is read here as concerning Census's prospective/current approach following the recent order, not as a retraction of the dated 2007-2018 historical statements this entry relies on; a different reading, under which the banner casts doubt on those historical statements too, would leave this entry with no documentary basis at all and 2019 would have to be unknown instead. INFERENCE MARKER, CLOSING.",
+        "regime": "noise_infusion"
+      },
+      "2020": {
+        "citation": "https://www.census.gov/programs-surveys/cbp/technical-documentation/methodology.html -- section 'Protecting Confidentiality > Noise Infusion'",
+        "evidence": "No CBP documentation specific to reference year 2020 was found among the routes this script's own DOC_URLS fetches (see documentation_fetched -- only 2017 has a year-specific record-layout URL in that list). Additional manual verification while authoring this entry (live GETs against the Census record-layouts naming pattern for every window year, outside this script's own fetch list) found that a 2020-labeled record-layout file is archived at the Census record-layouts index, but it describes the state ALL-NAICS-totals product rather than the state-by-NAICS product this task's own extracts use, so it does not corroborate a NAICS-level regime for 2020. The same is true of 2018's year-labeled file; only 2017 has a year-specific file of the right product; and 2019, 2021, 2022 and 2023 have no year-labeled file of either product at all. This entry therefore rests entirely on methodology.html's continuing statements -- noise infusion 'since reference year 2007' and EMPFLAG discontinued 'beginning in reference year 2018' -- read forward through 2020 with no later documented reversal found. methodology.html itself carries a banner, current as of its own June 18, 2026 revision, stating its content 'is no longer current' pending a U.S. Department of Commerce administrative order prohibiting the use of noise infusion -- a fact that by itself already means 2020's label carries less independent corroboration than 2017's or 2018's and should be weighted accordingly, not read as equally certain, regardless of how the banner's own scope is read. INFERENCE MARKER, OPENING: what follows to the closing marker is this auditor's own reading of that banner's scope, not a distinction the banner's text itself draws -- it carries no extract hash and is re-checked by no later run. The banner is read here as concerning Census's prospective/current approach following the recent order, not as a retraction of the dated 2007-2018 historical statements this entry relies on; a different reading, under which the banner casts doubt on those historical statements too, would leave this entry with no documentary basis at all and 2020 would have to be unknown instead. INFERENCE MARKER, CLOSING.",
+        "regime": "noise_infusion"
+      },
+      "2021": {
+        "citation": "https://www.census.gov/programs-surveys/cbp/technical-documentation/methodology.html -- section 'Protecting Confidentiality > Noise Infusion'",
+        "evidence": "No CBP documentation specific to reference year 2021 was found among the routes this script's own DOC_URLS fetches (see documentation_fetched -- only 2017 has a year-specific record-layout URL in that list). Additional manual verification while authoring this entry (live GETs against the Census record-layouts naming pattern for every window year, outside this script's own fetch list) found that unlike 2017, no year-labeled record-layout file for 2021 is archived at the Census record-layouts index at all: only 2017, 2018 and 2020 have one, and the 2018 and 2020 files describe the state ALL-NAICS-totals product rather than the state-by-NAICS product this task's own extracts use, so neither would have corroborated a NAICS-level regime for its own year even if it had been in scope. This entry therefore rests entirely on methodology.html's continuing statements -- noise infusion 'since reference year 2007' and EMPFLAG discontinued 'beginning in reference year 2018' -- read forward through 2021 with no later documented reversal found. methodology.html itself carries a banner, current as of its own June 18, 2026 revision, stating its content 'is no longer current' pending a U.S. Department of Commerce administrative order prohibiting the use of noise infusion -- a fact that by itself already means 2021's label carries less independent corroboration than 2017's or 2018's and should be weighted accordingly, not read as equally certain, regardless of how the banner's own scope is read. INFERENCE MARKER, OPENING: what follows to the closing marker is this auditor's own reading of that banner's scope, not a distinction the banner's text itself draws -- it carries no extract hash and is re-checked by no later run. The banner is read here as concerning Census's prospective/current approach following the recent order, not as a retraction of the dated 2007-2018 historical statements this entry relies on; a different reading, under which the banner casts doubt on those historical statements too, would leave this entry with no documentary basis at all and 2021 would have to be unknown instead. INFERENCE MARKER, CLOSING.",
+        "regime": "noise_infusion"
+      },
+      "2022": {
+        "citation": "https://www.census.gov/programs-surveys/cbp/technical-documentation/methodology.html -- section 'Protecting Confidentiality > Noise Infusion'",
+        "evidence": "No CBP documentation specific to reference year 2022 was found among the routes this script's own DOC_URLS fetches (see documentation_fetched -- only 2017 has a year-specific record-layout URL in that list). Additional manual verification while authoring this entry (live GETs against the Census record-layouts naming pattern for every window year, outside this script's own fetch list) found that unlike 2017, no year-labeled record-layout file for 2022 is archived at the Census record-layouts index at all: only 2017, 2018 and 2020 have one, and the 2018 and 2020 files describe the state ALL-NAICS-totals product rather than the state-by-NAICS product this task's own extracts use, so neither would have corroborated a NAICS-level regime for its own year even if it had been in scope. This entry therefore rests entirely on methodology.html's continuing statements -- noise infusion 'since reference year 2007' and EMPFLAG discontinued 'beginning in reference year 2018' -- read forward through 2022 with no later documented reversal found. methodology.html itself carries a banner, current as of its own June 18, 2026 revision, stating its content 'is no longer current' pending a U.S. Department of Commerce administrative order prohibiting the use of noise infusion -- a fact that by itself already means 2022's label carries less independent corroboration than 2017's or 2018's and should be weighted accordingly, not read as equally certain, regardless of how the banner's own scope is read. INFERENCE MARKER, OPENING: what follows to the closing marker is this auditor's own reading of that banner's scope, not a distinction the banner's text itself draws -- it carries no extract hash and is re-checked by no later run. The banner is read here as concerning Census's prospective/current approach following the recent order, not as a retraction of the dated 2007-2018 historical statements this entry relies on; a different reading, under which the banner casts doubt on those historical statements too, would leave this entry with no documentary basis at all and 2022 would have to be unknown instead. INFERENCE MARKER, CLOSING.",
+        "regime": "noise_infusion"
+      },
+      "2023": {
+        "citation": "https://www.census.gov/programs-surveys/cbp/technical-documentation/methodology.html -- section 'Protecting Confidentiality > Noise Infusion'",
+        "evidence": "No CBP documentation specific to reference year 2023 was found among the routes this script's own DOC_URLS fetches (see documentation_fetched -- only 2017 has a year-specific record-layout URL in that list). Additional manual verification while authoring this entry (live GETs against the Census record-layouts naming pattern for every window year, outside this script's own fetch list) found that unlike 2017, no year-labeled record-layout file for 2023 is archived at the Census record-layouts index at all: only 2017, 2018 and 2020 have one, and the 2018 and 2020 files describe the state ALL-NAICS-totals product rather than the state-by-NAICS product this task's own extracts use, so neither would have corroborated a NAICS-level regime for its own year even if it had been in scope. This entry therefore rests entirely on methodology.html's continuing statements -- noise infusion 'since reference year 2007' and EMPFLAG discontinued 'beginning in reference year 2018' -- read forward through 2023 with no later documented reversal found. methodology.html itself carries a banner, current as of its own June 18, 2026 revision, stating its content 'is no longer current' pending a U.S. Department of Commerce administrative order prohibiting the use of noise infusion -- a fact that by itself already means 2023's label carries less independent corroboration than 2017's or 2018's and should be weighted accordingly, not read as equally certain, regardless of how the banner's own scope is read. INFERENCE MARKER, OPENING: what follows to the closing marker is this auditor's own reading of that banner's scope, not a distinction the banner's text itself draws -- it carries no extract hash and is re-checked by no later run. The banner is read here as concerning Census's prospective/current approach following the recent order, not as a retraction of the dated 2007-2018 historical statements this entry relies on; a different reading, under which the banner casts doubt on those historical statements too, would leave this entry with no documentary basis at all and 2023 would have to be unknown instead. INFERENCE MARKER, CLOSING.",
+        "regime": "noise_infusion"
+      },
+      "2024": {
+        "citation": "",
+        "evidence": "2024: not obtainable -- cbp_metadata's own dataset probe (dataset_probe_status_by_year) recorded a non-200 status for reference year 2024 and 2024 is absent from years_available; Task 7's report identifies this as a real HTTP 404 from cbp.json, not a transport blip. No 2024 CBP dataset exists to fetch a 2024-specific disclosure-methodology statement from, and the documentation fetched this run for 2017-2023 cannot be assumed to cover a year that postdates it: methodology.html's own banner (current as of its June 18, 2026 revision) states its regime description 'is no longer current' pending a U.S. Department of Commerce administrative order prohibiting the use of noise infusion, so even a hypothetical future 2024 release cannot be assumed to carry forward the 2018-2023 regime found above.",
+        "regime": "unknown"
+      }
+    },
+    "unknown_years": [
+      2024
+    ]
+  },
+  "generated_utc": "2026-09-04T16:25:37+00:00",
+  "source": "cbp_regime"
+}

@@ -188,7 +188,7 @@ Content changes the reviews forced, relative to the spec read alone:
       Exit: the finding file exists with every field above either filled or marked "not obtainable — why"; the SRC-QCEW-006 branch verdict names exactly one of enforce, residual-cells, or decline, in one sentence, citing the per-quarter comparison that produced it and stating whether the geography universe accounts for any gap; the QCEW year boundary is stated as a reference year, not an approximation; `git ls-files` shows no `.env`; every extract's recorded sha256 matches the file on disk.
       ROUTING: writing-plans
 
-- [ ] Stage 1: Foundation, ingestion, and harmonization (Phase 0 code + Phase 1)
+- [x] Stage 1: Foundation, ingestion, and harmonization (Phase 0 code + Phase 1) — COMPLETE 2026-09-05, plan 2
       Objective: Stand up the uv-managed hatchling package and produce immutable, vintage-aware QCEW, QCEW-size, and CBP tables with harmonized dimensions and explicit bridges.
       Spec: §3.1, §3.4 (contracts only), §5.5, §6, §7.1–7.5, §8.1–8.3, §8.6, §16.1 (`validate-config`, `registry verify`, `fetch`, `build-harmonized`), §17.1 rows 1–6 and 11, §17.4 rows 1–2, §17.6 (source parsing), §19 Phases 0–1; Rollout D1–D5.
       Gap closed: REQ-001, REQ-002 (universe filter), REQ-003 (config default), REQ-004, REQ-005, REQ-006 (parser), REQ-007 (guard), REQ-008, REQ-028 (source/run manifests), REQ-029 (schema/regime); INV-003, INV-007 (dimensions), INV-009 (default unknown), INV-010; SRC-QCEW-001–005, SRC-QCEW-006/007 (in-code tests); SRC-QSIZE-001, SRC-QSIZE-002 (assertion), SRC-QSIZE-004; SRC-CBP-001 (parser), SRC-CBP-002, SRC-CBP-003 (fail closed); SRC-OTH-001/004 (guards).

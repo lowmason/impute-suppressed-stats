@@ -48,15 +48,34 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       identity is untestable on a complete published state sum. Stage 3 must name
       a substitute anchor or accept a weaker assumption. Recorded in the plan's own
       `> Deviation` note at Task 5 Step 6.
-- [ ] **`cbp_metadata.lfo_by_year` is null for all eight window years** — the one
+- [x] **`cbp_metadata.lfo_by_year` is null for all eight window years** — the one
       roadmap-named field that shipped no value. Human ruling at this gate: carry
       as a §1.2 row rather than re-run. The "why" is recorded in the summary's
       sibling `notes` key and in `specs/findings/source-audit-notes.md`, and the
       exit gate declares it in `LEGITIMATELY_EMPTY_FINDINGS` rather than passing it
       silently. **Stage 1 (parser) should issue a dedicated `LFO,LFO_LABEL` query.**
-- [ ] **`cbp_regime.unknown_years = [2024]`.** CBP's 2024 disclosure regime is
+      **Closed 2026-09-05 by Stage 1 Task 11 Step 6.** `ingest.cbp.build_query`
+      selects `LFO,LFO_LABEL` as output columns rather than sending `LFO=001` only
+      as a filter. The live 2023 query returned 200 with `LFO_LABEL` present and
+      equal to `"All establishments"` on all 188 rows — the label for the `001`
+      code the window queries filter on. The response is shipped as
+      `tests/fixtures/cbp/data_113310_2023_live.json` and pinned by
+      `test_the_live_response_serves_the_lfo_label_the_query_asks_for`.
+- [x] **`cbp_regime.unknown_years = [2024]`.** CBP's 2024 disclosure regime is
       undetermined because the vintage is not published yet. Stage 1 fails closed on
       an unknown regime, which is the correct behaviour; revisit when 2024 CBP ships.
+      **Closed 2026-09-05 by Stage 1 Tasks 12 and 16.** `harmonize.disclosure`
+      records 2017–2023 and omits 2024, so `regime_for_year(2024)` raises
+      `UnknownDisclosureRegimeError`; `build_harmonized` additionally refuses to
+      persist the `"unknown"` label even when config permits a report to carry it.
+      Confirmed against the live API: `variables.json` for 2024 returns 404, the
+      fetch skipped the year on a bare non-200 `continue`, and the window pull
+      produced 7 CBP snapshot rows rather than 8. **Note what that does and does not
+      show.** No 2024 bytes entered the store, so `regime_for_year` — whose only
+      non-test call site is `build.py`, on the build path — was never reached. The
+      fail-closed guard is proven by an injected-snapshot test, not by this run; the
+      run demonstrates only that the year is absent upstream. Re-open when a 2024
+      vintage ships, at which point the guard becomes reachable for real.
 
 ### Reviewer Minors triaged as defer
 
@@ -131,3 +150,92 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       few bytes, so `forest_sources.py` re-runs are not byte-stable either.
 - [ ] **Repo-wide pre-existing `ruff I001` import-order noise**, untouched by this
       stage.
+
+## 2-stage1-logging-employment-spec — 2026-09-05
+
+### Raised during Tasks 7–11
+
+- [ ] **`probe_slice_boundary` probes every candidate year rather than stopping at
+      the first one served.** Ascending sort makes `served[0]` and an early exit
+      return the same value, so this is cost, not correctness — but Task 16's live
+      run pays it as ~17 sequential `data.bls.gov` requests where ~5 would settle
+      the boundary. Left as the plan specifies it; revisit if the live run is slow
+      or if BLS rate-limits. The full sweep does buy one thing an early exit would
+      not: a complete per-year record of what the route served that run.
+- [ ] **`tests/audit/` also fails `black`, not just `ruff I001`.** The existing
+      repo-wide I001 item above undercounts the debt: 14 files under `tests/audit/`
+      would be reformatted. `src/logging_employment/` and `tests/unit/` are clean
+      under both, so a `black`/`ruff` gate can be enforced on the package today and
+      on `tests/audit/` only after a dedicated sweep.
+- [ ] **The bulk-route branch is exercised only under a synthetic boundary.**
+      Stage 0 measured `bulk_years_required = []`, so with the boundary where it
+      sits today no window year routes to bulk and no live run will ever take that
+      path. `route_for_year` is tested by passing `earliest_slice_year=2020`, and
+      `read_bulk_zip` by a reduced fixture. Neither is a substitute for the branch
+      having run end-to-end against a real bulk download; if the boundary ever moves
+      past a window year, treat that path as unproven in production.
+- [ ] **`source_row_hash` is computed with `map_elements`,** i.e. one Python call
+      per output row. Fine at the 5,430 rows one quarter produces; the full D1
+      window is 32 quarters across three sources, and Task 14 rebuilds all of it
+      twice to prove byte-identity. If that run is slow, this is the first thing to
+      look at — `pl.concat_str(...).hash()` is not a substitute (it is not sha256
+      and not stable across Polars versions), so a native replacement needs care.
+
+### Raised during Tasks 11-16
+
+- [ ] **`cbp_state_size` has no column for `EMP_N_F`, the only field that carries
+      CBP's per-cell noise magnitude.** §7.5's field list was written against the
+      columns Stage 0's query selected, and Stage 0 never selected `EMP_N_F`
+      (`emp_n_f_in_response: false` for all eight years), so the omission is a spec
+      gap this stage's live run discovered rather than a parser defect.
+      `employment_noise_range` ← `EMP_N` is the correct mapping by Census's own
+      naming ("Noise range for number of employees"), and `EMP_N` is the literal
+      string `'0'` on every row of every window year — so the shipped column
+      preserves a field that carries no information while the one that does is
+      dropped at the parse layer. Measured on the live 2023 response this run
+      (188 rows, `113310` × state × `LFO=001`): `EMP_N_F` is present on every row,
+      distributed `G: 103, H: 51, J: 34` — methodology.html's low / moderate / high
+      noise bands. Not urgent and not a data loss: `ingest.cbp.build_query` already
+      selects `EMP_N_F`, so the immutable raw store captures it at rest and a later
+      stage can re-parse the stored bytes without re-fetching. Closing it means
+      amending §7.5 and `CBP_STATE_SIZE_SCHEMA` (a fingerprint change), which is a
+      spec decision rather than an implementation one. **Stage 6's measurement
+      model is the consumer that needs it** (SRC-CBP-004 enters CBP employment as a
+      noisy measurement; noise magnitude is what that model would weight by).
+
+- [ ] **Nothing re-derives `EMPFLAG_WITHHELD_CODES` against a post-2017 layout.**
+      The table is derived from the 2017 state record layout, which is the last year
+      EMPFLAG was used, so it is correct for the D1 window. A test re-derives it from
+      the shipped copy of that document. If CBP is ever read outside 2017–2023, the
+      derivation has no later layout to check against and an unrecognized flag will
+      halt the run — the intended §18.3 behaviour, but worth knowing before the run
+      halts.
+
+### Raised during Task 16's live run
+
+- [ ] **CBP responses are not byte-reproducible, so the immutable store cannot
+      deduplicate them.** Measured this run: two fetches of `2023/cbp` minutes apart
+      returned rows that are *identical as sets* (188 each, zero rows in one and not
+      the other) in a **different order**, so the content sha256 differs and
+      `RawStore.put` writes a second object. Five of the seven window years now carry
+      two snapshots. This is the same phenomenon Stage 0 recorded for
+      `bds/naics_11.json` ("three fetches gave three hashes; rows are equal as sets
+      but their order varies"), now confirmed for CBP. The build no longer stacks
+      them — `build.snapshot_paths` selects one file per reference key, preferring the
+      run manifest and halting with `AmbiguousSnapshotError` when nothing disambiguates
+      — so the INV-007 exposure is closed. What is *not* closed is the store growing a
+      copy per fetch. Options if that becomes a problem: canonicalize CBP JSON (sort
+      rows) before hashing, which would break "bytes verbatim"; or record a
+      content-independent identity alongside the hash. Neither is obviously right, so
+      neither is done. **QCEW is unaffected** — all 32 quarters re-fetched to identical
+      bytes.
+
+- [ ] **`qcew_national_size` carries every industry, not just 113310.** 140,343 rows
+      over the eight window years, against 1,298 for `cbp_state_size`. Task 10's parser
+      filters to national geography and to size codes other than "all sizes", and uses
+      its `industry` argument only for the dimensionality assertion, never as a row
+      filter. §7.4's schema has an `industry_code` column, so a multi-industry table is
+      consistent with the contract and this is not a defect — but it is ~99% of the
+      harmonized layer's row count and every `build-harmonized` run pays for it twice
+      under the byte-identity check. Revisit if the rebuild gets slow, together with the
+      `map_elements` item above.

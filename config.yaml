@@ -1,0 +1,33 @@
+# Stage 1 configuration. The project/storage/sources blocks are copied byte-for-byte
+# from Appendix A of specs/logging-employment-spec.md (its lines 2022-2049), extracted
+# with sed rather than retyped. Appendix A's other source entries (tpo, fia, ces, susb,
+# bds, nonemployer, bea) and its constraints/model/reconciliation/validation/promotion/
+# disclosure blocks are omitted: Config forbids extra keys and those belong to Stages 2-8.
+project:
+  name: 'logging-state-employment'
+  industry_code_supplied: '1113310'
+  industry_code_used: '113310'
+  industry_title: 'Logging'
+  ownership: 'private'
+  geography_universe: 'states_dc'
+  start_month: '2017-01'
+  end_month: '2024-12'
+  analysis_mode: 'retrospective_final'
+  size_concept: 'march_reference'
+
+storage:
+  raw_uri: 'data/raw'
+  staged_uri: 'data/staged'
+  output_uri: 'runs'
+  immutable_raw: true
+
+sources:
+  qcew:
+    enabled: true
+    release_status: 'final'
+  qcew_size:
+    enabled: true
+  cbp:
+    enabled: true
+    api_key_env: 'CENSUS_API_KEY'
+    fail_on_unknown_disclosure_regime: true
