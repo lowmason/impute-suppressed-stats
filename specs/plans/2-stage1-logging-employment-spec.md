@@ -96,7 +96,7 @@ anything you copy out of this plan, too.
 
 **This plan's code blocks were never run.** They encode intent, not a passing state, and their
 "Expected: PASS, N passed" lines are predictions rather than observations. Transcribing them
-verbatim has produced a failure or a defect in five of the five tasks executed so far:
+verbatim has produced a failure or a defect in six of the seven tasks executed so far:
 
 | Task | What the block got wrong | Caught by |
 |---|---|---|
@@ -105,8 +105,10 @@ verbatim has produced a failure or a defect in five of the five tasks executed s
 | 9 | `source_row_hash` omits ownership, aggregation level, size and industry — 18 collisions | measuring uniqueness |
 | 10 | Reads `qtrly_estabs` from a file that ships `qtrly_estabs_count`; bounds table nulls 16.3% of rows; the dimensionality assertion is never called from the build path | opening the file |
 | 11 | `disclosure_status` reads four suppression-coded cells as published zeros — INV-003. The fixture list omits the only year that has one, so all nine tests pass anyway | copying the 2017 file and counting its flagged rows |
+| 12 | Nothing — the block's labels, config reference and cited banner all check out. Its *tests* assert the same literals the table declares, so none of them would notice a mistyped label | re-deriving the table from Stage 0's summary |
+| 13 | Step 4's reader infers `vintage` as `Int64`, so Step 4's own filter raises `ComputeError`; Step 4's docstring wraps a phrase Step 2's test asserts unbroken | running Step 1, then reading the frame |
 
-**Four of those five passed the task's own tests.** A green run here means the plan's assertions
+**Four of those six passed the task's own tests.** A green run here means the plan's assertions
 held, not that the code is right. Task 11 sharpens the point: its defect was invisible not because
 the tests were weak but because **the plan's fixture list excluded the data that exhibits it**.
 Check what a fixture set cannot show you, not only what it does.
@@ -119,7 +121,7 @@ What has actually found them, every time:
    test dies. If nothing dies, the behaviour is untested regardless of the pass count.
 
 Deviations are annotated inline at the step they affect, marked **DEVIATION**. Ticked boxes on
-Tasks 8, 9, 10 and 11 do **not** mean "done as written" — read the annotation. Items raised and
+Tasks 8 through 13 do **not** mean "done as written" — read the annotation. Items raised and
 deliberately not fixed are in `specs/deferred_items.md`.
 
 ---
@@ -3317,7 +3319,7 @@ no allocation weights. And 1:1 establishes only that the six-digit code neither 
 it is the unchanged title and the empty `change_indicator` that carry the continuity claim, and
 even those are titles and markers rather than a comparison of definitional text.
 
-- [ ] **Step 1: Vendor the crosswalk rows**
+- [x] **Step 1: Vendor the crosswalk rows**
 
 ```bash
 python3 - <<'PY'
@@ -3349,7 +3351,7 @@ Expected: a five-line CSV body — a comment block, a header, and one row per vi
 carrying `link_type_to_next = 1:1`. If the skill directory is absent on your machine, stop and say
 so in your implementer report rather than typing the values by hand.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `tests/unit/test_harmonize.py`:
 
@@ -3432,12 +3434,12 @@ def test_nonemployer_is_rejected_from_the_core_total() -> None:
         concepts.reject_nonemployer_in_core_total("nonemployer")
 ```
 
-- [ ] **Step 3: Run to verify it fails**
+- [x] **Step 3: Run to verify it fails**
 
 Run: `uv run pytest tests/unit/test_harmonize.py -v`
 Expected: FAIL — `ImportError: cannot import name 'bridge' from 'logging_employment.harmonize'`.
 
-- [ ] **Step 4: Write `harmonize/naics.py`**
+- [x] **Step 4: Write `harmonize/naics.py`**
 
 ```python
 """NAICS vintage handling and the mechanical 113310 crosswalk across the D1 window.
@@ -3510,7 +3512,7 @@ def assert_113310_survives_the_window() -> None:
         raise ValueError(f"the 2017->2022 concordance does not pair 113310 one-to-one: {link}")
 ```
 
-- [ ] **Step 5: Write `harmonize/dimensions.py`, `bridge.py`, and `concepts.py`**
+- [x] **Step 5: Write `harmonize/dimensions.py`, `bridge.py`, and `concepts.py`**
 
 ```python
 # harmonize/dimensions.py
@@ -3611,12 +3613,48 @@ def reject_nonemployer_in_core_total(source_id: str) -> None:
         )
 ```
 
-- [ ] **Step 6: Run to verify it passes**
+- [x] **Step 6: Run to verify it passes**
 
 Run: `uv run pytest tests/unit/test_harmonize.py -v`
 Expected: PASS, 9 passed.
 
-- [ ] **Step 7: Commit**
+> **DEVIATION (2026-09-05): 18 passed, and two of the plan's nine could not have.**
+>
+> 1. **Step 4's reader and Step 4's own assertion contradict each other.**
+>    `pl.read_csv(..., schema_overrides={"code": pl.String})` leaves `vintage` and `parent_code`
+>    inferred as `Int64` — they are all-digit strings. `assert_113310_survives_the_window` then
+>    runs `frame.filter(pl.col("vintage") == "2017")`, which raises
+>    `ComputeError: cannot compare string with numeric type (i64)`, and Step 2's
+>    `set(frame["vintage"].to_list()) == {"2017", "2022"}` compares ints to strings and is False.
+>    The reader now uses `infer_schema_length=0`, which is how `qcew_size.read_by_size_zip`
+>    already treats codes. Reverting it fails five tests.
+> 2. **Step 4's docstring and Step 2's test disagree about a line break.** The docstring wraps the
+>    phrase as `**not a Census\ncolumn**`; the test asserts the unbroken `"not a Census column"`.
+>    The assertion now collapses whitespace before matching, because the claim is about what the
+>    prose says rather than where it wraps at 100 columns.
+>
+> Additions, all of them cases the plan's tests leave unexercised:
+>
+> * `assert_113310_survives_the_window` takes an optional `frame`, so each of its four failure
+>   branches is shown rejecting a doctored crosswalk. As written, only the passing path ran — an
+>   assertion never seen to fail is not evidence.
+> * `bridge_frame` rejects a row missing a declared field. Polars renders an absent key as null,
+>   so the plan's version would emit a bridge with a null `verification_status`, which is the one
+>   thing §8.6 asks a bridge row to state.
+> * The geography dimension is checked against `constants.STATES_DC_FIPS` rather than a count,
+>   and the `disclosure_regime` dimension against every label Task 12's registry can return — so
+>   the two tasks cannot drift apart silently.
+> * The vendored CSV's provenance header is pinned, not just the module docstring. The caveats
+>   have to travel with the data.
+>
+> **Step 1 ran as written.** The skill directory is present, its column layout matches the
+> indices the script assumes (`code,level,title,parent_code,sector_code,trilateral,change_indicator`
+> and `naics_2017,title_2017,naics_2022,title_2022,link_type`), and 113310 resolves to a single
+> `1:1` concordance row with an empty change indicator in both structure files. The vendored CSV
+> ships in the built wheel — verified by building one and listing its contents, since
+> `crosswalk_113310()` reads it relative to `__file__`.
+
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/logging_employment/harmonize/ tests/unit/test_harmonize.py
