@@ -92,6 +92,33 @@ anything you copy out of this plan, too.
 
 ---
 
+## Execution notes — read before resuming (added 2026-09-05, Tasks 7–10 shipped)
+
+**This plan's code blocks were never run.** They encode intent, not a passing state, and their
+"Expected: PASS, N passed" lines are predictions rather than observations. Transcribing them
+verbatim has produced a failure or a defect in four of the four tasks executed so far:
+
+| Task | What the block got wrong | Caught by |
+|---|---|---|
+| 7 | Step 4's docstring types "reference year 2014", which Step 2's own test forbids file-wide | reading both blocks together |
+| 8 | Step 1 copies a 439 MB / 2,232-member archive into `tests/fixtures/` | checking the file's size |
+| 9 | `source_row_hash` omits ownership, aggregation level, size and industry — 18 collisions | measuring uniqueness |
+| 10 | Reads `qtrly_estabs` from a file that ships `qtrly_estabs_count`; bounds table nulls 16.3% of rows; the dimensionality assertion is never called from the build path | opening the file |
+
+**Three of those four passed the task's own tests.** A green run here means the plan's assertions
+held, not that the code is right. What has actually found them, every time:
+
+1. **Before implementing**, run the two or three commands that turn a step's "Expected:" lines
+   into knowns — open the fixture, print its columns, check a claim the block asserts in prose.
+2. **After the task goes green**, mutate the one thing the task exists to get right and confirm a
+   test dies. If nothing dies, the behaviour is untested regardless of the pass count.
+
+Deviations are annotated inline at the step they affect, marked **DEVIATION**. Ticked boxes on
+Tasks 8, 9 and 10 do **not** mean "done as written" — read the annotation. Items raised and
+deliberately not fixed are in `specs/deferred_items.md`.
+
+---
+
 ## Scope judgment: one plan, fourteen tasks
 
 Stage 1 is large, but it is one vertical slice with a single exit criterion — a frozen pull
@@ -3813,6 +3840,10 @@ git commit -m "feat(build): assemble the harmonized layer deterministically from
 ---
 
 ### Task 15: The universe filter, the suppression-type default, and the SRC-QCEW-006/007 in-code tests
+
+> **Note:** `ingest/qcew.py` is under a file-wide constraint — `test_boundary_probe_does_not_hard_code_a_year`
+> greps the whole module and fails if the measured slice-boundary year appears in it as a literal,
+> including inside a comment or docstring. See Task 7.
 
 **Files:**
 - Modify: `src/logging_employment/ingest/qcew.py`
