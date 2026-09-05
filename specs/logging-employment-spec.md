@@ -2170,3 +2170,31 @@ Other §21 rows keep their Appendix A defaults until a stage's plan or finding c
 ### Stage stamps
 
 - Roadmap: specs/logging-employment-spec-roadmap.md, Stage 0 — on plan completion, tick the stage and re-validate later stages against what shipped.
+> Stage 0: COMPLETE (2026-09-04) — implemented by plan 1 (specs/plans/completed/1-stage0-logging-employment-spec.md).
+> Next: resume the roadmap.
+>
+> **Later stages re-validated against what Stage 0 actually measured:**
+> - **Stage 1 (parser contracts, QCEW year boundary).** The slice route serves from reference
+>   year **2014**, measured — not the "most recent five years" D5 assumed, so the dual-route
+>   selection boundary is empirical and stated as a reference year, not an approximation.
+>   Stage 1 must read `published_start`/`published_end` only with the semantics note beside
+>   `COVERAGE_KEYS` in `scripts/audit/_common.py`: the key means measured publication bounds in
+>   some summaries and the window restated in others.
+> - **Stage 2 (available margins).** `SRC-QCEW-006` is **`decline`** — the national/state
+>   employment identity is untestable, because every one of the 96 testable months carries at
+>   least one suppressed states+DC cell. Establishment counts close exactly in 32 of 32
+>   quarters. Stage 2 gets the establishment margin, not the employment identity.
+> - **Stage 3 (allocation anchor) — ACTION REQUIRED.** Because the branch is `decline`, Stage 3
+>   must name a substitute anchor or accept a weaker assumption **before any baseline is
+>   written**. The decline is for unverifiability, not geography.
+> - **Stage 4 (mask design).** Measured suppression share **0.2602** over 4716 states+DC
+>   monthly cells, in 54 runs of which four span the full 96 months. A mask design assuming
+>   short independent gaps does not match this; four areas are suppressed throughout.
+> - **Stage 6 (routing) — NO re-route needed.** `simultaneous_state_industry_size` came back
+>   **`false`**, so the roadmap's condition for re-routing Stage 6 to brainstorming is not met.
+>   SUSB's `detailed_sizes_reaches_six_digit_at_state` is also `false`, and BDS cannot resolve
+>   logging at all (`finest_naics_available: "11"`).
+> - **Stages 2, 3 and 6 `Consumes` blocks — CBP coverage gap.** CBP publishes **2017-2023**;
+>   **2024 is not available** (probe returned 404, vintage not yet published). Any Consumes
+>   block assuming CBP covers the full D1 window is wrong by one year.
+

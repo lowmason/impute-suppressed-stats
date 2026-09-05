@@ -179,7 +179,7 @@ Content changes the reviews forced, relative to the spec read alone:
 
 ## Stages
 
-- [ ] Stage 0: Source access, dimensionality, and national-identity audit (investigation)
+- [x] Stage 0: Source access, dimensionality, and national-identity audit (investigation) — COMPLETE 2026-09-04, plan 1
       Objective: Establish from fetched files what each source actually publishes for 113310 over the D1 window, by which route, and which SRC-QCEW-006 branch the national identity takes — so no later stage rests on an assumed dimension or an unavailable margin.
       Spec: §1.2 (final bullet), §2.2 rows 1–4, §5.1–5.4, §8.1 SRC-QCEW-006/007, §8.2 SRC-QSIZE-002, §8.3 SRC-CBP-001/003, §8.5 SRC-OTH-002/003, §19 Phase 0 acceptance, §21 rows (geography universe, TPO/FIA coverage, optional state sources); Rollout D1, D3, D5.
       Gap closed: audit halves of REQ-006, SRC-QSIZE-002, SRC-CBP-001, SRC-CBP-003, SRC-OTH-002, SRC-OTH-003, SRC-FOR-001/002/003; the branch verdict for SRC-QCEW-006 and SRC-QCEW-007. De-risks REQ-015, REQ-016, SRC-CBP-005.

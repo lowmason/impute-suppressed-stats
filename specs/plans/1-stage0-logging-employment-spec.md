@@ -1,5 +1,16 @@
 # Stage 0: Source Access, Dimensionality, and National-Identity Audit — Implementation Plan
 
+**Status: COMPLETE (2026-09-04)** — executed via subagent-driven-development; deferred items in specs/deferred_items.md
+
+> **Deviation (pervasive, recorded once here rather than under each of the 70 steps):**
+> every one of the 13 tasks found real defects in this plan's illustrative code — 21 in
+> Task 13 alone. The plan was a strong draft, not a correct implementation. Each defect
+> was corrected during execution, disclosed in that task's implementer report, and
+> checked by a task reviewer; the shipped code is the source of truth over the code
+> blocks below. A four-group whole-branch review, three fix waves and one
+> gate-unblocked work item followed. Final state: 666 tests passing, `EXIT CRITERIA: PASS`,
+> deliverables idempotent under regeneration.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: implement this plan task-by-task via
 > subagent-driven-development (the default) — or executing-plans when your human partner
 > chose inline execution at the handoff. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -190,7 +201,7 @@ PYTHONPATH=scripts/audit uv run --no-project --with httpx --with polars --with p
 
     `findings` is free-form per source; each task below names the exact keys it must contain.
 
-- [ ] **Step 1: Widen `.gitignore` and prove `.env` is untracked**
+- [x] **Step 1: Widen `.gitignore` and prove `.env` is untracked**
 
 Replace the whole file:
 
@@ -213,7 +224,7 @@ __pycache__/
 .ruff_cache/
 ```
 
-- [ ] **Step 2: Assert the credential is untracked and loadable**
+- [x] **Step 2: Assert the credential is untracked and loadable**
 
 Run:
 
@@ -226,7 +237,7 @@ Expected: the `grep -c` prints `0`; `git check-ignore` prints a rule line naming
 and `.env`; the last command prints `contact email present`. If `grep -c` prints anything but
 `0`, stop — run `git rm --cached .env` and re-check before continuing.
 
-- [ ] **Step 3: Write the failing harness test**
+- [x] **Step 3: Write the failing harness test**
 
 Create `tests/audit/test_common.py`:
 
@@ -335,7 +346,7 @@ def test_contact_email_required(monkeypatch):
         _common.contact_email()
 ```
 
-- [ ] **Step 4: Run the test to verify it fails**
+- [x] **Step 4: Run the test to verify it fails**
 
 Run:
 
@@ -346,7 +357,7 @@ PYTHONPATH=scripts/audit uv run --no-project --with httpx --with polars --with p
 
 Expected: FAIL — collection error `ModuleNotFoundError: No module named '_common'`.
 
-- [ ] **Step 5: Write the harness**
+- [x] **Step 5: Write the harness**
 
 Create `scripts/audit/_common.py`:
 
@@ -579,7 +590,7 @@ def load_summary(source: str) -> dict[str, Any]:
     return json.loads((AUDIT_ROOT / source / "summary.json").read_text())
 ```
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run:
 
@@ -590,7 +601,7 @@ PYTHONPATH=scripts/audit uv run --no-project --with httpx --with polars --with p
 
 Expected: PASS — 10 passed (the four parametrised validator cases count separately).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add .gitignore scripts/audit/_common.py tests/audit/test_common.py
@@ -646,7 +657,7 @@ one CSV member per industry, so a 113310-only member drops out of `namelist()`; 
 filter. Use `by_industry`. Both are streamed by `download_extract` under `_common`'s 300 s
 timeout, which is the number `bls-stats` uses for the same files.
 
-- [ ] **Step 1: Write the script**
+- [x] **Step 1: Write the script**
 
 Create `scripts/audit/qcew_routes.py`:
 
@@ -822,7 +833,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run:
 
@@ -835,7 +846,7 @@ Expected: a single stdout line of the form `slice years served: <int>-<int>; bul
 minutes on a normal connection. This step reports whatever the servers return; there is no
 expected year value.
 
-- [ ] **Step 3: Verify the summary's shape**
+- [x] **Step 3: Verify the summary's shape**
 
 Run:
 
@@ -863,7 +874,7 @@ is non-empty; the slice-extract count is `4 × (number of window years served)`.
 assertions failing is a script bug, not a finding — fix the script. A `bulk_years_required` of
 `[]` is a legitimate finding, not a failure.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add scripts/audit/qcew_routes.py
@@ -873,6 +884,11 @@ git commit -m "feat(audit): measure QCEW slice-route year boundary and prove the
 ---
 
 ### Task 3: QCEW code inventory on 113310 rows and the SRC-QCEW-007 alignment statement
+
+> **Deviation:** `period_basis`'s `month1/2/3_emplvl` half is now DERIVED from the header
+> `load_slices()` already reads (anchored `^month(\d+)_emplvl$`), not typed as this plan
+> mandated; the "pay period including the 12th" half is kept as documentation with a cited
+> reference and an inference marker. Resolved at the plan-completion gate, 2026-09-04.
 
 Closes: the audit half of `REQ-006`; the roadmap's *"code/title lists actually present for
 `agglvl_code`, `own_code`, `size_code`, and `disclosure_code` on 113310 rows"*; and
@@ -907,7 +923,7 @@ a constraint."*
     counts. (§8.2 context: the slice and singlefile products carry `size_code == "0"` only;
     Task 6 tests the by-size product separately.)
 
-- [ ] **Step 1: Write the script**
+- [x] **Step 1: Write the script**
 
 Create `scripts/audit/qcew_codes.py`:
 
@@ -1431,7 +1447,7 @@ if __name__ == "__main__":
 > `notes` where the check is inconclusive — Stage 1 owns the mechanical crosswalk test, and it
 > needs to know which years are actually established.
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run:
 
@@ -1444,7 +1460,7 @@ state agglvl=[<code>]; aligned=<bool>`. If the script raises on the `'Private'` 
 the ownership titles file changed shape — inspect
 `data/raw/audit/qcew_codes/titles/own_code.csv` and fix the parse, never the constant.
 
-- [ ] **Step 3: Fill `naics_vintage_by_year` by hand**
+- [x] **Step 3: Fill `naics_vintage_by_year` by hand**
 
 The script ships every window year as `"unconfirmed"`: QCEW publishes no per-row NAICS-vintage
 column, so the vintage is a documentation fact, not a derivable one. Confirm the switch year
@@ -1458,7 +1474,7 @@ the sibling `notes` field. An `"unconfirmed"` with a stated reason is a legitima
 `"unconfirmed"` left behind by a skipped step is not, and Step 4 fails it. Stage 1 owns the
 mechanical crosswalk test and needs to know which years are actually established.
 
-- [ ] **Step 4: Verify the summary's shape**
+- [x] **Step 4: Verify the summary's shape**
 
 Run:
 
@@ -1487,7 +1503,7 @@ Expected: four non-empty code lists print with titles (`disclosure_code` titles 
 one aggregation level appears at either geography level, that is a **finding that must be
 written up**, not a bug — record the codes and set `aligned: false` with an explanatory `notes`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add scripts/audit/qcew_codes.py
@@ -1533,7 +1549,7 @@ sizes Stage 4's pseudo-suppression mask design. Also produces the panel Task 5 j
     available when employment is suppressed; Task 5's universe test depends on it being true,
     so it is measured rather than assumed.
 
-- [ ] **Step 1: Write the failing panel-flag test**
+- [x] **Step 1: Write the failing panel-flag test**
 
 Create `tests/audit/test_panel_flags.py`. This test exists because the natural expression
 `pl.col("disclosure_code").str.strip_chars() == "N"` yields **null**, not `False`, wherever the
@@ -1612,7 +1628,7 @@ def test_sub_state_rows_are_excluded(tmp_path, monkeypatch):
     assert build_panel("5").filter(pl.col("area_fips") == "01001").height == 0
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run:
 
@@ -1623,7 +1639,7 @@ PYTHONPATH=scripts/audit uv run --no-project --with httpx --with polars --with p
 
 Expected: FAIL — `ModuleNotFoundError: No module named 'qcew_panel'`.
 
-- [ ] **Step 3: Write the script**
+- [x] **Step 3: Write the script**
 
 Create `scripts/audit/qcew_panel.py`:
 
@@ -2079,7 +2095,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run:
 
@@ -2090,7 +2106,7 @@ PYTHONPATH=scripts/audit uv run --no-project --with httpx --with polars --with p
 
 Expected: PASS — 4 passed.
 
-- [ ] **Step 5: Run it on the real extracts**
+- [x] **Step 5: Run it on the real extracts**
 
 Run:
 
@@ -2100,7 +2116,7 @@ set -a && source .env && set +a && uv run --no-project scripts/audit/qcew_panel.
 
 Expected: one stdout line `panel rows=<int>; states=<int>; suppressed share=<float>`.
 
-- [ ] **Step 6: Verify the panel's shape**
+- [x] **Step 6: Verify the panel's shape**
 
 Run:
 
@@ -2127,7 +2143,7 @@ on this data, and `areas_with_no_rows` enumerates which areas are absent. Fetch 
 carried by `months_covered == 96` and an empty `coverage_span.uncovered`: a window year the slice
 route failed to serve shows up there, as missing months, not as a missing state.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add scripts/audit/qcew_panel.py tests/audit/test_panel_flags.py
@@ -2177,7 +2193,7 @@ national universe?"* with little interference from suppression, and the employme
 then free to answer *"how much is suppression hiding?"* That ordering is what the roadmap means
 by testing the geography universe **before** suppression is blamed.
 
-- [ ] **Step 1: Write the failing rule test**
+- [x] **Step 1: Write the failing rule test**
 
 Create `tests/audit/test_identity_rule.py`:
 
@@ -2270,7 +2286,7 @@ def test_branch_is_always_exactly_one_of_three(branch_input, expected):
     assert out["branch"] in ("enforce", "residual_cells", "decline")
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run:
 
@@ -2281,7 +2297,7 @@ PYTHONPATH=scripts/audit uv run --no-project --with httpx --with polars --with p
 
 Expected: FAIL — `ModuleNotFoundError: No module named 'qcew_identity'`.
 
-- [ ] **Step 3: Write the rule and the scan**
+- [x] **Step 3: Write the rule and the scan**
 
 Create `scripts/audit/qcew_identity.py`:
 
@@ -3000,7 +3016,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 4: Run the rule tests to verify they pass**
+- [x] **Step 4: Run the rule tests to verify they pass**
 
 Run:
 
@@ -3011,7 +3027,7 @@ PYTHONPATH=scripts/audit uv run --no-project --with httpx --with polars --with p
 
 Expected: PASS — 9 passed.
 
-- [ ] **Step 5: Run the scan**
+- [x] **Step 5: Run the scan**
 
 Run:
 
@@ -3022,7 +3038,7 @@ set -a && source .env && set +a && uv run --no-project scripts/audit/qcew_identi
 Expected: the one-sentence verdict prints, beginning with `enforce:`, `residual_cells:`, or
 `decline:`. Any of the three is a legitimate finding.
 
-- [ ] **Step 6: Verify the verdict is well-formed**
+- [x] **Step 6: Verify the verdict is well-formed**
 
 Run:
 
@@ -3070,7 +3086,7 @@ then name a substitute allocation anchor before writing any baseline.
 > subtracts anything. The branch was `decline` under both forms — only the recorded reason
 > changed, from false to true.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add scripts/audit/qcew_identity.py tests/audit/test_identity_rule.py
@@ -3125,7 +3141,7 @@ QCEW unless a concrete file extract proves otherwise."* This task is that proof-
     run and the persisted sentence names the probe count it rests on.
   - `stage6_reroute_required` — bool, mirroring `simultaneous_state_industry_size`.
 
-- [ ] **Step 1: Write the failing predicate test**
+- [x] **Step 1: Write the failing predicate test**
 
 Create `tests/audit/test_size_predicate.py`:
 
@@ -3178,7 +3194,7 @@ def test_county_row_is_not_a_state_row():
         df, industry="113310", state_areas=STATE_AREAS, all_sizes="0")
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run:
 
@@ -3189,7 +3205,7 @@ PYTHONPATH=scripts/audit uv run --no-project --with httpx --with polars --with p
 
 Expected: FAIL — `ModuleNotFoundError: No module named 'qcew_size'`.
 
-- [ ] **Step 3: Write the script**
+- [x] **Step 3: Write the script**
 
 Create `scripts/audit/qcew_size.py`:
 
@@ -3378,7 +3394,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 4: Run the predicate tests to verify they pass**
+- [x] **Step 4: Run the predicate tests to verify they pass**
 
 Run:
 
@@ -3389,7 +3405,7 @@ PYTHONPATH=scripts/audit uv run --no-project --with httpx --with polars --with p
 
 Expected: PASS — 5 passed.
 
-- [ ] **Step 5: Run the scan**
+- [x] **Step 5: Run the scan**
 
 Run:
 
@@ -3401,7 +3417,7 @@ Expected: two or three stdout lines — the boolean verdict, the prose statement
 file does carry, and the Stage 6 re-route warning only when the verdict is `True`. Both
 verdicts are legitimate findings.
 
-- [ ] **Step 6: Verify the summary's shape**
+- [x] **Step 6: Verify the summary's shape**
 
 Run:
 
@@ -3424,7 +3440,7 @@ Expected: the assertions hold; at least one inventory row prints with `has_11331
 **no** aggregation level carries 113310 at all, that is itself a finding — record it and set
 `what_the_file_does_carry` to say the by-size product has no Logging detail at any geography.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add scripts/audit/qcew_size.py tests/audit/test_size_predicate.py
@@ -3471,7 +3487,7 @@ unresolved.
 API key; only the data pull does. The key travels in `params`, never in a recorded URL — see
 `_common.assert_no_secrets`.
 
-- [ ] **Step 1: Write the script**
+- [x] **Step 1: Write the script**
 
 Create `scripts/audit/cbp_metadata.py`:
 
@@ -4171,7 +4187,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run:
 
@@ -4185,7 +4201,7 @@ non-empty `uncovered` is likely and is a first-class finding: Stage 2's hard-con
 eligibility, Stage 3's CBP-intensity baseline, and Stage 6's benchmark all need to know which
 window years have no CBP anchor.
 
-- [ ] **Step 3: Verify the summary's shape**
+- [x] **Step 3: Verify the summary's shape**
 
 Run:
 
@@ -4222,7 +4238,7 @@ still wrong. Only when the third attempt succeeds while the first two fail —
 state x six-digit x `EMPSZES` crossing is unavailable for this vintage." Record that in
 `notes`; do not let a query bug masquerade as it.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add scripts/audit/cbp_metadata.py
@@ -4307,7 +4323,7 @@ reference year" into `evidence`.
 > fresh clone would carry the decision or the reason for the mismatch between this section's
 > field name and `scripts/audit/cbp_regime.py`'s actual one.
 
-- [ ] **Step 1: Write the script**
+- [x] **Step 1: Write the script**
 
 Create `scripts/audit/cbp_regime.py`:
 
@@ -4411,7 +4427,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 2: Run it and read the fetched documentation**
+- [x] **Step 2: Run it and read the fetched documentation**
 
 Run:
 
@@ -4422,7 +4438,7 @@ set -a && source .env && set +a && uv run --no-project scripts/audit/cbp_regime.
 Expected: one line per available CBP year showing the suppressed share, the noise-flagged
 share, and the distinct `EMP_F` values observed on 113310 state rows.
 
-- [ ] **Step 3: Fill in the regime labels by hand, from the fetched documentation**
+- [x] **Step 3: Fill in the regime labels by hand, from the fetched documentation**
 
 Open every file under `data/raw/audit/cbp_regime/docs/` and, for each year, set `regime`,
 `evidence` (one sentence naming what in the document establishes it), and `citation` (the URL
@@ -4430,7 +4446,7 @@ plus the section heading) in the `regime_by_year` literal in `cbp_regime.py`. Le
 where no per-year statement exists, and write the reason into `evidence` in the form
 `"not obtainable — <why>"`. Re-run the script.
 
-- [ ] **Step 4: Verify the summary's shape**
+- [x] **Step 4: Verify the summary's shape**
 
 Run:
 
@@ -4451,7 +4467,7 @@ PY
 Expected: one line per year with a non-blank evidence sentence; the `unknown_years` list prints
 (possibly empty).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add scripts/audit/cbp_regime.py
@@ -4461,6 +4477,12 @@ git commit -m "feat(audit): record the CBP disclosure regime per reference year 
 ---
 
 ### Task 9: Per-state CES publication level
+
+> **Deviation:** `publication_level_by_state` → `publication_level_by_sm_state_code` and
+> `near_miss_states` → `near_miss_sm_state_codes`. The map spans 55 `sm.state` codes, four of
+> which (`00`, `72`, `78`, `99`) are not state FIPS, so the old names over-collected. Values are
+> unchanged; `verify_extracts.ROADMAP_FIELDS` updated in the same commit. Resolved at the
+> plan-completion gate, 2026-09-04. The six `states_with_*` keys keep their plan-mandated names.
 
 Closes: the audit half of `SRC-OTH-003` and the roadmap's *"per-state CES publication level
 (1133, 113, or supersector)"*. D6 makes this consequential: *"CES stays in scope: NAICS
@@ -4526,7 +4548,7 @@ positions 3–8, zero-padded. Stripping trailing zeros from `industry_code[2:8]`
 NAICS digits; the number of digits recovered is the publication level. A code with no NAICS
 digits is a supersector. Derive the level this way — do not pattern-match on names.
 
-- [ ] **Step 1: Write the script**
+- [x] **Step 1: Write the script**
 
 Create `scripts/audit/ces_levels.py`:
 
@@ -4949,7 +4971,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run:
 
@@ -4965,7 +4987,7 @@ literal code.
 The six counts sum to the number of `sm.state` codes, which includes non-state areas — record
 that denominator rather than forcing it to 51.
 
-- [ ] **Step 3: Verify the summary's shape**
+- [x] **Step 3: Verify the summary's shape**
 
 Run:
 
@@ -4990,7 +5012,7 @@ and `states_with_1133` are both `0`, that is a finding with real consequences fo
 D6's industry-alignment claim would then apply to no state, and every CES series stays
 proxy-only.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add scripts/audit/ces_levels.py
@@ -5000,6 +5022,11 @@ git commit -m "feat(audit): determine the per-state CES publication level for Lo
 ---
 
 ### Task 10: BDS finest industry detail
+
+> **Deviation:** ships SEVEN findings keys, not the five this section names — adding
+> `probe_query_scope` and `raw_retention_rule`, both required by dispatch-level rulings and
+> reviewed as such. Substantive finding: BDS cannot resolve logging (`finest_naics_available`
+> is the 2-digit sector `"11"`; every candidate below it returned HTTP 204, never 404).
 
 Closes: the audit half of `SRC-OTH-002` — *"BDS industry detail MUST be discovered; six-digit
 Logging detail must not be invented."* §5.3's BDS guardrail is *"Do not imply six-digit Logging
@@ -5023,7 +5050,7 @@ for progressively finer codes and record where it stops answering.
   - `variables_present` — the subset of `ESTAB`, `FIRM`, `JOB_CREATION`, `JOB_DESTRUCTION`,
     `ESTABS_ENTRY`, `ESTABS_EXIT` that appear in `variables.json`.
 
-- [ ] **Step 1: Write the script**
+- [x] **Step 1: Write the script**
 
 Create `scripts/audit/bds_detail.py`:
 
@@ -5120,7 +5147,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run:
 
@@ -5132,7 +5159,7 @@ Expected: a summary line naming the finest NAICS code that returned rows, then o
 probed code with its status and row count. A `404` or a zero row count at the finer codes is
 the expected *kind* of result and is the finding; do not retry until one succeeds.
 
-- [ ] **Step 3: Verify the summary's shape**
+- [x] **Step 3: Verify the summary's shape**
 
 Run:
 
@@ -5152,7 +5179,7 @@ PY
 Expected: the assertions hold; the finest code, six-digit boolean, year range, and uncovered
 window years print.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add scripts/audit/bds_detail.py
@@ -5162,6 +5189,11 @@ git commit -m "feat(audit): discover the finest BDS NAICS detail for Logging (SR
 ---
 
 ### Task 11: SUSB detailed-sizes file layout
+
+> **Deviation:** ships EIGHT findings keys, adding `raw_retention_rule` (ruling D-B). Tests
+> were required by dispatch though this section specifies none. Substantive finding:
+> `detailed_sizes` reaches 113310 only at the national row; the six-digit file reaches it at 45
+> real states (46 distinct `STATE` values, one being the `"00"` national aggregate).
 
 Closes: the roadmap's *"SUSB detailed-sizes file layout"*, which feeds `SRC-OTH-001` —
 *"SUSB data MUST preserve enterprise-size semantics"* — and `INV-010`, *"Firm-size or
@@ -5190,7 +5222,7 @@ state-industry-size cross-tab beyond the published enterprise-size description."
   - `detailed_sizes_reaches_six_digit_at_state` — bool. This is the claim the review warns
     against assuming.
 
-- [ ] **Step 1: Write the script**
+- [x] **Step 1: Write the script**
 
 Create `scripts/audit/susb_layout.py`:
 
@@ -5326,7 +5358,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run:
 
@@ -5337,7 +5369,7 @@ set -a && source .env && set +a && uv run --no-project scripts/audit/susb_layout
 Expected: two stdout lines — the latest SUSB year with its size concept, and the six-digit
 reach boolean.
 
-- [ ] **Step 3: Verify the summary's shape and confirm the size concept by eye**
+- [x] **Step 3: Verify the summary's shape and confirm the size concept by eye**
 
 Run:
 
@@ -5364,7 +5396,7 @@ the file's header row and the Census record layout, decide `enterprise` or `esta
 the published text, and record the header wording that decided it in a `note` key. `INV-010`
 turns on this field.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add scripts/audit/susb_layout.py
@@ -5513,7 +5545,7 @@ reproduce a reliable raw TPO URL, and Appendix A already ships `tpo.enabled: fal
     Which county those identifiers name stays inside the marker, because a column name does not
     say whose county and no data-row cells were read or compared across sheets.
 
-- [ ] **Step 1: Write the script**
+- [x] **Step 1: Write the script**
 
 Create `scripts/audit/forest_sources.py`:
 
@@ -7024,7 +7056,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run:
 
@@ -7035,7 +7067,7 @@ set -a && source .env && set +a && uv run --no-project scripts/audit/forest_sour
 Expected: two stdout lines — the FIA status with its two field names (either may be `None`),
 and the TPO route or `not obtainable`.
 
-- [ ] **Step 3: Verify both summaries and hand-complete any gap**
+- [x] **Step 3: Verify both summaries and hand-complete any gap**
 
 Run:
 
@@ -7059,7 +7091,7 @@ by hand or write `"not obtainable — <why>"` into a `note` key. `SRC-FOR-002` s
 observations must retain sampling errors *"when available"*, so establishing availability is
 the deliverable, not obtaining the numbers.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add scripts/audit/forest_sources.py
@@ -7069,6 +7101,10 @@ git commit -m "feat(audit): record TPO and FIA access verdicts (SRC-FOR-001/002/
 ---
 
 ### Task 13: Assemble the finding, verify every exit criterion, and close the stage
+
+> **Deviation:** Step 8 (the Plan Completion Protocol) was deliberately withheld from this
+> task's implementer and run by the controller instead — it must follow the whole-branch review,
+> whose findings its resolve-before-defer gate consumes. Steps 1-7 were this task's scope.
 
 Closes: the stage deliverable `specs/findings/source-audit.md` and every roadmap exit
 criterion. Also discharges §1.2's final required-plan bullet — *"states which requirements
@@ -7088,7 +7124,7 @@ three §21 rows the stage cites.
 - Produces: `verify_extracts.py` as a **script, not a manual step** — it is the exit gate and is
   re-run whenever the stage is re-checked or a later stage re-validates against what shipped.
 
-- [ ] **Step 1: Write the verifier**
+- [x] **Step 1: Write the verifier**
 
 Create `scripts/audit/verify_extracts.py`:
 
@@ -7169,7 +7205,7 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-- [ ] **Step 2: Run the verifier**
+- [x] **Step 2: Run the verifier**
 
 Run:
 
@@ -7182,7 +7218,7 @@ lines, and `exit=0`. Any `FAIL` line names a concrete defect — a mismatched ha
 on disk changed after it was recorded; re-fetch and re-run the owning task rather than editing
 the recorded hash.
 
-- [ ] **Step 3: Write the hand-authored notes**
+- [x] **Step 3: Write the hand-authored notes**
 
 Create `specs/findings/source-audit-notes.md`. Fill every bracketed slot from the summaries you
 have produced; nothing below may remain a placeholder.
@@ -7219,7 +7255,7 @@ empty, write a single line saying so.
 worked only with a retry, a code list that changed mid-window.>
 ```
 
-- [ ] **Step 4: Write the assembler**
+- [x] **Step 4: Write the assembler**
 
 Create `scripts/audit/assemble_finding.py`:
 
@@ -7315,7 +7351,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 5: Assemble the finding**
+- [x] **Step 5: Assemble the finding**
 
 Run:
 
@@ -7326,7 +7362,7 @@ uv run --no-project scripts/audit/assemble_finding.py
 Expected: `wrote specs/findings/source-audit.md from <n> summaries`, where `<n>` is the number
 of `data/raw/audit/*/summary.json` files.
 
-- [ ] **Step 6: Check every stage exit criterion**
+- [x] **Step 6: Check every stage exit criterion**
 
 Run:
 
@@ -7397,7 +7433,7 @@ echo "exit=$?"```
 Expected: `summaries validated`, `manifest written`, `EXIT CRITERIA: PASS`, and `exit=0`. Every
 `FAIL` line names one unmet exit criterion — fix the underlying finding, never the check.
 
-- [ ] **Step 7: Commit the stage deliverable**
+- [x] **Step 7: Commit the stage deliverable**
 
 ```bash
 git add scripts/audit/verify_extracts.py scripts/audit/assemble_finding.py \
@@ -7406,7 +7442,7 @@ git add scripts/audit/verify_extracts.py scripts/audit/assemble_finding.py \
 git commit -m "docs(findings): record the Stage 0 source audit and its extract manifest"
 ```
 
-- [ ] **Step 8: Run the Plan Completion Protocol**
+- [x] **Step 8: Run the Plan Completion Protocol**
 
 1. **Resolve-before-defer gate.** Collect every field this audit closed as
    `"not obtainable — why"`, every `unknown` CBP regime year, and any step skipped during
