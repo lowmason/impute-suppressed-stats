@@ -134,7 +134,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
 
 ## 2-stage1-logging-employment-spec — 2026-09-05
 
-### Raised during Tasks 7–8
+### Raised during Tasks 7–9
 
 - [ ] **`probe_slice_boundary` probes every candidate year rather than stopping at
       the first one served.** Ascending sort makes `served[0]` and an early exit
@@ -155,3 +155,9 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       `read_bulk_zip` by a reduced fixture. Neither is a substitute for the branch
       having run end-to-end against a real bulk download; if the boundary ever moves
       past a window year, treat that path as unproven in production.
+- [ ] **`source_row_hash` is computed with `map_elements`,** i.e. one Python call
+      per output row. Fine at the 5,430 rows one quarter produces; the full D1
+      window is 32 quarters across three sources, and Task 14 rebuilds all of it
+      twice to prove byte-identity. If that run is slow, this is the first thing to
+      look at — `pl.concat_str(...).hash()` is not a substitute (it is not sha256
+      and not stable across Polars versions), so a native replacement needs care.
