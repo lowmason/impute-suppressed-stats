@@ -53,3 +53,33 @@ def registry_verify(
     if problems:
         raise typer.Exit(code=1)
     typer.echo("OK: registry verified")
+
+
+@app.command("fetch")
+def fetch(
+    source: str = typer.Option(..., "--source", help="qcew, qcew_size, or cbp"),
+    config: Path = typer.Option(..., "--config", exists=True, dir_okay=False),
+) -> None:
+    """Acquire raw bytes for one source into the immutable store and record a snapshot row."""
+    if source not in {"qcew", "qcew_size", "cbp"}:
+        raise typer.BadParameter(f"unknown source {source!r}")
+    from .fetching import fetch_source
+
+    cfg = load_config(config)
+    rows = fetch_source(source, cfg, env_path=Path(".env"))
+    typer.echo(f"{source}: {len(rows)} snapshot row(s) -> {cfg.storage.raw_uri}")
+
+
+@app.command("build-harmonized")
+def build_harmonized_command(
+    config: Path = typer.Option(..., "--config", exists=True, dir_okay=False),
+) -> None:
+    """Assemble the harmonized Parquet layer from stored raw bytes and print output hashes."""
+    from .build import build_harmonized
+
+    cfg = load_config(config)
+    hashes = build_harmonized(
+        cfg, raw_root=Path(cfg.storage.raw_uri), out_root=Path(cfg.storage.staged_uri)
+    )
+    for table, digest in sorted(hashes.items()):
+        typer.echo(f"{table} {digest}")

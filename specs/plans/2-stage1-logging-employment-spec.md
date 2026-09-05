@@ -96,7 +96,7 @@ anything you copy out of this plan, too.
 
 **This plan's code blocks were never run.** They encode intent, not a passing state, and their
 "Expected: PASS, N passed" lines are predictions rather than observations. Transcribing them
-verbatim has produced a failure or a defect in six of the seven tasks executed so far:
+verbatim has produced a failure or a defect in seven of the eight tasks executed so far:
 
 | Task | What the block got wrong | Caught by |
 |---|---|---|
@@ -107,8 +107,9 @@ verbatim has produced a failure or a defect in six of the seven tasks executed s
 | 11 | `disclosure_status` reads four suppression-coded cells as published zeros — INV-003. The fixture list omits the only year that has one, so all nine tests pass anyway | copying the 2017 file and counting its flagged rows |
 | 12 | Nothing — the block's labels, config reference and cited banner all check out. Its *tests* assert the same literals the table declares, so none of them would notice a mistyped label | re-deriving the table from Stage 0's summary |
 | 13 | Step 4's reader infers `vintage` as `Int64`, so Step 4's own filter raises `ComputeError`; Step 4's docstring wraps a phrase Step 2's test asserts unbroken | running Step 1, then reading the frame |
+| 14 | Step 1's fixture omits the `variables.json` Step 3 requires, so all three tests error; adding it exposes a `*.json` glob that parses metadata as a data response | reading Task 14 and Task 16 together |
 
-**Four of those six passed the task's own tests.** A green run here means the plan's assertions
+**Four of those seven passed the task's own tests.** A green run here means the plan's assertions
 held, not that the code is right. Task 11 sharpens the point: its defect was invisible not because
 the tests were weak but because **the plan's fixture list excluded the data that exhibits it**.
 Check what a fixture set cannot show you, not only what it does.
@@ -121,7 +122,7 @@ What has actually found them, every time:
    test dies. If nothing dies, the behaviour is untested regardless of the pass count.
 
 Deviations are annotated inline at the step they affect, marked **DEVIATION**. Ticked boxes on
-Tasks 8 through 13 do **not** mean "done as written" — read the annotation. Items raised and
+Tasks 8 through 14 do **not** mean "done as written" — read the annotation. Items raised and
 deliberately not fixed are in `specs/deferred_items.md`.
 
 ---
@@ -3690,7 +3691,7 @@ before writing), Parquet metadata timestamps (write with a fixed compression set
 statistics that embed a clock), and any column carrying `retrieved_at_utc` into a harmonized table.
 `retrieved_at_utc` belongs in `source_snapshot`, which is a manifest, not a harmonized table.
 
-- [ ] **Step 1: Write the failing integration test**
+- [x] **Step 1: Write the failing integration test**
 
 Create `tests/integration/test_build_harmonized.py`:
 
@@ -3759,12 +3760,12 @@ def test_no_harmonized_table_carries_a_retrieval_timestamp(
         assert "retrieved_at_utc" not in pl.read_parquet_schema(path)
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `uv run pytest tests/integration/test_build_harmonized.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'logging_employment.build'`.
 
-- [ ] **Step 3: Write `build.py`**
+- [x] **Step 3: Write `build.py`**
 
 ```python
 """Deterministic assembly of the harmonized layer from frozen raw bytes."""
@@ -3914,7 +3915,7 @@ def predicate_from_stored_metadata(cbp_raw_dir: Path, year: int) -> str:
 `fetch` must therefore store `variables.json` alongside each year's data response — Task 16's
 `fetch_source` does exactly that in its CBP branch, before it builds the query.
 
-- [ ] **Step 4: Add `fetch` and `build-harmonized` to `cli.py`**
+- [x] **Step 4: Add `fetch` and `build-harmonized` to `cli.py`**
 
 ```python
 @app.command("fetch")
@@ -3947,12 +3948,46 @@ def build_harmonized_command(
         typer.echo(f"{table} {digest}")
 ```
 
-- [ ] **Step 5: Run the integration test**
+- [x] **Step 5: Run the integration test**
 
 Run: `uv run pytest tests/integration/test_build_harmonized.py -v`
 Expected: PASS, 3 passed.
 
-- [ ] **Step 6: Run the whole suite, both suites**
+> **DEVIATION (2026-09-05): 10 passed, and none of the plan's three could have.** Both defects
+> come from the same place — Step 1's fixture tree does not look like the tree Task 16's `fetch`
+> actually writes, and reading the two tasks together is what surfaced them.
+>
+> 1. **The fixture omits the `variables.json` that Step 3 requires.** `predicate_from_stored_metadata`
+>    globs for one and raises `FileNotFoundError` when it is absent, so all three of the plan's
+>    tests fail before reaching any assertion. `tests/fixtures/cbp/variables_2023.json` is now
+>    shipped (543 KB raw, ~53 KB in git) and the fixture stores it as `2023_variables.json` beside
+>    the data file, which is exactly where Task 16's CBP branch puts it.
+> 2. **Adding it exposes the real defect: the build globs `*.json` and would parse the metadata as
+>    a data response.** `2023_variables.json` matches `*.json`, and `path.stem[:4]` yields the same
+>    `2023` as the data file, so the metadata is fed to `parse_cbp_state_size` as a second CBP year.
+>    Data and metadata are now told apart by an explicit `cbp.METADATA_SUFFIX` — named in
+>    `ingest/cbp.py`, which owns CBP's file naming, so `fetching` writes it and `build` skips it
+>    from one definition rather than two conventions that have to stay in step. Reverting the
+>    filter fails 6 of the 10 tests.
+>
+> Two additions to `build.py` beyond the block:
+>
+> * **`unknown` never reaches a harmonized table.** `regime_for_year(..., fail_on_unknown=False)`
+>   returns `"unknown"`, and `config.yaml` could set that flag. The flag exists so a *report* can
+>   record the gap; a persisted table recording a regime no source establishes is a different
+>   thing, so the build raises regardless of the flag. Tested by building a tree containing a 2024
+>   CBP file under a permissive config.
+> * **`.rechunk()` before writing.** Parquet row-group boundaries follow the frame's chunk layout,
+>   and a frame assembled by `pl.concat` chunks differently than the same rows read back in one
+>   pass. `write_parquet_deterministic`'s sort was already a total order — it sorts on every
+>   column, so the only tied rows are rows identical in all of them — and a test now writes the
+>   same frame shuffled to show the sort is what makes the bytes equal.
+>
+> The byte-identity test compares **two runs against each other**, not against a pinned literal.
+> That is what the exit criterion actually asks, and it is why Task 15's schema change three steps
+> later does not read as a determinism regression.
+
+- [x] **Step 6: Run the whole suite, both suites**
 
 Run: `uv run pytest -q`
 Expected: every test passes. Report the count.
@@ -3960,12 +3995,19 @@ Expected: every test passes. Report the count.
 Run: `PYTHONPATH=scripts/audit uv run --no-project pytest tests/audit -q`
 Expected: Stage 0's suite still passes, unchanged.
 
-- [ ] **Step 7: Run the linters**
+- [x] **Step 7: Run the linters**
 
 Run: `uv run ruff check src tests && uv run black --check src tests && uv run interrogate src`
 Expected: all three clean. Fix what they flag rather than loosening their configuration.
 
-- [ ] **Step 8: Commit**
+> **DEVIATION (2026-09-05): `tests/audit/` is not clean and this task did not make it so.** 11
+> ruff errors and 16 black reformats, all under `tests/audit/`, all pre-existing — the repo-wide
+> `I001` item and the `tests/audit/` black item already in `specs/deferred_items.md` name exactly
+> this. `src/`, `tests/unit/` and `tests/integration/` are clean under all three. Sweeping Stage
+> 0's test suite inside a Stage 1 task would put an unrelated 16-file reformat in this diff; the
+> deferred item is the right place for it and it is already there.
+
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/logging_employment/build.py src/logging_employment/cli.py tests/integration/

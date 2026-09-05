@@ -9,6 +9,7 @@ measures it.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import polars as pl
 
@@ -20,6 +21,23 @@ VARIABLES_URL = "https://api.census.gov/data/{year}/cbp/variables.json"
 EMPSZES_URL = "https://api.census.gov/data/{year}/cbp/variables/EMPSZES.json"
 
 PARSER_VERSION = "cbp_state_size/1"
+
+# `fetch` stores a year's variables metadata beside its data response, in the same source tree.
+# Both are `.json`, and `2023_variables` yields the same reference year as `2023` under a
+# four-character stem slice, so the two are told apart by this suffix and nothing else. Named here
+# because this module owns CBP's file naming; `fetching` writes it and `build` skips it.
+METADATA_SUFFIX = "_variables.json"
+
+
+def metadata_filename(year: int) -> str:
+    """The stored filename for one reference year's CBP variables metadata."""
+    return f"{year}{METADATA_SUFFIX}"
+
+
+def is_metadata_path(path: Path) -> bool:
+    """Whether a stored CBP file is variables metadata rather than a data response."""
+    return path.name.endswith(METADATA_SUFFIX)
+
 
 # EMPSZES labels that name a universe rather than an employment range, so a null range is the
 # honest answer for them rather than a silent default. Derived by running `size_bounds` over all
