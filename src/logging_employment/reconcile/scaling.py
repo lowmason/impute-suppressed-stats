@@ -68,14 +68,19 @@ def scale_into_bounds(
 
     lower_sum = sum(bounds.lower[cell] for cell in cells)
     upper_sum = sum(bounds.upper_of(cell) for cell in cells)
-    # STRICT, per spec:1312-1318. Equality is feasible: the degenerate case where every cell sits
-    # exactly on a bound must succeed, and a `>=` here would fail-close on it.
-    if lower_sum > anchor.residual:
+    # STRICT, per spec:1312-1318 -- but compared against the originated tolerance rather than in
+    # exact float arithmetic. Equality is feasible: the degenerate case where every cell sits
+    # exactly on a bound MUST succeed, and `>=` would fail-close on it. Exact `>` is not enough
+    # either, because the sums are accumulated in floating point: seven cells at lower 0.1 sum to
+    # 0.7000000000000001, which an exact `>` reads as infeasible against a residual of 0.7 --
+    # rejecting the very case the paragraph above promises will work. Both arms are widened by
+    # `tolerance` so the boundary is governed by the configured value in both directions.
+    if lower_sum - anchor.residual > tolerance:
         raise InfeasibleResidualError(
             f"{anchor.reference_month}: summed lower bounds {lower_sum} exceed residual "
             f"{anchor.residual}; §12.3 forbids approximating this away"
         )
-    if upper_sum < anchor.residual:
+    if anchor.residual - upper_sum > tolerance:
         raise InfeasibleResidualError(
             f"{anchor.reference_month}: summed upper bounds {upper_sum} fall below residual "
             f"{anchor.residual}; §12.3 forbids approximating this away"

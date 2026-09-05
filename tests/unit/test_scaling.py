@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from logging_employment.errors import InfeasibleResidualError, WeightDomainError
@@ -112,9 +114,15 @@ def test_a_residual_exactly_equal_to_the_summed_lower_bounds_succeeds() -> None:
 
 
 def test_a_null_upper_bound_is_infinite_and_never_becomes_a_number() -> None:
-    """§9.3 forbids arbitrary caps; a null upper must stay open, not become a big float."""
+    """§9.3 forbids arbitrary caps; a null upper must stay open, not become a big float.
+
+    The representation is asserted directly. Checking only the downstream `clipped_sum` has no
+    detection power: under a 1e15 sentinel the clip still evaluates to 1e12 per cell and the sum
+    is still 2e12, so a coercion that violates §9.3 would pass unnoticed.
+    """
     cells = ("01", "02")
     bounds = _open_bounds(cells)
+    assert math.isinf(bounds.upper_of("01"))
     assert clipped_sum(1e12, _weights({"01": 1.0, "02": 1.0}), bounds, cells) == pytest.approx(2e12)
 
 
@@ -169,3 +177,23 @@ def test_weights_against_an_empty_missing_set_are_refused_here_too() -> None:
             tolerance=TOL,
             max_iterations=ITERS,
         )
+
+
+def test_a_float_rounded_lower_sum_equal_to_the_residual_still_succeeds() -> None:
+    """The degenerate Σ L = R_t case must survive floating-point accumulation.
+
+    Seven cells at lower 0.1 sum to 0.7000000000000001, so an exact `>` guard reads the case as
+    infeasible and raises on precisely what §12.3's strict predicate requires to succeed. The
+    guard is widened by the configured tolerance instead.
+    """
+    cells = tuple(f"{i:02d}" for i in range(7))
+    assert sum(0.1 for _ in cells) > 0.7  # the rounding this test exists to survive
+    bounds = Bounds(lower={c: 0.1 for c in cells}, upper={c: None for c in cells})
+    out = scale_into_bounds(
+        _anchor(0.7, cells),
+        _weights({c: 1.0 for c in cells}),
+        bounds,
+        tolerance=TOL,
+        max_iterations=ITERS,
+    )
+    assert out == pytest.approx({c: 0.1 for c in cells}, abs=1e-9)
