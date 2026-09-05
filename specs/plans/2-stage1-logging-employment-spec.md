@@ -2114,7 +2114,7 @@ establishments has zero employment because there is nothing to employ anyone. So
 recorded but not load-bearing — and a hard failure if a `'-'` row ever arrives carrying
 `qtrly_estabs > 0`, because that would break the premise the rule rests on.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_qcew_parser.py`:
 
@@ -2244,12 +2244,12 @@ def test_every_observation_status_is_in_the_declared_vocabulary() -> None:
     assert set(_parsed()["observation_status"].unique()) <= set(OBSERVATION_STATUSES)
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `uv run pytest tests/unit/test_qcew_parser.py -v`
 Expected: FAIL — `AttributeError: module 'logging_employment.ingest.qcew' has no attribute 'parse_qcew_monthly'`.
 
-- [ ] **Step 3: Write the parser**
+- [x] **Step 3: Write the parser**
 
 Append to `ingest/qcew.py`:
 
@@ -2395,13 +2395,29 @@ def parse_qcew_monthly(
     )
 ```
 
-- [ ] **Step 4: Run to verify they pass**
+- [x] **Step 4: Run to verify they pass**
 
 Run: `uv run pytest tests/unit/test_qcew_parser.py -v`
 Expected: PASS, 11 passed. If `unpivot`'s index list or the `cast` mapping needs adjusting for your
 Polars version, fix the implementation — **do not relax an assertion** to make a test pass.
 
-- [ ] **Step 5: Verify the parser against the whole fixture, not just constructed rows**
+> **DEVIATION (2026-09-05): Step 3's `source_row_hash` does not identify a row.** As written it
+> hashes `area_fips|year|qtr|month_column`, omitting `own_code`, `agglvl_code`, `size_code` and
+> `industry_code`. Measured on `slice_2017q1.csv`: **18 collisions across 5,430 rows**, including
+> area `26165` in `2017-03`, where a suppressed Local Government cell (`own_code` 3) and a Private
+> cell reporting 93 (`own_code` 5) received the same hash — conflating two universes under one
+> identity, which is what `INV-007` forbids. The shipped key is
+> `_ROW_IDENTITY_COLUMNS` = QCEW's natural key plus `month_column`. §7.3 names the column but
+> never defines its inputs, so this was the plan's choice to make and it was wrong.
+>
+> The 11 tests here all pass under the *broken* key — none of them asserts uniqueness. Two added
+> tests do (`test_source_row_hash_identifies_a_row_uniquely`,
+> `test_source_row_hash_separates_ownership_sectors_in_the_same_area_and_month`), so the task ends
+> at **13 passed, not 11**. Both fail under the original key and under dropping `own_code` alone.
+> **Later tasks joining or deduplicating on `source_row_hash` must use the shipped key**, not
+> Step 3's.
+
+- [x] **Step 5: Verify the parser against the whole fixture, not just constructed rows**
 
 Run:
 
@@ -2422,7 +2438,7 @@ Expected: three rows per input row; `suppressed` rows have null `employment_valu
 count equals 3 × the number of `N` rows in the fixture. Record the observed counts in your
 implementer report — they are measurements of this fixture, not values to hard-code.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/logging_employment/ingest/qcew.py tests/unit/test_qcew_parser.py
