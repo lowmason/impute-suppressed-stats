@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+import hashlib
+import io
+import zipfile
 from pathlib import Path
 
 import httpx
 import polars as pl
+import pytest
 
+from logging_employment import constants
 from logging_employment.ingest import qcew
 from logging_employment.ingest.base import HttpFetcher
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "qcew" / "slice_2017q1.csv"
+BULK = Path(__file__).resolve().parents[1] / "fixtures" / "qcew" / "bulk_2017.zip"
 
 
 def _fetcher(handler) -> HttpFetcher:
@@ -66,3 +72,70 @@ def test_the_fixture_carries_the_columns_the_parser_needs() -> None:
         "total_qtrly_wages",
     ):
         assert column in frame.columns
+
+
+def test_route_selection_uses_the_measured_boundary() -> None:
+    assert qcew.route_for_year(2017, earliest_slice_year=2014) == "slice"
+    # Forced: today's measured boundary makes this unreachable in production, so the bulk branch
+    # would otherwise never execute.
+    assert qcew.route_for_year(2017, earliest_slice_year=2020) == "bulk"
+
+
+def test_the_bulk_fixture_carries_the_audited_member_bytes() -> None:
+    """`bulk_2017.zip` is reduced, so pin the member the reduction was supposed to preserve.
+
+    The fixture is not the archive Stage 0 fetched -- that one is 439 MB and untrackable -- but
+    the member inside it must still be byte-identical to the audited archive's. This asserts
+    that, rather than asserting that `tests/fixtures/qcew/README.md` says so.
+    """
+    with zipfile.ZipFile(io.BytesIO(BULK.read_bytes())) as archive:
+        members = archive.namelist()
+        assert members == ["2017.q1-q4.by_industry/2017.q1-q4 113310 NAICS 113310 Logging.csv"]
+        digest = hashlib.sha256(archive.read(members[0])).hexdigest()
+    assert digest == "47bfbef888054477d4fc4fcf4c2a04e70b72610ec4125eeb279c613a14c48caa"
+
+
+def test_bulk_columns_are_renamed_to_the_slice_vocabulary() -> None:
+    frame = qcew.read_bulk_zip(BULK.read_bytes(), constants.INDUSTRY_CODE)
+    assert "qtrly_estabs" in frame.columns
+    assert "qtrly_estabs_count" not in frame.columns
+    for bulk_name in qcew.BULK_TO_SLICE_COLUMNS:
+        assert bulk_name not in frame.columns
+
+
+def test_both_routes_agree_on_the_columns_the_parser_reads() -> None:
+    slice_frame = qcew.read_slice_csv(FIXTURE.read_bytes())
+    bulk_frame = qcew.read_bulk_zip(BULK.read_bytes(), constants.INDUSTRY_CODE)
+    needed = {
+        "area_fips",
+        "own_code",
+        "industry_code",
+        "agglvl_code",
+        "size_code",
+        "year",
+        "qtr",
+        "disclosure_code",
+        "qtrly_estabs",
+        "month1_emplvl",
+        "month2_emplvl",
+        "month3_emplvl",
+        "total_qtrly_wages",
+    }
+    assert needed <= set(slice_frame.columns)
+    assert needed <= set(bulk_frame.columns)
+
+
+def test_bulk_only_title_columns_are_dropped() -> None:
+    frame = qcew.read_bulk_zip(BULK.read_bytes(), constants.INDUSTRY_CODE)
+    for title_column in qcew.BULK_ONLY_TITLE_COLUMNS:
+        assert title_column not in frame.columns
+
+
+def test_selecting_a_member_that_is_not_unique_fails_closed() -> None:
+    """Two members matching one industry code is an unrecognized archive shape (§18.3)."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("a/2017.q1-q4 113310 NAICS 113310 Logging.csv", "x")
+        archive.writestr("b/2017.q1-q4 113310 NAICS 113310 Logging.csv", "x")
+    with pytest.raises(ValueError, match=constants.INDUSTRY_CODE):
+        qcew.read_bulk_zip(buffer.getvalue(), constants.INDUSTRY_CODE)
