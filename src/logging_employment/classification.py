@@ -27,9 +27,7 @@ def _section_31_fence(spec_text: str) -> list[str]:
     before the next heading of equal or higher level.
     """
     lines = spec_text.splitlines()
-    start = next(
-        (i for i, line in enumerate(lines) if re.match(r"###\s+3\.1(\s|$)", line)), None
-    )
+    start = next((i for i, line in enumerate(lines) if re.match(r"###\s+3\.1(\s|$)", line)), None)
     if start is None:
         raise ValueError("the spec has no `### 3.1` heading to anchor the classification memo to")
     opened: int | None = None

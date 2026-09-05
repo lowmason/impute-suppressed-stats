@@ -9,12 +9,14 @@ INDUSTRY_CODE = "113310"
 PRIVATE_OWN_CODE = "5"
 
 NATIONAL_AREA = "US000"
+# fmt: off
 STATES_DC_FIPS: tuple[str, ...] = (
     "01", "02", "04", "05", "06", "08", "09", "10", "11", "12", "13", "15", "16", "17",
     "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
     "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "44", "45", "46",
     "47", "48", "49", "50", "51", "53", "54", "55", "56",
 )
+# fmt: on
 STATE_AREAS = frozenset(f"{fips}000" for fips in STATES_DC_FIPS)
 
 QCEW_NATIONAL_AGGLVL = "18"  # "National, NAICS 6-digit -- by ownership sector"

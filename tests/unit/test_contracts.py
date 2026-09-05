@@ -14,6 +14,7 @@ def test_observation_statuses_separate_absent_from_suppressed_and_zero() -> None
 
 
 def test_qcew_monthly_carries_every_field_the_spec_names() -> None:
+    # fmt: off
     expected = [
         "snapshot_id", "release_vintage", "release_status", "reference_quarter",
         "reference_month", "area_fips", "area_type", "state_fips", "industry_code",
@@ -22,6 +23,7 @@ def test_qcew_monthly_carries_every_field_the_spec_names() -> None:
         "wages_value", "disclosure_code", "observation_status", "is_published_numeric_zero",
         "is_true_zero", "source_row_hash",
     ]
+    # fmt: on
     assert list(contracts.QCEW_MONTHLY_SCHEMA) == expected
 
 

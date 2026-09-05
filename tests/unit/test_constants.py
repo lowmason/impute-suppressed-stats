@@ -12,7 +12,8 @@ def test_states_dc_has_fifty_one_members() -> None:
 
 def test_state_areas_are_fips_plus_three_zeroes() -> None:
     assert constants.STATE_AREAS == frozenset(f"{f}000" for f in constants.STATES_DC_FIPS)
-    assert "11000" in constants.STATE_AREAS  # DC is IN the universe even though it publishes nothing
+    # DC is IN the universe even though it publishes nothing
+    assert "11000" in constants.STATE_AREAS
     assert "72000" not in constants.STATE_AREAS  # Puerto Rico is not
 
 
@@ -28,6 +29,6 @@ def test_the_allowlist_docstring_does_not_claim_a_titles_file_defines_it() -> No
     # is null). A comment claiming otherwise would misdescribe the provenance.
     source = (constants.__file__ and open(constants.__file__).read()) or ""
     marker = "QCEW_DISCLOSURE_CODES"
-    block = source[source.index(marker):source.index(marker) + 800]
+    block = source[source.index(marker) : source.index(marker) + 800]
     assert "measured" in block
     assert "no titles file" in block
