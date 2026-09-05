@@ -13,8 +13,23 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
+from logging_employment.config import Config, load_config
+
 _AUDIT_SCRIPTS = Path(__file__).resolve().parent.parent / "scripts" / "audit"
 if str(_AUDIT_SCRIPTS) not in sys.path:
     # append, not insert(0, ...): this directory holds every Stage 0 audit script, and one
     # named after a stdlib module must not shadow it suite-wide.
     sys.path.append(str(_AUDIT_SCRIPTS))
+
+
+@pytest.fixture()
+def appendix_a_config() -> Config:
+    """The Appendix A configuration, parsed once, for estimators that read config keys.
+
+    Defined in the ROOT conftest, not `tests/unit/`, because §17.6's golden tests under
+    `tests/integration/` request it too and pytest does not expose a subdirectory's fixtures to a
+    sibling directory.
+    """
+    return load_config(Path(__file__).resolve().parents[1] / "config.yaml")
