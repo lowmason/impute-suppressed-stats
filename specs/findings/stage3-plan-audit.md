@@ -7,6 +7,68 @@ verification pass did not complete, so each is a claim to check, not a confirmed
 
 Counts: 67 total — 13 blocker, 25 defect, 29 nit.
 
+## Disposition (added 2026-09-05, after execution)
+
+Every finding below was raw auditor output. This section records what happened to each class of
+them. **No finding was acted on without first reproducing it**, and every fix was mutation-tested
+— the code was reverted and the new test confirmed to fail — so a fix that asserted nothing would
+have been caught.
+
+### Confirmed and fixed
+
+| Task | Defect | Commit |
+|---|---|---|
+| 2 | Test block referenced names the file never imports | `627c736` |
+| 3 | Closure audit driven by partition keys, so a national month with no state rows escaped the gate | `cc90061` |
+| 3 | `fill_null(0)` a no-op, so a null in `disclosed` inflated R_t | `cc90061` |
+| 3 | §5.5 warrant enumerated eight dimensions while claiming nine | `cc90061` |
+| 3 | `implied_intensity` doubt-trigger fires in 96 of 96 months | `cc90061` |
+| 4 | `Weights` docstring's 762/1,227 and 1,041/1,080 coverage figures | `1b480c4` |
+| 5 | Float accumulation rejected the degenerate `Σ L = R_t` case | `ea784f2` |
+| 5 | Null-upper test passed identically under a 1e15 sentinel | `ea784f2` |
+| 6 | Non-indicator margins silently minimized a different objective | `ba63c69` |
+| 6 | Degenerate branch skipped the bound clip | `ba63c69` |
+| 6 | `weighted_quadratic` refusal promised in a docstring, absent in code | `ba63c69` |
+| 7 | Matrix reconciliation returned non-converged margins silently | `400b19e` |
+| 8 | Shrinking loop bound left units unplaced on 72% of feasible inputs | `e0e768f` |
+| 9 | `max(value, floor)` turned a negative draw into a legal weight | `bb84302` |
+| 9 | `general_method` guard on a path governed by `single_margin_method` | `bb84302` |
+| 9 | `PosteriorDraws` cited §16.2 for a §15.4 requirement | `bb84302` |
+| 10/12/13 | Composite arms in incommensurable units (one defect, three sites) | `4fb5230`, `1b480c4`, `f9700da` |
+| 11 | Test asserted the opposite of its own name | `3a9c0e2` |
+| 12 | NAICS-vintage test vacuous — fixture lacked a national row | `1b480c4` |
+| 12 | `.tail(n)` bounded the lookback in rows, not months | `1b480c4` |
+| 13 | Shrinkage test asserted unreachable unshrunk values | `f9700da` |
+| 15 | Missing docstring below the `interrogate` gate; "appears twice" was once | `86f971c` |
+| 16 | Three-field `cell_id` that could never join Stage 2's tables | `75934fa` |
+| 16 | §10.8 hierarchy resolved once for the window rather than per month | `75934fa` |
+| 16 | Integerization recheck used `assert`, which vanishes under `-O` | `75934fa` |
+| 17 | `reconcile` wrote no manifest, against §16.1's MUST | `eb54ad1` |
+| 17 | `weight_basis_counts` pooled across estimators | `eb54ad1` |
+| 17 | `staged_repo` fixture required by five tests and defined nowhere | `eb54ad1` |
+| 19 | Golden fixture sliced from gitignored `data/` at test time | `038c3af` |
+| 19 | `.equals` compared emission order against a sorted golden | `038c3af` |
+| 19 | `slow` claimed to exclude the D1 file; no marker filter exists | `038c3af` |
+| 19 | Universe-gate assertion compared audit to results, not to the panel | `038c3af` |
+
+### Not acted on
+
+* **Task 1's two defects are plan-prose errors, not code.** The expected `bound_status` tally and
+  the re-key literal `e04604e5dbce` are both wrong in the plan; the correct values (`observed`
+  largest, run id `320caf9c8934`) were measured during execution and recorded in commit `3b54a31`
+  and in the plan's Task 1 deviation note. Nothing shipped was affected.
+* **Nits** were reviewed in aggregate. Those that made a docstring or comment false were folded
+  into the commit for their task; the rest were judged cosmetic and left.
+
+### Never audited
+
+Task 18 and four of the five cross-cutting units died with the workflow. The four cross-cutting
+checks — mask-signature violations, call-site arity, anti-drift in test blocks, and §17.3 vacuity
+— were re-run inline by hand and all came back clean. Task 18 was never machine-audited; see
+specs/deferred_items.md.
+
+---
+
 ## Cross-task pattern worth naming
 
 Tasks 10, 12 and 13 carry the same blocker in three places: `compose` unions an own-weight

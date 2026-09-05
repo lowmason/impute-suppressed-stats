@@ -1,8 +1,10 @@
 # Stage 3: Exact Reconciliation and Transparent Baselines — Implementation Plan
 
+**Status: COMPLETE (2026-09-05)** — executed via executing-plans; deferred items in specs/deferred_items.md
+
 > **For agentic workers:** REQUIRED SUB-SKILL: **executing-plans** — inline execution was chosen
 > at the handoff on 2026-09-05, so run the tasks yourself in plan order rather than dispatching
-> subagents. Its stop-and-ask rules and completion chain apply. Steps use checkbox (`- [ ]`)
+> subagents. Its stop-and-ask rules and completion chain apply. Steps use checkbox (`- [x]`)
 > syntax for tracking.
 
 > Roadmap: specs/logging-employment-spec-roadmap.md, Stage 3 — on plan completion, tick the stage
@@ -276,6 +278,8 @@ schemas and three new enums), `errors.py` (four new exception classes), `cli.py`
 
 ### Task 1: Dependencies, the `reconciliation:` and `baselines:` config blocks, and the re-key rebuild
 
+> Deviation: Step 7's expected tally and the re-key literal were both wrong in the plan (`observed` is the largest status, and the new run id is `320caf9c8934`, not `e04604e5dbce`). `data/constraints/` was verified byte-identical across the rebuild.
+
 **Files:**
 - Modify: `pyproject.toml` (dependencies)
 - Modify: `src/logging_employment/config.py`
@@ -290,7 +294,7 @@ schemas and three new enums), `errors.py` (four new exception classes), `cli.py`
 Read §7 of "What the evidence already settles" before starting. Adding a config block re-keys
 `run_id`, and this task ends by rebuilding Stage 2's outputs under the new key.
 
-- [ ] **Step 1: Declare numpy as a direct dependency**
+- [x] **Step 1: Declare numpy as a direct dependency**
 
 `numpy` is imported directly by four shipped modules — `constraints/graph.py:16`,
 `constraints/diagnostics.py:19`, `constraints/rank.py:21`, `constraints/bounds.py:26` — but appears
@@ -316,7 +320,7 @@ dependencies = [
 Run `uv sync` and confirm it reports no change to the resolved set — numpy 2.5.2 is already
 installed transitively, so this declares reality rather than changing it.
 
-- [ ] **Step 2: Write the failing config test**
+- [x] **Step 2: Write the failing config test**
 
 Append to `tests/unit/test_config.py`. Do **not** yet edit `APPENDIX_A`; this test asserts the new
 blocks parse, and it must fail first.
@@ -354,13 +358,13 @@ def test_a_nondeterministic_integerization_tiebreak_is_rejected(tmp_path: Path) 
         load_config(_write(tmp_path, APPENDIX_A.replace("largest_remainder", "random")))
 ```
 
-- [ ] **Step 3: Run the tests to verify they fail**
+- [x] **Step 3: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_config.py -k reconciliation -v`
 Expected: FAIL — `AttributeError: 'Config' object has no attribute 'reconciliation'`, or a
 pydantic `ValidationError` for the extra `reconciliation` key once `APPENDIX_A` is edited.
 
-- [ ] **Step 4: Add the two config classes**
+- [x] **Step 4: Add the two config classes**
 
 In `src/logging_employment/config.py`, after `ConstraintsConfig` and before `DisclosureConfig`:
 
@@ -425,7 +429,7 @@ class Config(_Strict):
     disclosure: DisclosureConfig
 ```
 
-- [ ] **Step 5: Add the blocks to `config.yaml` and to `APPENDIX_A`**
+- [x] **Step 5: Add the blocks to `config.yaml` and to `APPENDIX_A`**
 
 Append to `config.yaml`, after the `constraints:` block and before `disclosure:`:
 
@@ -457,12 +461,12 @@ Also update `config.yaml`'s header comment, which currently says the
 "constraints/model/reconciliation/validation/promotion/disclosure blocks are omitted" — the
 reconciliation block is no longer omitted.
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_config.py -v`
 Expected: PASS, all tests including the four new ones.
 
-- [ ] **Step 7: Rebuild Stage 2's outputs under the new run id**
+- [x] **Step 7: Rebuild Stage 2's outputs under the new run id**
 
 Adding a config block changes `resolved_dict(cfg)`, which `run_id` hashes, so the run directory
 re-keys and Stage 2's outputs are orphaned. `data/constraints/` is not run-scoped and holds stale
@@ -482,7 +486,7 @@ precondition gate doing its job — not a defect. Run `build-constraints` and re
 
 Record the new run id; later tasks write into the same directory.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add pyproject.toml uv.lock src/logging_employment/config.py config.yaml tests/unit/test_config.py
@@ -492,6 +496,8 @@ git commit -m "feat(config): add the reconciliation and baselines blocks, and de
 ---
 
 ### Task 2: Stage 3 table contracts, enums, and errors
+
+> Deviation: The Step 1 test block referenced the new names bare; this file qualifies every reference through the `contracts` module, so a `NameError` would have persisted after the implementation landed.
 
 **Files:**
 - Modify: `src/logging_employment/contracts.py`
@@ -504,7 +510,7 @@ git commit -m "feat(config): add the reconciliation and baselines blocks, and de
   `RECONCILIATION_STATUSES`, `WEIGHT_BASES`, `ANCHOR_BASES`, and four exception classes:
   `UniverseClosureError`, `InfeasibleResidualError`, `WeightDomainError`, `NoHarvestFactorError`.
 
-- [ ] **Step 1: Write the failing contract test**
+- [x] **Step 1: Write the failing contract test**
 
 Append to `tests/unit/test_contracts.py`:
 
@@ -533,12 +539,12 @@ def test_a_declined_baseline_row_is_representable() -> None:
     assert BASELINE_RESULT_SCHEMA["estimate"] == pl.Float64
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `uv run pytest tests/unit/test_contracts.py -k baseline -v`
 Expected: FAIL with `NameError: name 'BASELINE_RESULT_SCHEMA' is not defined`.
 
-- [ ] **Step 3: Add the enums**
+- [x] **Step 3: Add the enums**
 
 In `contracts.py`, after `BOUND_STATUSES`:
 
@@ -567,7 +573,7 @@ WEIGHT_BASES: tuple[str, ...] = ("own_estimator", "establishment_fallback", "non
 ANCHOR_BASES: tuple[str, ...] = ("declared_national_total", "verified_identity", "none")
 ```
 
-- [ ] **Step 4: Add the two schemas**
+- [x] **Step 4: Add the two schemas**
 
 After `DETERMINISTIC_BOUNDS_SCHEMA`:
 
@@ -609,7 +615,7 @@ ANCHOR_AUDIT_SCHEMA: dict[str, pl.DataType] = {
 }
 ```
 
-- [ ] **Step 5: Add the four exception classes**
+- [x] **Step 5: Add the four exception classes**
 
 Append to `errors.py`, following the house style — one sentence, naming the offending value:
 
@@ -641,12 +647,12 @@ class NoHarvestFactorError(LoggingEmploymentError):
     """The harvest-proportional baseline has no harvest-origin volume and no latent factor."""
 ```
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_contracts.py -v`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/logging_employment/contracts.py src/logging_employment/errors.py tests/unit/test_contracts.py
@@ -656,6 +662,8 @@ git commit -m "feat(contracts): declare the Stage 3 tables, provenance enums, an
 ---
 
 ### Task 3: The substitute allocation anchor and its universe-closure gate
+
+> Deviation: Four repairs beyond the plan — the closure audit is driven by the panel's months (a national month with no state rows escaped the gate), `fill_null(0)` on the disclosed sum was a no-op that let a null inflate R_t, the §5.5 warrant enumerated eight dimensions while claiming nine, and the `implied_intensity` doubt-trigger fired in 96 of 96 months.
 
 **Files:**
 - Create: `src/logging_employment/reconcile/__init__.py`
@@ -682,7 +690,7 @@ settles" §2 and §3 before writing a line.**
 `observed_partition` is the *default* partition builder for a production run; Stage 4 will build a
 different one from a pseudo-suppression mask and pass it to the same `national_residual`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_anchor.py`:
 
@@ -826,12 +834,12 @@ def test_a_month_with_no_missing_cells_yields_no_anchor(make_monthly) -> None:
     assert anchor.residual == 0.0
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_anchor.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'logging_employment.reconcile'`.
 
-- [ ] **Step 3: Create the subpackage**
+- [x] **Step 3: Create the subpackage**
 
 Create `src/logging_employment/reconcile/__init__.py`:
 
@@ -850,7 +858,7 @@ from .anchor import Anchor, Partition, national_residual, observed_partition
 __all__ = ["Anchor", "Partition", "national_residual", "observed_partition"]
 ```
 
-- [ ] **Step 4: Write `anchor.py`**
+- [x] **Step 4: Write `anchor.py`**
 
 ```python
 """The substitute allocation anchor, and the gate that admits it.
@@ -1047,12 +1055,12 @@ predicate is strict, so `R_t = 0` with all lower bounds at 0 is a feasible degen
 MUST succeed. A `<= 0` guard fail-closes on a case the spec requires to work. It never fires on D1
 (min residual 696) but Stage 4's masks reach it.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_anchor.py -v`
 Expected: PASS, all six tests.
 
-- [ ] **Step 6: Confirm the gate on the real window**
+- [x] **Step 6: Confirm the gate on the real window**
 
 ```bash
 uv run python -c "
@@ -1072,7 +1080,7 @@ print('missing set size range', audit['missing_set_size'].min(), audit['missing_
 Expected: 96 months, gap range 0 0, a strictly positive residual range, and a missing-set size
 range within [9, 15]. **Record what it prints; do not hardcode it into a test.**
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/logging_employment/reconcile/ tests/unit/test_anchor.py
@@ -1082,6 +1090,8 @@ git commit -m "feat(reconcile): add the declared allocation anchor and its unive
 ---
 
 ### Task 4: The shared allocation entry point and its domain refusal (§12.2)
+
+> Deviation: `check_domain` runs before the empty-missing-set shortcut, not after; as ordered, a populated weight vector against an empty missing set returned `{}` instead of raising. The `Weights` docstring's 762/1,227 and 1,041/1,080 coverage figures were dropped — both were wrong and the anti-drift rule forbids typing counts into source.
 
 **Files:**
 - Create: `src/logging_employment/reconcile/allocate.py`
@@ -1102,7 +1112,7 @@ The domain refusal lands **here, with the entry point, and before any baseline e
 arrives later, the first baseline gets written against a permissive front door and the tightening
 breaks it.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_allocate.py`:
 
@@ -1183,12 +1193,12 @@ def test_a_declared_composite_is_permitted_and_its_basis_survives() -> None:
     assert weights.basis["04"] == "establishment_fallback"
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_allocate.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'logging_employment.reconcile.allocate'`.
 
-- [ ] **Step 3: Write `allocate.py`**
+- [x] **Step 3: Write `allocate.py`**
 
 ```python
 """§12.2's required no-bound fast path, and the domain refusal that guards it.
@@ -1271,12 +1281,12 @@ def allocate(anchor: Anchor, weights: Weights) -> dict[str, float]:
     return {cell: anchor.residual * weights.values[cell] / total for cell in anchor.missing_cells}
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_allocate.py -v`
 Expected: PASS, all eight tests (the parametrized one counts three).
 
-- [ ] **Step 5: Export from the subpackage**
+- [x] **Step 5: Export from the subpackage**
 
 Extend `src/logging_employment/reconcile/__init__.py`:
 
@@ -1295,7 +1305,7 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/logging_employment/reconcile/ tests/unit/test_allocate.py
@@ -1305,6 +1315,8 @@ git commit -m "feat(reconcile): add the shared allocation entry point and its do
 ---
 
 ### Task 5: Bounded proportional scaling by bisection (§12.3)
+
+> Deviation: The strict predicate is compared against the configured tolerance on both arms: seven cells at lower 0.1 sum to 0.7000000000000001, so an exact `>` rejected the degenerate case §12.3 requires to succeed. The null-upper test now asserts `math.isinf` directly — as written it passed identically under a 1e15 sentinel.
 
 **Files:**
 - Create: `src/logging_employment/reconcile/scaling.py`
@@ -1337,7 +1349,7 @@ above uses `Σ_{s∈M_t}`. Implement both over `M_t`: summing bounds over disclo
 be incoherent with §12.2's definition of `R_t` as the national total net of disclosed cells. This
 is an editorial asymmetry in the spec, not a second index set.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_scaling.py`:
 
@@ -1460,12 +1472,12 @@ def test_a_partial_weight_vector_is_refused_here_too() -> None:
                           tolerance=TOL, max_iterations=ITERS)
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_scaling.py -v`
 Expected: FAIL with `ModuleNotFoundError`.
 
-- [ ] **Step 3: Write `scaling.py`**
+- [x] **Step 3: Write `scaling.py`**
 
 ```python
 """§12.3 bounded proportional scaling, solved by bisection.
@@ -1580,12 +1592,12 @@ def scale_into_bounds(
     }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_scaling.py -v`
 Expected: PASS, all nine tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/reconcile/scaling.py tests/unit/test_scaling.py
@@ -1595,6 +1607,8 @@ git commit -m "feat(reconcile): solve bounded proportional scaling by bisection 
 ---
 
 ### Task 6: KL projection into the feasible polytope (§12.4)
+
+> Deviation: Margins are asserted to be 0/1 indicator rows (the uniform update is the I-projection only for those), the bound clip runs on both branches (the degenerate branch skipped it and returned bound-violating vectors), and `require_supported_method` makes the `weighted_quadratic` refusal real — the docstring promised a raise that existed nowhere.
 
 **Files:**
 - Create: `src/logging_employment/reconcile/projection.py`
@@ -1618,7 +1632,7 @@ be "versioned and validation-tested". `general_method` in config is that version
 implements `kl_projection` only and leaves `weighted_quadratic` unimplemented, raising
 `NotImplementedError` naming the config key — an honest gap beats a silently different objective.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_projection.py`:
 
@@ -1686,12 +1700,12 @@ def test_projection_output_is_strictly_positive() -> None:
     assert np.all(out > 0.0)
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_projection.py -v`
 Expected: FAIL with `ModuleNotFoundError`.
 
-- [ ] **Step 3: Write `projection.py`**
+- [x] **Step 3: Write `projection.py`**
 
 ```python
 """§12.4 general feasible-polytope projection under I-divergence (KL).
@@ -1762,12 +1776,12 @@ def kl_project(
     return x
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_projection.py -v`
 Expected: PASS, all five tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/reconcile/projection.py tests/unit/test_projection.py
@@ -1777,6 +1791,8 @@ git commit -m "feat(reconcile): project draws into the feasible polytope under I
 ---
 
 ### Task 7: Size-matrix reconciliation (§12.5)
+
+> Deviation: Adds the post-projection margin check the Interfaces block already declared but the code omitted. Consistent margins can still be unreachable from a seed's zero pattern: [[0,3],[2,0]] against rows [10,20] and columns [25,5] returned row sums [5,25] silently, while a feasible point exists.
 
 **Files:**
 - Create: `src/logging_employment/reconcile/matrix.py`
@@ -1798,7 +1814,7 @@ consumes it and §17.3 requires the property, not because this stage runs it on 
 overlapping margins use the general convex projection; **if margins are inconsistent, fail and
 diagnose rather than forcing convergence.**
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_matrix.py`:
 
@@ -1852,12 +1868,12 @@ def test_a_zero_seed_row_is_floored_rather_than_dividing_by_zero() -> None:
     assert out.sum(axis=1) == pytest.approx([10.0, 20.0], abs=1e-7)
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_matrix.py -v`
 Expected: FAIL with `ModuleNotFoundError`.
 
-- [ ] **Step 3: Write `matrix.py`**
+- [x] **Step 3: Write `matrix.py`**
 
 ```python
 """§12.5 size matrix reconciliation: row sums to reconciled state totals, columns to class margins.
@@ -1932,12 +1948,12 @@ def reconcile_matrix(
     return flat.reshape(n_rows, n_cols)
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_matrix.py -v`
 Expected: PASS, all four tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/reconcile/matrix.py tests/unit/test_matrix.py
@@ -1947,6 +1963,8 @@ git commit -m "feat(reconcile): reconcile a size matrix to row and column margin
 ---
 
 ### Task 8: Balanced integerization (§12.6)
+
+> Deviation: The placement budget is computed once before the loop. Evaluated inside the condition it shrank as units landed, leaving units unplaced on 72% of feasible bounded inputs — and all seven of the task's own tests passed against the broken version.
 
 **Files:**
 - Create: `src/logging_employment/reconcile/integerize.py`
@@ -1966,7 +1984,7 @@ That final line is the whole point of the task. Rounding each cell on its own br
 three cells at 3.4 each round to 9, not the 10 they summed to. The tie-break MUST be deterministic
 (by `cell_id`) or §16.1's idempotence requirement breaks.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_integerize.py`:
 
@@ -2027,12 +2045,12 @@ def test_a_total_below_the_summed_lower_bounds_raises() -> None:
         integerize({"01": 1.0, "02": 1.0}, total=1, lower={"01": 1, "02": 1})
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_integerize.py -v`
 Expected: FAIL with `ModuleNotFoundError`.
 
-- [ ] **Step 3: Write `integerize.py`**
+- [x] **Step 3: Write `integerize.py`**
 
 ```python
 """§12.6 balanced integerization.
@@ -2102,12 +2120,12 @@ def integerize(
     return out
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_integerize.py -v`
 Expected: PASS, all seven tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/reconcile/integerize.py tests/unit/test_integerize.py
@@ -2117,6 +2135,8 @@ git commit -m "feat(reconcile): integerize against the margin rather than cell b
 ---
 
 ### Task 9: `reconcile_draws`, `PosteriorDraws`, and joint dependence (§12.7, §16.2)
+
+> Deviation: Negative draws are refused rather than floored (§12.4 authorises a floor for zero seeds only; `max(-300, 1e-12)` reconciled an out-of-domain draw away silently). The `general_method` guard is removed — this path is §12.3, governed by `single_margin_method`. `PosteriorDraws` cites §15.4, which is where index preservation actually lives.
 
 **Files:**
 - Create: `src/logging_employment/reconcile/draws.py`
@@ -2146,7 +2166,7 @@ deviation in the docstring so Stage 5's implementer is not surprised by the sign
 remain available downstream. This function therefore returns draws, never summaries, and never
 reduces the draw axis.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_reconcile_draws.py`:
 
@@ -2238,12 +2258,12 @@ def test_a_cell_set_mismatch_is_refused() -> None:
         reconcile_draws(raw, _inputs(), _config())
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_reconcile_draws.py -v`
 Expected: FAIL with `ModuleNotFoundError`.
 
-- [ ] **Step 3: Write `draws.py`**
+- [x] **Step 3: Write `draws.py`**
 
 ```python
 """§16.2's `reconcile_draws`, and the joint-draw guarantee of §12.7.
@@ -2341,12 +2361,12 @@ def reconcile_draws(
     )
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_reconcile_draws.py -v`
 Expected: PASS, all six tests.
 
-- [ ] **Step 5: Export the full reconcile surface**
+- [x] **Step 5: Export the full reconcile surface**
 
 Rewrite `src/logging_employment/reconcile/__init__.py`'s exports to cover the whole subpackage:
 
@@ -2388,7 +2408,7 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/logging_employment/reconcile/ tests/unit/test_reconcile_draws.py
@@ -2398,6 +2418,8 @@ git commit -m "feat(reconcile): add reconcile_draws with one path for point esti
 ---
 
 ### Task 10: The `Estimator` protocol and the declared-composite weight machinery
+
+> Deviation: `compose` gained a units tripwire. Both arms must be in employees; measured on 2024-03, the raw union gave nine states with full observed histories 0.58 of 1,589 employees between them while one fallback state took 1,257. Decision recorded in specs/findings/stage3-plan-audit.md.
 
 **Files:**
 - Create: `src/logging_employment/baselines/__init__.py`
@@ -2422,7 +2444,7 @@ decline in 96/96 months on the D1 window, emptying §10.8's rungs 1 and 3. `comp
 partial coverage into a declared composite with per-cell provenance instead of either a silent
 subset or a total decline.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_baseline_interfaces.py`:
 
@@ -2480,12 +2502,12 @@ def test_a_non_positive_own_weight_falls_back_rather_than_poisoning_the_vector()
     assert w.basis["02"] == "establishment_fallback"
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_baseline_interfaces.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'logging_employment.baselines'`.
 
-- [ ] **Step 3: Write `interfaces.py`**
+- [x] **Step 3: Write `interfaces.py`**
 
 ```python
 """The `Estimator` protocol, and the declared-composite rule every baseline composes under.
@@ -2610,12 +2632,12 @@ from .interfaces import Decline, Estimator, EstimatorContext, compose
 __all__ = ["Decline", "Estimator", "EstimatorContext", "compose"]
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_baseline_interfaces.py -v`
 Expected: PASS, all five tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/baselines/ tests/unit/test_baseline_interfaces.py
@@ -2625,6 +2647,8 @@ git commit -m "feat(baselines): add the Estimator protocol and the declared-comp
 ---
 
 ### Task 11: §10.1 equal allocation and §10.2 establishment-proportional allocation
+
+> Deviation: `test_a_missing_cell_with_no_establishment_row_is_not_silently_dropped` asserted the opposite of its name; both halves are asserted now. `appendix_a_config` went in the ROOT conftest so §17.6's integration goldens can see it.
 
 **Files:**
 - Create: `src/logging_employment/baselines/simple.py`
@@ -2652,7 +2676,7 @@ the three months (measured: constant in all 1,572 state-quarters). §11.1 define
 and calls within-quarter constancy "a baseline modeling assumption, not a public identity". Say so
 in the docstring; do not silently treat the repeated value as a monthly measurement.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_baselines_simple.py`:
 
@@ -2757,12 +2781,12 @@ def appendix_a_config() -> "Config":
     return load_config(Path(__file__).resolve().parents[2] / "config.yaml")
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_baselines_simple.py -v`
 Expected: FAIL with `ModuleNotFoundError`.
 
-- [ ] **Step 3: Write `simple.py`**
+- [x] **Step 3: Write `simple.py`**
 
 ```python
 """§10.1 equal residual allocation and §10.2 establishment-count proportional allocation.
@@ -2842,12 +2866,12 @@ class EstablishmentProportional:
         return Weights(values=values, basis=dict.fromkeys(values, OWN))
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_baselines_simple.py -v`
 Expected: PASS, all four tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/baselines/simple.py tests/unit/ tests/unit/conftest.py
@@ -2857,6 +2881,8 @@ git commit -m "feat(baselines): add equal and establishment-proportional allocat
 ---
 
 ### Task 12: §10.3's five historical state-share variants
+
+> Deviation: Own weights are multiplied by the national total so both composite arms are in employees; the lookback is bounded in months as well as rows; the NAICS-vintage test's fixture lacked a national row and so passed on an empty join; and the 762/465 coverage claim was replaced by the measured 327/900 (129 for the same-month variant), recorded in the manifest rather than in prose.
 
 **Files:**
 - Create: `src/logging_employment/baselines/historical.py`
@@ -2891,7 +2917,7 @@ NV, VT — so no in-window share exists for them and every month's missing set c
 Measured split: **762 of 1,227 cells own-weight, 465 establishment-fallback.** Without composition
 this family declines in 96/96 months and §10.8's rung 3 is empty.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_baselines_historical.py`:
 
@@ -3008,12 +3034,12 @@ def test_crossing_the_break_is_possible_only_when_config_permits(
     assert history["reference_month"].to_list() == ["2021-12"]
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_baselines_historical.py -v`
 Expected: FAIL with `ModuleNotFoundError`.
 
-- [ ] **Step 3: Write `historical.py`**
+- [x] **Step 3: Write `historical.py`**
 
 ```python
 """§10.3's five historical state-share baselines.
@@ -3193,12 +3219,12 @@ class BreakAdjustedShare(_ShareBaseline):
         return statistics.median(segment)
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_baselines_historical.py -v`
 Expected: PASS — 13 tests (two parametrized over five classes, plus three).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/baselines/historical.py tests/unit/test_baselines_historical.py
@@ -3208,6 +3234,8 @@ git commit -m "feat(baselines): add the five historical share variants with a vi
 ---
 
 ### Task 13: §10.4 CBP/QCEW employee-per-establishment baseline
+
+> Deviation: The fallback arm is `national_intensity x A` — the estimator's own n->0 shrinkage limit — rather than a bare establishment count, which had allocated fallback states as if their intensity were 1.0. `test_intensity_is_employment_over_establishments_per_state` now passes `shrink_strength=0.0`, without which its asserted 5.0 and 3.0 were unreachable.
 
 **Files:**
 - Create: `src/logging_employment/baselines/intensity.py`
@@ -3242,7 +3270,7 @@ count-weighted shrink toward the national March intensity, with weight `n / (n +
 the state's establishment count and `k` a fixed prior strength. Record `k` in the docstring as this
 package's decision.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_baselines_intensity.py`:
 
@@ -3343,12 +3371,12 @@ def test_shrinkage_pulls_a_thin_state_toward_the_national_intensity() -> None:
     assert out["01"] == pytest.approx(10.0, abs=1.0)
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_baselines_intensity.py -v`
 Expected: FAIL with `ModuleNotFoundError`.
 
-- [ ] **Step 3: Write `intensity.py`**
+- [x] **Step 3: Write `intensity.py`**
 
 ```python
 """§10.4: the preferred transparent structural baseline.
@@ -3449,12 +3477,12 @@ class CbpIntensity:
         )
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_baselines_intensity.py -v`
 Expected: PASS, all five tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/baselines/intensity.py tests/unit/test_baselines_intensity.py
@@ -3486,7 +3514,7 @@ No harvest input exists: Appendix A ships `tpo.enabled: false` and `fia.enabled:
 pass.** State that in the test, or the integration test in Task 19 will read the decline as a
 failure.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_baselines_harvest.py`:
 
@@ -3543,12 +3571,12 @@ def test_the_decline_is_a_pass_for_the_run_every_baseline_criterion(
     assert out.reason  # a decline always carries a reason a reader can act on
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `uv run pytest tests/unit/test_baselines_harvest.py -v`
 Expected: FAIL with `ModuleNotFoundError`.
 
-- [ ] **Step 3: Write `harvest.py`**
+- [x] **Step 3: Write `harvest.py`**
 
 ```python
 """§10.5 harvest-proportional allocation, which declines on this window.
@@ -3594,12 +3622,12 @@ class HarvestProportional:
         )
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_baselines_harvest.py -v`
 Expected: PASS, both tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/baselines/harvest.py tests/unit/test_baselines_harvest.py
@@ -3609,6 +3637,8 @@ git commit -m "feat(baselines): decline harvest-proportional allocation rather t
 ---
 
 ### Task 15: §10.6 constrained regression baseline
+
+> Deviation: The fallback arm is in employees here too (latent on D1, where exposure covers every missing cell). `weights` gained the docstring `interrogate`'s 100% gate requires, and the "appears twice" claim about "training-visible" was corrected to once.
 
 **Files:**
 - Create: `src/logging_employment/baselines/regression.py`
@@ -3632,7 +3662,7 @@ mask-parameterised rule the anchor already follows.
 **Dependency decision: use `scipy`/`numpy`, not scikit-learn.** scipy is already a declared
 dependency; sklearn is not, and a ridge regression is a closed-form solve. Do not add sklearn.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_baselines_regression.py`:
 
@@ -3724,12 +3754,12 @@ def test_a_fit_with_too_few_training_rows_falls_back(make_monthly, appendix_a_co
     assert out.basis["02"] == "establishment_fallback"
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_baselines_regression.py -v`
 Expected: FAIL with `ModuleNotFoundError`.
 
-- [ ] **Step 3: Write `regression.py`**
+- [x] **Step 3: Write `regression.py`**
 
 ```python
 """§10.6: a regularized model for log employment intensity, fit on training-visible cells only.
@@ -3824,12 +3854,12 @@ class ConstrainedRegression:
         )
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_baselines_regression.py -v`
 Expected: PASS, all four tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/baselines/regression.py tests/unit/test_baselines_regression.py
@@ -3839,6 +3869,8 @@ git commit -m "feat(baselines): add the constrained regression baseline over tra
 ---
 
 ### Task 16: §10.8's fallback hierarchy, the runner, and `baseline_results/`
+
+> Deviation: Uses the shipped seven-field `cell_id`; the plan's three-field form could never join Stage 2's tables, and no join would have raised. §10.8's hierarchy is also resolved per month. The integerization recheck raises a package error rather than using `assert`. Adds the `harmonized_toy` fixture the plan specified only in prose.
 
 **Files:**
 - Create: `src/logging_employment/baselines/runner.py`
@@ -3870,7 +3902,7 @@ The runner is where the anchor gate runs once for the whole window (a `UniverseC
 **whole-run halt**, per §18.3, not a per-month decline), and where every decline becomes a visible
 row rather than an absent one.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_baseline_runner.py`:
 
@@ -4008,12 +4040,12 @@ Add a `harmonized_toy` fixture to `tests/unit/conftest.py` building a two-month,
 `HarmonizedData` whose establishment universes close exactly, with at least one suppressed cell per
 month, one state with no observed history, and one state absent from CBP.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_baseline_runner.py -v`
 Expected: FAIL with `ModuleNotFoundError`.
 
-- [ ] **Step 3: Write `runner.py`**
+- [x] **Step 3: Write `runner.py`**
 
 ```python
 """Run every §10 baseline over the window, and rank what ran by §10.8's hierarchy.
@@ -4195,12 +4227,12 @@ def preferred_estimator(results: pl.DataFrame) -> str:
     raise ValueError("no estimator in §10.8's fallback hierarchy produced any estimate")
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_baseline_runner.py -v`
 Expected: PASS, all ten tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/baselines/ tests/unit/
@@ -4210,6 +4242,8 @@ git commit -m "feat(baselines): run every estimator under one gate and rank by t
 ---
 
 ### Task 17: The `run-baselines` and `reconcile` CLI commands
+
+> Deviation: `reconcile` writes a manifest (§16.1 admits no exception), `weight_basis_counts` is nested per estimator rather than pooled, and four tests that discarded the runner result now assert its exit code. Adds `staged_repo` and the committed fixture under tests/fixtures/baselines/, neither of which the plan defined.
 
 **Files:**
 - Modify: `src/logging_employment/cli.py`
@@ -4230,7 +4264,7 @@ cheap, `typer.Option(..., "--config", exists=True, dir_okay=False)`, and `typer.
 
 §16.1 requires both commands to be idempotent for identical inputs.
 
-- [ ] **Step 1: Write the failing integration test**
+- [x] **Step 1: Write the failing integration test**
 
 Create `tests/integration/test_baseline_cli.py`:
 
@@ -4291,12 +4325,12 @@ def test_declines_are_counted_in_the_manifest(staged_repo) -> None:
     assert "harvest_proportional" in manifest["declines"]
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `uv run pytest tests/integration/test_baseline_cli.py -v`
 Expected: FAIL — `run-baselines` is not a registered command.
 
-- [ ] **Step 3: Add the two commands**
+- [x] **Step 3: Add the two commands**
 
 Append to `src/logging_employment/cli.py`:
 
@@ -4424,12 +4458,12 @@ def reconcile_command(
         raise typer.Exit(code=1)
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/integration/test_baseline_cli.py -v`
 Expected: PASS, all five tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/cli.py tests/integration/test_baseline_cli.py
@@ -4478,7 +4512,7 @@ until Stage 6.
 There is no Hypothesis dependency in this repo; property tests are hand-rolled with a seeded
 `numpy.random.default_rng`. Follow that. Seeds are fixed constants so a failure is reproducible.
 
-- [ ] **Step 1: Write the seven property tests plus the three named unit rows**
+- [x] **Step 1: Write the seven property tests plus the three named unit rows**
 
 Create `tests/unit/test_reconcile_properties.py`:
 
@@ -4687,18 +4721,18 @@ def test_property_7b_integerization_is_order_independent() -> None:
     assert forward == backward
 ```
 
-- [ ] **Step 2: Run the tests**
+- [x] **Step 2: Run the tests**
 
 Run: `uv run pytest tests/unit/test_reconcile_properties.py -v`
 Expected: PASS, 12 tests. If property 3b or 7 fails, the implementation has the strictness or
 determinism defect those tests exist to catch — fix the implementation, not the test.
 
-- [ ] **Step 3: Confirm the full unit suite still passes**
+- [x] **Step 3: Confirm the full unit suite still passes**
 
 Run: `uv run pytest tests/unit -q`
 Expected: PASS, with the Stage 1 and Stage 2 tests unchanged.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/unit/test_reconcile_properties.py
@@ -4708,6 +4742,8 @@ git commit -m "test(reconcile): add §17.3's seven properties and name §17.1 ro
 ---
 
 ### Task 19: §17.4 row 4 integration, §17.6 golden fixtures, and the D1 acceptance run
+
+> Deviation: The goldens are generated from the committed fixture and checked in — the plan sliced them from gitignored `data/staged` at test time. Comparison goes through a new `build.deterministic_order` so the test cannot drift from the writer. The D1 file carries the shipped `skipif` guard, and the universe-gate assertion compares against the panel's months rather than the results'.
 
 **Files:**
 - Create: `tests/integration/test_baseline_golden.py`
@@ -4730,7 +4766,7 @@ pattern in `tests/integration/test_constraint_golden.py`.
 **The D1 acceptance run is marked `slow`** and excluded from the default run, like
 `test_d1_acceptance.py`. It is the run that produces the numbers for the completion report.
 
-- [ ] **Step 1: Write the integration and golden tests**
+- [x] **Step 1: Write the integration and golden tests**
 
 Create `tests/integration/test_baseline_golden.py`:
 
@@ -4847,12 +4883,12 @@ def test_the_composite_split_is_recorded_rather_than_hidden() -> None:
     assert "establishment_fallback" in ran["weight_basis"].unique().to_list()
 ```
 
-- [ ] **Step 2: Run the integration tests to verify they fail**
+- [x] **Step 2: Run the integration tests to verify they fail**
 
 Run: `uv run pytest tests/integration/test_baseline_golden.py -v`
 Expected: FAIL — the golden fixtures do not exist yet.
 
-- [ ] **Step 3: Generate the golden fixtures**
+- [x] **Step 3: Generate the golden fixtures**
 
 Build the frozen fixture and write the goldens once, then read them back:
 
@@ -4884,12 +4920,12 @@ print('results', results.height, 'audit', audit.height)
 Wire `frozen_harmonized` in `tests/integration/conftest.py` to build the identical slice, so the
 fixture the test runs and the fixture the golden was generated from cannot drift.
 
-- [ ] **Step 4: Run the integration tests to verify they pass**
+- [x] **Step 4: Run the integration tests to verify they pass**
 
 Run: `uv run pytest tests/integration/test_baseline_golden.py -v`
 Expected: PASS, all three tests.
 
-- [ ] **Step 5: Run the D1 acceptance run**
+- [x] **Step 5: Run the D1 acceptance run**
 
 ```bash
 uv run logging-estimates run-baselines --config config.yaml
@@ -4903,14 +4939,14 @@ gated and anchored, and the maximum residual drift.
 
 **Do not hardcode any of those numbers into a test.** They are measurements dated to the run.
 
-- [ ] **Step 6: Run the whole suite**
+- [x] **Step 6: Run the whole suite**
 
 Run: `uv run pytest -q`
 Expected: PASS. The Stage 1 and Stage 2 tests must be untouched — if `deterministic_bounds` or
 `constraint_set_hash` changed, something in this stage wrote back into Stage 2's outputs, which the
 Global Constraints forbid.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add tests/integration/ tests/fixtures/baselines/
