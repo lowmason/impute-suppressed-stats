@@ -190,7 +190,7 @@ exit includes proving both suites still collect.
 - Produces: an installable package importable as `logging_employment`, exposing
   `logging_employment.__version__: str`. Every later task imports from this package.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_package.py`:
 
@@ -207,13 +207,13 @@ def test_package_exposes_a_version_string() -> None:
     assert logging_employment.__version__.count(".") >= 1
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/unit/test_package.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'logging_employment'` (uv will also
 complain there is no project; that is the same failure).
 
-- [ ] **Step 3: Write `pyproject.toml`**
+- [x] **Step 3: Write `pyproject.toml`**
 
 ```toml
 [project]
@@ -271,7 +271,7 @@ fail-under = 100
 exclude = ["tests"]
 ```
 
-- [ ] **Step 4: Create the package module**
+- [x] **Step 4: Create the package module**
 
 Create `src/logging_employment/__init__.py`:
 
@@ -283,31 +283,31 @@ from __future__ import annotations
 __version__ = "0.1.0"
 ```
 
-- [ ] **Step 5: Lock and install**
+- [x] **Step 5: Lock and install**
 
 Run: `uv lock && uv sync`
 Expected: `uv.lock` is created; the sync resolves on CPython 3.14. If uv reports it must download
 CPython 3.14, let it.
 
-- [ ] **Step 6: Run the test to verify it passes**
+- [x] **Step 6: Run the test to verify it passes**
 
 Run: `uv run pytest tests/unit/test_package.py -v`
 Expected: PASS, 1 passed.
 
-- [ ] **Step 7: Prove the CLI entry point is registered**
+- [x] **Step 7: Prove the CLI entry point is registered**
 
 Run: `uv run logging-estimates --help`
 Expected: this FAILS right now with `ModuleNotFoundError` or an AttributeError on `cli` — the
 module does not exist until Task 4. That is expected; do not create a stub `cli.py` here. Record
 the observed error in your implementer report and move on.
 
-- [ ] **Step 8: Prove Stage 0's suite is undisturbed**
+- [x] **Step 8: Prove Stage 0's suite is undisturbed**
 
 Run: `PYTHONPATH=scripts/audit uv run --no-project pytest tests/audit -q`
 Expected: the Stage 0 suite collects and passes exactly as before this task (Stage 0 reported 666
 tests at plan completion; report the number you observe rather than asserting that one).
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add pyproject.toml uv.lock src/logging_employment/__init__.py tests/unit/test_package.py
@@ -338,7 +338,7 @@ git commit -m "feat(pkg): scaffold the logging_employment package on Python 3.14
   - `errors.UnknownDisclosureCodeError`, `errors.UnknownDisclosureRegimeError`,
     `errors.SchemaMismatchError`, `errors.MissingCrossTabulationError`, `errors.ConceptViolationError`
 
-- [ ] **Step 1: Write the failing tests for the allowlist**
+- [x] **Step 1: Write the failing tests for the allowlist**
 
 Create `tests/unit/test_constants.py`:
 
@@ -378,12 +378,12 @@ def test_the_allowlist_docstring_does_not_claim_a_titles_file_defines_it() -> No
     assert "no titles file" in block
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `uv run pytest tests/unit/test_constants.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'logging_employment.constants'`.
 
-- [ ] **Step 3: Write `constants.py`**
+- [x] **Step 3: Write `constants.py`**
 
 ```python
 """Fixed values for the D1 window, the target industry, and the measured QCEW code sets."""
@@ -418,12 +418,12 @@ QCEW_ALL_SIZES_CODE = "0"  # "All establishment sizes"
 QCEW_DISCLOSURE_CODES = frozenset({"", "N", "-"})
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `uv run pytest tests/unit/test_constants.py -v`
 Expected: PASS, 4 passed.
 
-- [ ] **Step 5: Write the failing test for the classification memo**
+- [x] **Step 5: Write the failing test for the classification memo**
 
 Create `tests/unit/test_classification.py`:
 
@@ -472,12 +472,12 @@ def test_memo_raises_when_section_31_is_missing(tmp_path: Path) -> None:
         classification_memo(empty)
 ```
 
-- [ ] **Step 6: Run to verify it fails**
+- [x] **Step 6: Run to verify it fails**
 
 Run: `uv run pytest tests/unit/test_classification.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'logging_employment.classification'`.
 
-- [ ] **Step 7: Write `classification.py`**
+- [x] **Step 7: Write `classification.py`**
 
 The anchored-read approach is Stage 0's, in `scripts/audit/verify_extracts.py::classification_block`
 — read that function before writing this one; it documents why anchoring matters here.
@@ -550,12 +550,12 @@ def classification_memo(spec_path: Path) -> dict[str, str]:
     return memo
 ```
 
-- [ ] **Step 8: Run to verify it passes**
+- [x] **Step 8: Run to verify it passes**
 
 Run: `uv run pytest tests/unit/test_classification.py -v`
 Expected: PASS, 3 passed.
 
-- [ ] **Step 9: Write `errors.py`**
+- [x] **Step 9: Write `errors.py`**
 
 ```python
 """Named fail-closed exceptions (§18.3).
@@ -591,7 +591,7 @@ class ConceptViolationError(LoggingEmploymentError):
     """A value would cross a concept boundary the spec forbids crossing."""
 ```
 
-- [ ] **Step 10: Run the whole suite and commit**
+- [x] **Step 10: Run the whole suite and commit**
 
 Run: `uv run pytest tests/unit -v`
 Expected: PASS, 8 passed.
@@ -628,7 +628,7 @@ invent three vocabularies. The four values are fixed here, and the distinction t
 fourth one is real: DC publishes no private 113310 row in any of the 96 months, which is neither a
 suppressed cell nor a zero.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_contracts.py`:
 
@@ -679,12 +679,12 @@ def test_validate_frame_names_the_offending_columns() -> None:
         contracts.validate_frame(frame, {"x": pl.String, "y": pl.Int64}, "toy")
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `uv run pytest tests/unit/test_contracts.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'logging_employment.contracts'`.
 
-- [ ] **Step 3: Write `contracts.py`**
+- [x] **Step 3: Write `contracts.py`**
 
 ```python
 """Polars schemas for every table this stage persists, and their fingerprints.
@@ -843,12 +843,12 @@ def validate_frame(frame: pl.DataFrame, schema: dict[str, pl.DataType], name: st
         raise SchemaMismatchError(f"{name}: dtype mismatches {wrong}")
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `uv run pytest tests/unit/test_contracts.py -v`
 Expected: PASS, 5 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/contracts.py tests/unit/test_contracts.py
