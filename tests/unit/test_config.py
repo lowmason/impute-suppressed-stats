@@ -42,6 +42,24 @@ constraints:
   solver: 'highs'
   feasibility_tolerance: 1.0e-7
   rank_tolerance: 1.0e-10
+reconciliation:
+  single_margin_method: 'bounded_proportional_scaling'
+  general_method: 'kl_projection'
+  integerize_release: true
+  # Originated by plan 4, not by Appendix A, which has no tolerance key.
+  tolerance: 1.0e-9
+  max_bisection_iterations: 200
+  max_projection_iterations: 1000
+  zero_seed_floor: 1.0e-12
+  integerization_tiebreak: 'largest_remainder'
+
+baselines:
+  allow_declared_composite: true
+  composite_fallback: 'establishment_proportional'
+  historical_lookback_months: 24
+  historical_may_cross_naics_vintage: false
+  regression_ridge_penalty: 1.0
+
 disclosure:
   exact_reconstruction_action: 'withhold'
   narrow_interval_action: 'manual_review'
@@ -114,3 +132,35 @@ def test_the_shipped_config_carries_both_new_blocks() -> None:
     cfg = load_config(Path(__file__).resolve().parents[2] / "config.yaml")
     assert cfg.constraints.solver == "highs"
     assert cfg.disclosure.narrow_interval_relative_width == 0.25
+
+
+def test_the_reconciliation_block_parses_with_appendix_a_methods(tmp_path: Path) -> None:
+    cfg = load_config(_write(tmp_path, APPENDIX_A))
+    assert cfg.reconciliation.single_margin_method == "bounded_proportional_scaling"
+    assert cfg.reconciliation.general_method == "kl_projection"
+    assert cfg.reconciliation.integerize_release is True
+
+
+def test_the_reconciliation_tolerance_is_this_packages_decision_not_appendix_as(
+    tmp_path: Path,
+) -> None:
+    """Appendix A's `reconciliation:` block has three keys and no tolerance.
+
+    `feasibility_tolerance: 1.0e-7` lives under `constraints:` and belongs to the LP/MILP bound
+    solver. Reusing the number here is a new decision, so it is configured separately and can
+    diverge without touching the solver.
+    """
+    cfg = load_config(_write(tmp_path, APPENDIX_A))
+    assert cfg.reconciliation.tolerance == 1.0e-9
+    assert cfg.constraints.feasibility_tolerance == 1.0e-7
+
+
+def test_an_unknown_general_method_is_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError):
+        load_config(_write(tmp_path, APPENDIX_A.replace("kl_projection", "hand_waving")))
+
+
+def test_a_nondeterministic_integerization_tiebreak_is_rejected(tmp_path: Path) -> None:
+    """§16.1 requires idempotence; a random tie-break would break it."""
+    with pytest.raises(ValidationError):
+        load_config(_write(tmp_path, APPENDIX_A.replace("largest_remainder", "random")))

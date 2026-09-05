@@ -331,3 +331,72 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       `Path(cfg.storage.staged_uri).parent / "constraints"` silently relocates the constraint
       tables if `staged_uri` is ever pointed outside `data/`. A `StorageConfig.constraints_uri`
       would make the location configured rather than inferred.
+
+## 4-stage3-logging-employment-spec — 2026-09-05
+
+- [ ] **`MAX_SCALE_RATIO = 100.0` is an originated tripwire with no spec warrant.**
+      `baselines/interfaces.py` refuses a composite whose two arms' medians differ by more than
+      100x. The factor is this package's decision, chosen to sit far above any honest
+      employees-vs-employees ratio and far below the ~1e4 units mismatch it was written to catch.
+      Nothing in §10 or §12 speaks to it. If a future baseline legitimately produces arms an order
+      of magnitude apart, the number needs re-deriving rather than nudging.
+
+- [ ] **§10.3's fallback scales by the DISCLOSED intensity; §10.4's uses the NATIONAL one.**
+      Both put the fallback arm in employees, and each is defensible on its own terms — §10.4's is
+      exactly its own n->0 shrinkage limit, §10.3 has no such limit to appeal to and uses a
+      published ratio of two published sums. But two baselines answering "how many employees does
+      an establishment carry" differently is a divergence no section asked for. See
+      `baselines/simple.py:establishment_fallback_in_employees` and
+      `baselines/intensity.py:national_march_intensity`.
+
+- [ ] **`disclosed_intensity` reads the partition from the context while the residual comes from
+      the anchor.** `baselines/simple.py` looks up `context.partitions[anchor.reference_month]`,
+      but `national_residual` was handed a `Partition` argument directly. Under a Stage 4
+      pseudo-suppression mask the two agree only if the harness rebuilds
+      `EstimatorContext.partitions` from the same mask it passed to the anchor — nothing enforces
+      that, and a mismatch would scale the fallback off the unmasked partition without any signal.
+      This is the mask-parameterisation rule one level above where the plan stated it. Stage 4
+      should either thread the partition through the estimator call or assert the two agree.
+
+- [ ] **The `general_method` guard lives at the CLI, not in the reconciliation layer.**
+      `require_supported_method` is exported from `reconcile.projection` but is called only where
+      config is read. `reconcile_matrix` takes no config argument, so Stage 6 must call the guard
+      itself when it wires the matrix path — nothing in the layer forces it to.
+
+- [ ] **`kl_project` returns silently on an infeasible bounded system.**
+      Its loop breaks on step size, not on violation, so a fully-clipped update exits on iteration
+      one: `kl_project(seed=[1,1], margins=[[1,1]], targets=[10], upper=[1,1])` returns `[1., 1.]`
+      with violation 8.0 and no exception. `reconcile_matrix` compensates with its own post-check,
+      and a 5,417-case feasible sweep showed violation never increases — but `kl_project` is
+      exported and Stage 5/6 can call it directly. It should return the achieved violation or
+      raise. (Whole-branch review, Important.)
+
+- [ ] **The three provenance enums are declared but never enforced.**
+      `RECONCILIATION_STATUSES`, `WEIGHT_BASES` and `ANCHOR_BASES` in `contracts.py` constrain
+      nothing: `run_baselines` writes string literals and only `BASELINE_RESULT_SCHEMA`'s dtypes
+      are checked, so a typo reaches `baseline_results.parquet` and passes every test. Validate
+      the three columns before returning. (Whole-branch review, Important.)
+
+- [ ] **`integerize` has three bound-handling gaps, all latent on D1 and all live in Stage 6.**
+      No `lower <= upper` check (a contradictory pair silently violates the lower bound); the cap
+      loop iterates `upper` rather than `values`, so a cap for an absent cell injects a phantom
+      entry; and the ordering key is the raw fractional part, which is no longer largest-remainder
+      once `floors` has been raised by `lower` or lowered by `upper`. D1 has `lower=0, upper=None`
+      throughout. (Whole-branch review, Minor.)
+
+- [ ] **`BreakAdjustedShare` collapses to `RollingMedianShare` below four shares.**
+      The pre-execution audit measured 111 of 360 cells taking that branch, and
+      `test_section_10_3_ships_exactly_five_variants` only checks that five distinct estimator ids
+      exist — nothing detects two variants computing the same number. (Whole-branch review, Minor.)
+
+- [ ] **`NoHarvestFactorError` is defined and never raised.**
+      `errors.py` declares it for §10.5, but `HarvestProportional` returns a `Decline` instead,
+      which is the correct behaviour. Either remove the class or document it as reserved for the
+      Stage 7 path that will raise it.
+
+- [ ] **Task 18's property tests and four of the five cross-cutting audit units never ran.**
+      The plan audit was stopped early after its subagents wrote into the working tree (see
+      specs/findings/stage3-plan-audit.md). The four cross-cutting checks were re-run inline by
+      hand and came back clean — mask-signature, call-site arity, anti-drift in test blocks, and
+      §17.3 vacuity — but Task 18 was never machine-audited. Its twelve properties pass against
+      the shipped implementation, which is evidence but not the same thing.

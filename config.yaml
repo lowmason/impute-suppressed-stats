@@ -1,8 +1,10 @@
 # Stage 1 configuration. The project/storage/sources blocks are copied byte-for-byte
 # from Appendix A of specs/logging-employment-spec.md (its lines 2022-2049), extracted
 # with sed rather than retyped. Appendix A's other source entries (tpo, fia, ces, susb,
-# bds, nonemployer, bea) and its constraints/model/reconciliation/validation/promotion/
-# disclosure blocks are omitted: Config forbids extra keys and those belong to Stages 2-8.
+# bds, nonemployer, bea) and its model/validation/promotion blocks are omitted: Config
+# forbids extra keys and those belong to Stages 4-8. The constraints/reconciliation/
+# disclosure blocks are present; `reconciliation:` additionally carries five numerical
+# keys Appendix A does not specify (see ReconciliationConfig).
 project:
   name: 'logging-state-employment'
   industry_code_supplied: '1113310'
@@ -37,6 +39,24 @@ constraints:
   solver: 'highs'
   feasibility_tolerance: 1.0e-7
   rank_tolerance: 1.0e-10
+
+reconciliation:
+  single_margin_method: 'bounded_proportional_scaling'
+  general_method: 'kl_projection'
+  integerize_release: true
+  # Originated by plan 4, not by Appendix A, which has no tolerance key.
+  tolerance: 1.0e-9
+  max_bisection_iterations: 200
+  max_projection_iterations: 1000
+  zero_seed_floor: 1.0e-12
+  integerization_tiebreak: 'largest_remainder'
+
+baselines:
+  allow_declared_composite: true
+  composite_fallback: 'establishment_proportional'
+  historical_lookback_months: 24
+  historical_may_cross_naics_vintage: false
+  regression_ridge_penalty: 1.0
 
 disclosure:
   exact_reconstruction_action: 'withhold'

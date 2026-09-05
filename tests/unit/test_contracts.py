@@ -170,3 +170,27 @@ def test_the_new_schemas_have_distinct_fingerprints() -> None:
         )
     }
     assert len(prints) == 4
+
+
+def test_the_baseline_result_schema_carries_per_cell_weight_provenance() -> None:
+    """A reader must never mistake a fallback-weighted cell for an own-estimator one."""
+    assert "weight_basis" in contracts.BASELINE_RESULT_SCHEMA
+    assert "anchor_basis" in contracts.BASELINE_RESULT_SCHEMA
+    assert "reconciliation_status" in contracts.BASELINE_RESULT_SCHEMA
+
+
+def test_reconciliation_status_is_distinct_from_hard_constraint_satisfaction() -> None:
+    """INV-002 binds hard public accounting constraints; the anchor is a modeling assumption.
+
+    The enum must be able to say "reconciled to a declared anchor" without that reading as
+    "satisfies a hard constraint", or INV-008's separation collapses.
+    """
+    assert "anchored_and_reconciled" in contracts.RECONCILIATION_STATUSES
+    assert "declined" in contracts.RECONCILIATION_STATUSES
+    assert "hard_constraint_satisfied" not in contracts.RECONCILIATION_STATUSES
+
+
+def test_a_declined_baseline_row_is_representable() -> None:
+    """A decline is a visible row, never an absent one."""
+    assert contracts.BASELINE_RESULT_SCHEMA["decline_reason"] == pl.String
+    assert contracts.BASELINE_RESULT_SCHEMA["estimate"] == pl.Float64

@@ -12,7 +12,13 @@ from collections.abc import Callable
 import polars as pl
 import pytest
 
-from logging_employment.contracts import QCEW_MONTHLY_SCHEMA, QCEW_NATIONAL_SIZE_SCHEMA
+from logging_employment.contracts import (
+    BRIDGE_SCHEMA,
+    CBP_STATE_SIZE_SCHEMA,
+    QCEW_MONTHLY_SCHEMA,
+    QCEW_NATIONAL_SIZE_SCHEMA,
+    HarmonizedData,
+)
 
 _MONTHLY_DEFAULTS: dict[str, object] = {
     "snapshot_id": "2024q1",
@@ -80,3 +86,136 @@ def make_size() -> Callable[..., pl.DataFrame]:
         )
 
     return _build
+
+
+_CBP_TOY_DEFAULTS: dict[str, object] = {
+    "snapshot_id": "2023",
+    "reference_year": 2023,
+    "state_fips": "01",
+    "industry_code": "113310",
+    "naics_vintage": "NAICS 2022",
+    "legal_form_code": "001",
+    "size_code": "001",
+    "size_label": "All establishments",
+    "size_lower": 0,
+    "size_upper": None,
+    "establishments": 10,
+    "employment": 50,
+    "employment_flag": "",
+    "employment_noise_range": "0",
+    "disclosure_status": "published",
+    "disclosure_regime": "noise_infusion",
+    "reference_period": "week_including_march_12",
+}
+
+
+@pytest.fixture()
+def harmonized_toy(make_monthly) -> HarmonizedData:
+    """A two-month, four-state `HarmonizedData` the runner can be driven end to end on.
+
+    Built to the shape the runner's tests need, and every property is load-bearing:
+
+    * The establishment universes CLOSE EXACTLY in both months — national 50 against states
+      10+20+5+15 — because `run_baselines` calls `assert_universe_closes` before anything else and
+      a fixture that failed the gate would test only the halt.
+    * Every month has a suppressed cell, so no month is skipped for an empty missing set.
+    * State '04' is suppressed in BOTH months, so it never acquires an observed history and the
+      §10.3 family must reach for its declared fallback.
+    * State '06' is absent from CBP entirely, so §10.4 must compose rather than decline.
+    * Residuals are positive in both months (50 and 80), so the anchor is admissible.
+    """
+    rows = [
+        # 2023-01: only '04' is suppressed; residual 500 - 450 = 50.
+        {
+            "area_type": "national",
+            "area_fips": "US000",
+            "state_fips": None,
+            "aggregation_level": "18",
+            "reference_month": "2023-01",
+            "employment_value": 500,
+            "qtrly_establishments": 50,
+        },
+        {
+            "state_fips": "01",
+            "area_fips": "01000",
+            "reference_month": "2023-01",
+            "employment_value": 100,
+            "qtrly_establishments": 10,
+        },
+        {
+            "state_fips": "02",
+            "area_fips": "02000",
+            "reference_month": "2023-01",
+            "employment_value": 200,
+            "qtrly_establishments": 20,
+        },
+        {
+            "state_fips": "04",
+            "area_fips": "04000",
+            "reference_month": "2023-01",
+            "observation_status": "suppressed",
+            "employment_value": None,
+            "qtrly_establishments": 5,
+        },
+        {
+            "state_fips": "06",
+            "area_fips": "06000",
+            "reference_month": "2023-01",
+            "employment_value": 150,
+            "qtrly_establishments": 15,
+        },
+        # 2023-02: '04' and '06' suppressed; residual 400 - 320 = 80.
+        {
+            "area_type": "national",
+            "area_fips": "US000",
+            "state_fips": None,
+            "aggregation_level": "18",
+            "reference_month": "2023-02",
+            "employment_value": 400,
+            "qtrly_establishments": 50,
+        },
+        {
+            "state_fips": "01",
+            "area_fips": "01000",
+            "reference_month": "2023-02",
+            "employment_value": 110,
+            "qtrly_establishments": 10,
+        },
+        {
+            "state_fips": "02",
+            "area_fips": "02000",
+            "reference_month": "2023-02",
+            "employment_value": 210,
+            "qtrly_establishments": 20,
+        },
+        {
+            "state_fips": "04",
+            "area_fips": "04000",
+            "reference_month": "2023-02",
+            "observation_status": "suppressed",
+            "employment_value": None,
+            "qtrly_establishments": 5,
+        },
+        {
+            "state_fips": "06",
+            "area_fips": "06000",
+            "reference_month": "2023-02",
+            "observation_status": "suppressed",
+            "employment_value": None,
+            "qtrly_establishments": 15,
+        },
+    ]
+    cbp = pl.DataFrame(
+        [
+            _CBP_TOY_DEFAULTS | {"state_fips": "01", "establishments": 10, "employment": 100},
+            _CBP_TOY_DEFAULTS | {"state_fips": "02", "establishments": 20, "employment": 200},
+            _CBP_TOY_DEFAULTS | {"state_fips": "04", "establishments": 5, "employment": 25},
+        ],
+        schema=CBP_STATE_SIZE_SCHEMA,
+    )
+    return HarmonizedData(
+        qcew_monthly=make_monthly(*rows),
+        qcew_national_size=pl.DataFrame([], schema=QCEW_NATIONAL_SIZE_SCHEMA),
+        cbp_state_size=cbp,
+        bridge=pl.DataFrame([], schema=BRIDGE_SCHEMA),
+    )
