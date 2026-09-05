@@ -195,6 +195,29 @@ BOUND_STATUSES: tuple[str, ...] = (
     "infeasible",
 )
 
+# §7.11 names no reconciliation status and enumerates none, unlike `release_action`'s eight
+# values, so these five are this package's decision. The separation that matters is the last two:
+# a cell reconciled to the declared anchor is NOT a cell satisfying a hard public accounting
+# constraint. INV-002 binds only the latter; INV-008 forbids relabelling one as the other.
+RECONCILIATION_STATUSES: tuple[str, ...] = (
+    "observed",
+    "anchored_and_reconciled",
+    "reconciled_no_anchor",
+    "declined",
+    "infeasible",
+)
+
+# Per-cell provenance for the weight that produced an estimate. §10.8's rank-1 phrasing
+# ("employee-per-establishment with robust historical adjustment") is the spec's own precedent
+# that a composed estimator is legitimate; this column is what keeps the composition declared
+# rather than silent.
+WEIGHT_BASES: tuple[str, ...] = ("own_estimator", "establishment_fallback", "none")
+
+# What licensed the allocation target. Only one value is reachable in this stage;
+# `verified_identity` exists for the retirement condition in the anchor's docstring, when a future
+# QCEW vintage publishes a month with no suppressed cell and SRC-QCEW-006 becomes testable.
+ANCHOR_BASES: tuple[str, ...] = ("declared_national_total", "verified_identity", "none")
+
 # What licenses a constraint, as a closed set rather than free prose. §7.8 has no column for it, so
 # the row factory writes it into `provenance_text` behind an `evidence_kind=` prefix. It exists so
 # that §9.3's forbidden forms can be refused *by name*: a restriction whose warrant is an assumed
@@ -265,6 +288,43 @@ DETERMINISTIC_BOUNDS_SCHEMA: dict[str, pl.DataType] = {
     "solver_tolerance": pl.Float64,
     "constraint_set_hash": pl.String,
 }
+
+# One row per (estimator, cell). A declined cell is a row with a null `estimate` and a populated
+# `decline_reason`, never an absent row: absence is indistinguishable from a bug.
+BASELINE_RESULT_SCHEMA: dict[str, pl.DataType] = {
+    "estimator_id": pl.String,
+    "cell_id": pl.String,
+    "state_fips": pl.String,
+    "reference_month": pl.String,
+    "raw_weight": pl.Float64,
+    "estimate": pl.Float64,
+    "estimate_integer": pl.Int64,
+    "weight_basis": pl.String,
+    "anchor_basis": pl.String,
+    "reconciliation_status": pl.String,
+    "decline_reason": pl.String,
+    "residual": pl.Float64,
+    "missing_set_size": pl.Int64,
+    "constraint_set_hash": pl.String,
+}
+
+# One row per reference month. This is the anchor as a diffable artifact rather than a docstring:
+# every number the admission gate looked at, recorded whether it passed or not.
+ANCHOR_AUDIT_SCHEMA: dict[str, pl.DataType] = {
+    "reference_month": pl.String,
+    "national_total": pl.Int64,
+    "national_establishments": pl.Int64,
+    "state_establishments_sum": pl.Int64,
+    "establishment_gap": pl.Int64,
+    "publishing_area_count": pl.Int64,
+    "disclosed_sum": pl.Int64,
+    "disclosed_count": pl.Int64,
+    "residual": pl.Int64,
+    "missing_set_size": pl.Int64,
+    "anchored": pl.Boolean,
+    "implied_intensity": pl.Float64,
+}
+
 
 _HARMONIZED_TABLES = ("qcew_monthly", "qcew_national_size", "cbp_state_size", "bridge")
 

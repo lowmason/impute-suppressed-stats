@@ -53,3 +53,30 @@ class HardConstraintClassError(LoggingEmploymentError):
 
 class SolverError(LoggingEmploymentError):
     """The solver returned a status that is neither an optimum nor a recognised refusal."""
+
+
+class UniverseClosureError(LoggingEmploymentError):
+    """The establishment universes of the national row and the state rows do not close.
+
+    §18.3 requires the pipeline to fail rather than guess when source universes cannot be
+    reconciled. This is a whole-run halt, not a per-month decline: a nonzero gap means the
+    published national row contains something the state table does not, and every month's
+    residual is then suspect, not just the failing one's.
+    """
+
+
+class InfeasibleResidualError(LoggingEmploymentError):
+    """§12.3's summed bounds exclude the residual, so no feasible scaling exists."""
+
+
+class WeightDomainError(LoggingEmploymentError):
+    """A weight vector's domain is not the missing set, or it carries a null or non-positive weight.
+
+    Normalizing a weight vector defined on a strict subset of the missing set silently reallocates
+    the absent cells' share onto the cells that happen to have inputs. That is fabricating an
+    allocation, so it is refused rather than normalized.
+    """
+
+
+class NoHarvestFactorError(LoggingEmploymentError):
+    """The harvest-proportional baseline has no harvest-origin volume and no latent factor."""
