@@ -363,6 +363,37 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       config is read. `reconcile_matrix` takes no config argument, so Stage 6 must call the guard
       itself when it wires the matrix path — nothing in the layer forces it to.
 
+- [ ] **`kl_project` returns silently on an infeasible bounded system.**
+      Its loop breaks on step size, not on violation, so a fully-clipped update exits on iteration
+      one: `kl_project(seed=[1,1], margins=[[1,1]], targets=[10], upper=[1,1])` returns `[1., 1.]`
+      with violation 8.0 and no exception. `reconcile_matrix` compensates with its own post-check,
+      and a 5,417-case feasible sweep showed violation never increases — but `kl_project` is
+      exported and Stage 5/6 can call it directly. It should return the achieved violation or
+      raise. (Whole-branch review, Important.)
+
+- [ ] **The three provenance enums are declared but never enforced.**
+      `RECONCILIATION_STATUSES`, `WEIGHT_BASES` and `ANCHOR_BASES` in `contracts.py` constrain
+      nothing: `run_baselines` writes string literals and only `BASELINE_RESULT_SCHEMA`'s dtypes
+      are checked, so a typo reaches `baseline_results.parquet` and passes every test. Validate
+      the three columns before returning. (Whole-branch review, Important.)
+
+- [ ] **`integerize` has three bound-handling gaps, all latent on D1 and all live in Stage 6.**
+      No `lower <= upper` check (a contradictory pair silently violates the lower bound); the cap
+      loop iterates `upper` rather than `values`, so a cap for an absent cell injects a phantom
+      entry; and the ordering key is the raw fractional part, which is no longer largest-remainder
+      once `floors` has been raised by `lower` or lowered by `upper`. D1 has `lower=0, upper=None`
+      throughout. (Whole-branch review, Minor.)
+
+- [ ] **`BreakAdjustedShare` collapses to `RollingMedianShare` below four shares.**
+      The pre-execution audit measured 111 of 360 cells taking that branch, and
+      `test_section_10_3_ships_exactly_five_variants` only checks that five distinct estimator ids
+      exist — nothing detects two variants computing the same number. (Whole-branch review, Minor.)
+
+- [ ] **`NoHarvestFactorError` is defined and never raised.**
+      `errors.py` declares it for §10.5, but `HarvestProportional` returns a `Decline` instead,
+      which is the correct behaviour. Either remove the class or document it as reserved for the
+      Stage 7 path that will raise it.
+
 - [ ] **Task 18's property tests and four of the five cross-cutting audit units never ran.**
       The plan audit was stopped early after its subagents wrote into the working tree (see
       specs/findings/stage3-plan-audit.md). The four cross-cutting checks were re-run inline by

@@ -64,8 +64,18 @@ have been caught.
 
 Task 18 and four of the five cross-cutting units died with the workflow. The four cross-cutting
 checks — mask-signature violations, call-site arity, anti-drift in test blocks, and §17.3 vacuity
-— were re-run inline by hand and all came back clean. Task 18 was never machine-audited; see
-specs/deferred_items.md.
+— were re-run inline by hand. Task 18 was never machine-audited; see specs/deferred_items.md.
+
+**CORRECTION (after the whole-branch review): the mask-signature check's "clean" verdict was
+wrong.** It was scoped to the plan's `reconcile/` tasks (plan lines 1084-2399), but the Global
+Constraint binds *every function downstream* of `national_residual`, and the baselines are
+downstream. `historical.py`'s `observed_share_history` read `observation_status` from the table
+and, under a pseudo-suppression mask, returned a held-out cell's own published value through the
+share. The whole-branch reviewer found it; the inline check did not. Fixed in `65c4480`.
+
+The lesson generalises past this branch: an audit's scope is part of its result. "Clean" recorded
+without the scope beside it reads as a stronger claim than was actually tested, which is the
+failure mode this very document was written to prevent.
 
 ---
 
