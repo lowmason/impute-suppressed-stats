@@ -9,6 +9,7 @@ authors = [{ name = "Lowell Mason", email = "mason.lowell@mac.com" }]
 dependencies = [
     "highspy>=1.15.1",
     "httpx>=0.28",
+    "numpy>=2.5",
     "polars>=1.44",
     "pyarrow>=25.0",
     "pydantic>=2.13",
