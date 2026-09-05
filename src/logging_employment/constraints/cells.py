@@ -62,7 +62,7 @@ def cell_id(
     naics_vintage: str,
     size_class: str,
 ) -> str:
-    """The identifier for one atomic cell: family first, then §9.2's key, pipe-separated."""
+    """The identifier for one atomic cell: kind and key (state, month, ownership, industry, naics_vintage, size_class), pipe-separated."""
     return (
         f"{kind}|{state_fips}|{reference_month}|{ownership_code}|{industry_code}|"
         f"{naics_vintage}|{size_class}"
