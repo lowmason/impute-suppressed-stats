@@ -3159,7 +3159,7 @@ git commit -m "feat(cbp): discover the predicate and size codes from metadata, a
   - `harmonize.disclosure.CBP_REGIME_BY_YEAR: dict[int, str]`
   - `harmonize.disclosure.regime_for_year(year: int, *, fail_on_unknown: bool = True) -> str`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_disclosure_regime.py`:
 
@@ -3196,12 +3196,12 @@ def test_the_gate_can_be_opened_only_explicitly() -> None:
     assert disclosure.regime_for_year(2024, fail_on_unknown=False) == "unknown"
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `uv run pytest tests/unit/test_disclosure_regime.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'logging_employment.harmonize'`.
 
-- [ ] **Step 3: Write `harmonize/disclosure.py`**
+- [x] **Step 3: Write `harmonize/disclosure.py`**
 
 ```python
 """The CBP disclosure regime, keyed by reference year, with a fail-closed lookup."""
@@ -3245,12 +3245,35 @@ def regime_for_year(year: int, *, fail_on_unknown: bool = True) -> str:
     return "unknown"
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `uv run pytest tests/unit/test_disclosure_regime.py -v`
 Expected: PASS, 5 passed.
 
-- [ ] **Step 5: Commit**
+> **DEVIATION (2026-09-05): 9 passed, not 5 — the registry is derived, not trusted.** Step 3's
+> table restates a Stage 0 measurement, which is exactly the shape the anti-transcription rule
+> targets: nothing in the plan's five tests would notice if a label had been mistyped, because
+> the tests assert the same literals the table does. Stage 0's `cbp_regime` summary is now
+> shipped as `tests/fixtures/cbp/cbp_regime_summary.json` (40 KB; it lives under the gitignored
+> `data/` tree, so a test cannot otherwise read it from a fresh clone) and four added tests
+> re-derive the registry from it — the established years, the unknown ones being absent rather
+> than defaulted, every established year carrying an `https://` citation, and every D1 window
+> year being decided one way or the other.
+>
+> **Step 3's prose checks out as written**, which is worth recording because four of the five
+> preceding tasks' blocks did not. Verified against the fetched artifacts: the regime labels
+> match `regime_by_year` exactly; `Config.sources.cbp.fail_on_unknown_disclosure_regime` exists
+> at `config.py:76`; and methodology.html does carry the banner the comment cites, reading
+> "the information on this page is no longer current. The Census Bureau is evaluating
+> alternative approaches to comply with the U.S. Department of Commerce's administrative order
+> prohibiting the use of noise infusion."
+>
+> One stale cross-reference, harmless: the task's **Interfaces** block says Task 11 "imports it
+> lazily (see Step 6)". Task 11's Step 6 is the live LFO query, and `parse_cbp_state_size` takes
+> `regime` as a parameter rather than importing this module at all — which is the cleaner seam,
+> so nothing was changed to satisfy the note.
+
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/harmonize/ tests/unit/test_disclosure_regime.py
