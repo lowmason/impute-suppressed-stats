@@ -5,8 +5,8 @@ from __future__ import annotations
 import polars as pl
 import pytest
 
-from logging_employment.baselines.interfaces import FALLBACK, OWN, Decline, EstimatorContext
 from logging_employment.baselines.intensity import CbpIntensity, march_intensity
+from logging_employment.baselines.interfaces import FALLBACK, OWN, Decline, EstimatorContext
 from logging_employment.contracts import CBP_STATE_SIZE_SCHEMA
 from logging_employment.reconcile.anchor import Anchor, observed_partition
 
