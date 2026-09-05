@@ -2249,3 +2249,5 @@ Other §21 rows keep their Appendix A defaults until a stage's plan or finding c
 > - **CBP coverage gap confirmed live.** Stage 0's probe result held: the 2024 vintage returns a
 >   non-200, the window pull produced 7 CBP snapshots rather than 8, and `regime_for_year(2024)`
 >   raises. Any `Consumes` block assuming CBP covers the full D1 window is still wrong by one year.
+
+- Roadmap: specs/logging-employment-spec-roadmap.md, Stage 2 — on plan completion, tick the stage and re-validate later stages against what shipped.

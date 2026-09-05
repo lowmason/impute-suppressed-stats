@@ -84,12 +84,46 @@ class SourcesConfig(_Strict):
     cbp: CbpSourceConfig
 
 
+class ConstraintsConfig(_Strict):
+    """The deterministic engine's solver settings (Appendix A `constraints:`).
+
+    `use_milp_when_lp_interval_width_below` is a *performance* switch: it decides when an integer
+    re-solve is worth its cost, never whether a cell is disclosive. The disclosure thresholds live
+    in `DisclosureConfig` and are a governance decision (§21).
+    """
+
+    enforce_integrality: bool
+    use_milp_when_lp_interval_width_below: float
+    solver: Literal["highs"]
+    feasibility_tolerance: float
+    rank_tolerance: float
+
+
+class DisclosureConfig(_Strict):
+    """Disclosure actions and the narrowness thresholds (Appendix A `disclosure:`, §21).
+
+    The two width keys resolve §21's "Disclosure thresholds" row, which the spec leaves to the
+    governance owner. A cell is narrow when its feasible width is at most
+    `narrow_interval_absolute_width` employees, or when width divided by midpoint is at most
+    `narrow_interval_relative_width`. §14.2 asks for both an absolute and a relative test, so both
+    are configured and either one alone is sufficient to route a cell to review.
+    """
+
+    exact_reconstruction_action: Literal["withhold", "manual_review", "release"]
+    narrow_interval_action: Literal["withhold", "manual_review", "release"]
+    publish_label_required: bool
+    narrow_interval_absolute_width: float
+    narrow_interval_relative_width: float
+
+
 class Config(_Strict):
     """The whole resolved configuration."""
 
     project: ProjectConfig
     storage: StorageConfig
     sources: SourcesConfig
+    constraints: ConstraintsConfig
+    disclosure: DisclosureConfig
 
 
 def load_config(path: Path) -> Config:
