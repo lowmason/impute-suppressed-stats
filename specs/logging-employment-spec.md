@@ -2295,3 +2295,31 @@ Other §21 rows keep their Appendix A defaults until a stage's plan or finding c
 >   vintages; `rows.vintage_status` catches a row spanning two *NAICS* vintages. Neither sees a
 >   hard row spanning two different area-months whose release vintages differ — which on this
 >   window is correct, since `qcew_monthly` carries 32 release vintages, one per reference quarter.
+>
+> **Completed at the 2026-09-05 resume reconcile — the three stages the block above
+> did not reach.** Derived from the shipped builders and the run above, not restated
+> from either.
+> - **Stage 4 (§13.5's out-of-bounds gate cannot fire on a state-month target).**
+>   `rows.size_margin_rows` filters to national size and national all-sizes cells and
+>   is the only margin this stage builds; `rows.assert_no_national_employment_margin`
+>   guards the absence of a state-sum row. A state-month employment cell therefore
+>   carries only single-cell rows — observed value, nonnegativity, integrality — so
+>   hiding a published state cell removes its observed-value row and returns it to
+>   `[0, null]`, which no nonnegative truth can fall outside. The gate exercises only
+>   on the 14-cell national size panel. Stage 4 must not read a never-firing gate on
+>   target 1 as evidence that the constraint data is sound; that is the one reading
+>   the geometry makes available and the one it does not support.
+> - **Stage 7 (the §13.9 envelope is unbounded above on state cells).** With
+>   `selected_upper` null on 1,227 of 1,241 unknown cells, `model_sensitivity_high`
+>   on a state-month release cell is set by the model alone — no public fact clips it
+>   from above. Only `model_sensitivity_low` meets a binding deterministic endpoint.
+> - **Stage 8 (the REQ-027 exactness path has no live instance).**
+>   `exact_reconstruction_flag` fires on no real cell in this run, so the §14.4 route
+>   for an exactly-reconstructed `N`-flagged cell can be exercised only by constructed
+>   tests on this window. `narrow_feasible_interval_flag` fired once, with two cells
+>   within 0.03 of the 0.25 threshold — Stage 8 should treat the count as revisable,
+>   not as one.
+> - **Stage 6's re-route condition was checked and does not fire.**
+>   `specs/findings/source-audit.md` records `simultaneous_state_industry_size: false`
+>   and `stage6_reroute_required: false`, so §2.2's premise holds and Stage 6 keeps
+>   its `writing-plans` routing.
