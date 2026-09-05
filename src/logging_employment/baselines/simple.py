@@ -83,3 +83,39 @@ class EstablishmentProportional:
         """A_{s,t} per cell, with any unweightable cell left for `allocate` to refuse by name."""
         values = establishment_weights(context, anchor)
         return Weights(values=values, basis=dict.fromkeys(values, OWN))
+
+
+def disclosed_intensity(context: EstimatorContext, anchor: Anchor) -> float | None:
+    """Published employees per establishment across this month's disclosed cells.
+
+    A published ratio of two published sums, computed over the partition the caller supplied so a
+    Stage 4 mask changes it the same way it changes the residual. `None` when the disclosed set
+    carries no establishments, which leaves the caller to decline rather than divide by zero.
+    """
+    disclosed = context.partitions[anchor.reference_month].disclosed
+    establishments = float(disclosed["qtrly_establishments"].fill_null(0).sum())
+    if establishments <= 0.0:
+        return None
+    return float(disclosed["employment_value"].fill_null(0).sum()) / establishments
+
+
+def establishment_fallback_in_employees(
+    context: EstimatorContext, anchor: Anchor
+) -> dict[str, float]:
+    """The §10.2 fallback rung, expressed in EMPLOYEES rather than establishments.
+
+    `allocate` normalizes the union of a composite's two arms, so an arm in establishments merged
+    with an arm in employees is decided entirely by whichever is numerically larger -- measured on
+    2024-03, that handed one fallback state 1,257 of 1,589 employees while nine states holding
+    full observed histories shared 0.58 between them. Scaling A by the disclosed cells'
+    employees-per-establishment puts both arms in the same unit using only published numbers.
+
+    The disclosed ratio is preferred over the residual-implied one (R_t / sum A over the missing
+    set) because it stays positive and well defined when R_t is 0 -- a degenerate case §12.3
+    requires to succeed.
+    """
+    exposure = establishment_weights(context, anchor)
+    intensity = disclosed_intensity(context, anchor)
+    if intensity is None or intensity <= 0.0:
+        return {}
+    return {cell: value * intensity for cell, value in exposure.items()}

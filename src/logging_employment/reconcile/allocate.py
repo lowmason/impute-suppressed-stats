@@ -27,9 +27,11 @@ from .anchor import Anchor
 class Weights:
     """Positive raw weights per cell, with the provenance of each.
 
-    `basis` is not decoration. §10.3 runs at 762/1,227 own-weight on the D1 window and §10.4 at
-    1,041/1,080 over the 84 months it covers; without a per-cell basis a reader -- and Stage 4's
-    scoreboard -- would report a composite's score as a pure estimator's.
+    `basis` is not decoration. Every §10.3 and §10.4 estimator runs as a composite on the D1
+    window -- a large minority of cells take the establishment fallback rather than the
+    estimator's own signal -- so without a per-cell basis a reader, and Stage 4's scoreboard,
+    would report a composite's score as a pure estimator's. The split itself is a measurement
+    that a revision moves, so it is written to the run manifest rather than pinned here.
     """
 
     values: dict[str, float]
