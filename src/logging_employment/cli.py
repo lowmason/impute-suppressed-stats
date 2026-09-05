@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
 
 from .config import load_config
+
+if TYPE_CHECKING:  # annotations only; keeps CLI start-up cheap
+    from .config import Config
 
 app = typer.Typer(add_completion=False, help="Monthly state Logging employment estimates.")
 
@@ -86,3 +90,128 @@ def build_harmonized_command(
     )
     for table, digest in sorted(hashes.items()):
         typer.echo(f"{table} {digest}")
+
+
+def _constraints_dir(cfg: Config) -> Path:
+    """§6.2's `data/constraints/`, resolved beside the configured staged root."""
+    return Path(cfg.storage.staged_uri).parent / "constraints"
+
+
+def _input_digests(cfg: Config) -> dict[str, str]:
+    """A sha256 per harmonized input, which is what makes the run id a function of the data."""
+    import hashlib
+
+    staged = Path(cfg.storage.staged_uri)
+    return {
+        path.stem: hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(staged.glob("*.parquet"))
+    }
+
+
+@app.command("build-constraints")
+def build_constraints_command(
+    config: Path = typer.Option(..., "--config", exists=True, dir_okay=False),
+) -> None:
+    """Assemble the constraint system from the harmonized layer and persist it."""
+    import json
+
+    import highspy
+    import yaml
+
+    from .build import write_parquet_deterministic
+    from .config import resolved_dict
+    from .constraints import graph
+    from .constraints.system import build_constraint_system
+    from .contracts import (
+        CONSTRAINT_COEFFICIENT_SCHEMA,
+        CONSTRAINT_ROW_SCHEMA,
+        TARGET_CELL_SCHEMA,
+        HarmonizedData,
+        schema_fingerprint,
+    )
+    from .runs import run_dir, run_id
+
+    cfg = load_config(config)
+    data = HarmonizedData.load(Path(cfg.storage.staged_uri))
+    built = graph.assign_components(build_constraint_system(data, cfg))
+
+    out = _constraints_dir(cfg)
+    hashes = {
+        "target_cell": write_parquet_deterministic(built.cells, out / "target_cell.parquet"),
+        "constraint_row": write_parquet_deterministic(built.rows, out / "constraint_row.parquet"),
+        "constraint_coefficient": write_parquet_deterministic(
+            built.coefficients, out / "constraint_coefficient.parquet"
+        ),
+    }
+
+    run = run_dir(cfg, run_id(cfg, _input_digests(cfg)))
+    run.mkdir(parents=True, exist_ok=True)
+    (run / "config.resolved.yaml").write_text(yaml.safe_dump(resolved_dict(cfg), sort_keys=True))
+    (run / "schema_manifest.json").write_text(
+        json.dumps(
+            {
+                "constraint_set_hash": built.constraint_set_hash,
+                "output_hashes": hashes,
+                "schema_fingerprints": {
+                    "target_cell": schema_fingerprint(TARGET_CELL_SCHEMA),
+                    "constraint_row": schema_fingerprint(CONSTRAINT_ROW_SCHEMA),
+                    "constraint_coefficient": schema_fingerprint(CONSTRAINT_COEFFICIENT_SCHEMA),
+                },
+                "compatibility_report": built.compatibility_report,
+                # REQ-029 names the solver among the fail-closed surfaces, and §18.1 wants a run
+                # reproducible from its manifest. `config.resolved.yaml` records that the solver is
+                # HiGHS; only this records which HiGHS.
+                "solver": cfg.constraints.solver,
+                "solver_version": highspy.Highs().version(),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    write_parquet_deterministic(
+        graph.component_provenance(built), run / "constraint_manifest.parquet"
+    )
+    typer.echo(f"constraint_set_hash {built.constraint_set_hash}")
+    for table, digest in sorted(hashes.items()):
+        typer.echo(f"{table} {digest}")
+
+
+@app.command("solve-bounds")
+def solve_bounds_command(
+    config: Path = typer.Option(..., "--config", exists=True, dir_okay=False),
+) -> None:
+    """Solve sharp LP/MILP bounds for every target cell and flag the disclosive ones."""
+    import json
+
+    from .build import write_parquet_deterministic
+    from .constraints.bounds import solve_bounds
+    from .constraints.system import load_system
+    from .disclosure.flags import build_flags
+    from .runs import run_dir, run_id
+
+    cfg = load_config(config)
+    run = run_dir(cfg, run_id(cfg, _input_digests(cfg)))
+    manifest = run / "schema_manifest.json"
+    if not manifest.exists():
+        raise typer.BadParameter(
+            f"{manifest} is missing: no `build-constraints` run matches the harmonized inputs "
+            "currently in the staged directory. Run `build-constraints` first"
+        )
+    built = load_system(
+        _constraints_dir(cfg),
+        expected_hash=json.loads(manifest.read_text())["constraint_set_hash"],
+    )
+    result = solve_bounds(built, cfg.constraints)
+    flags = build_flags(result.bounds, built.cells, cfg.disclosure)
+
+    run.mkdir(parents=True, exist_ok=True)
+    write_parquet_deterministic(result.bounds, run / "deterministic_bounds.parquet")
+    write_parquet_deterministic(result.components, run / "component_rank.parquet")
+    write_parquet_deterministic(flags, run / "disclosure_flags.parquet")
+    counts = result.bounds.group_by("bound_status").len().sort("bound_status")
+    for row in counts.iter_rows(named=True):
+        typer.echo(f"{row['bound_status']} {row['len']}")
+    typer.echo(
+        f"flagged {flags['narrow_feasible_interval_flag'].sum()} narrow, "
+        f"{flags['exact_reconstruction_flag'].sum()} exact"
+    )
