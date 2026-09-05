@@ -18,7 +18,12 @@ from typing import Literal
 
 import polars as pl
 
-from ..constants import QCEW_DISCLOSURE_CODES
+from ..constants import (
+    NATIONAL_AREA,
+    PRIVATE_OWN_CODE,
+    QCEW_DISCLOSURE_CODES,
+    STATE_AREAS,
+)
 from ..contracts import QCEW_MONTHLY_SCHEMA
 from ..errors import UnknownDisclosureCodeError
 from .base import FetchedBytes, HttpFetcher
@@ -259,6 +264,10 @@ def parse_qcew_monthly(
             pl.lit(release_vintage).alias("release_vintage"),
             pl.lit(release_status).alias("release_status"),
             pl.lit(naics_vintage).alias("naics_vintage"),
+            # INV-009: nothing QCEW publishes identifies which disclosure rule suppressed a cell,
+            # so every real row is `unknown`. The labelled types belong to Stage 4's synthetic
+            # masks, where the answer is known because the mask created it.
+            pl.lit("unknown").alias("suppression_type"),
             pl.when(pl.col("agglvl_code") == "18")
             .then(pl.lit("national"))
             .when(pl.col("agglvl_code") == "58")
@@ -280,4 +289,17 @@ def parse_qcew_monthly(
         .sort(["area_fips", "reference_month"])
         .select(list(QCEW_MONTHLY_SCHEMA))
         .cast(QCEW_MONTHLY_SCHEMA)  # type: ignore[arg-type]
+    )
+
+
+def apply_universe_filter(frame: pl.DataFrame) -> pl.DataFrame:
+    """Restrict to the estimand's universe: private ownership, states+DC and the national row.
+
+    REQ-002 and §3.2. Puerto Rico is dropped here rather than at read time: Stage 0 measured it
+    present in state-like rows and measured it sitting *outside* the national total, so it is a
+    real published area that this estimand's geography universe excludes -- not a parse artifact.
+    """
+    keep = STATE_AREAS | {NATIONAL_AREA}
+    return frame.filter(
+        (pl.col("ownership_code") == PRIVATE_OWN_CODE) & pl.col("area_fips").is_in(list(keep))
     )

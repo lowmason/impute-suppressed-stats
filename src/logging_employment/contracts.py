@@ -21,6 +21,11 @@ from .errors import SchemaMismatchError
 # zero. Collapsing it into either would state something about DC that no source published.
 OBSERVATION_STATUSES: tuple[str, ...] = ("observed", "suppressed", "true_zero", "absent")
 
+# INV-009: the real-world suppression type is unknown unless a public source identifies one, and
+# QCEW identifies none. The two labelled values exist for Stage 4's synthetic masks and must never
+# be written onto a real row.
+SUPPRESSION_TYPES: tuple[str, ...] = ("unknown", "primary_like", "complementary_like")
+
 SOURCE_REGISTRY_SCHEMA: dict[str, pl.DataType] = {
     "source_id": pl.String,
     "agency": pl.String,
@@ -85,6 +90,10 @@ QCEW_MONTHLY_SCHEMA: dict[str, pl.DataType] = {
     "is_published_numeric_zero": pl.Boolean,
     "is_true_zero": pl.Boolean,
     "source_row_hash": pl.String,
+    # This package's addition, not a field §7.3 names: INV-009 requires the real-world suppression
+    # type to be recorded as `unknown`, and a default that exists only in Stage 4 could not be
+    # distinguished from a value Stage 4 chose.
+    "suppression_type": pl.String,
 }
 
 QCEW_NATIONAL_SIZE_SCHEMA: dict[str, pl.DataType] = {

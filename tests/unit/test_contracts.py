@@ -21,10 +21,18 @@ def test_qcew_monthly_carries_every_field_the_spec_names() -> None:
         "naics_vintage", "ownership_code", "aggregation_level", "size_code",
         "qtrly_establishments", "employment_raw", "employment_value", "wages_raw",
         "wages_value", "disclosure_code", "observation_status", "is_published_numeric_zero",
-        "is_true_zero", "source_row_hash",
+        "is_true_zero", "source_row_hash", "suppression_type",
     ]
     # fmt: on
     assert list(contracts.QCEW_MONTHLY_SCHEMA) == expected
+
+
+def test_suppression_type_is_this_packages_addition_not_a_field_the_spec_names() -> None:
+    # §7.3 does not list it. INV-009 requires the value, and a column introduced downstream could
+    # not be told apart from one Stage 4's synthetic masks had set.
+    assert contracts.QCEW_MONTHLY_SCHEMA["suppression_type"] == pl.String
+    assert list(contracts.QCEW_MONTHLY_SCHEMA)[-1] == "suppression_type"
+    assert contracts.SUPPRESSION_TYPES == ("unknown", "primary_like", "complementary_like")
 
 
 def test_area_fips_is_a_string_so_leading_zeros_survive() -> None:

@@ -96,7 +96,7 @@ anything you copy out of this plan, too.
 
 **This plan's code blocks were never run.** They encode intent, not a passing state, and their
 "Expected: PASS, N passed" lines are predictions rather than observations. Transcribing them
-verbatim has produced a failure or a defect in seven of the eight tasks executed so far:
+verbatim has produced a failure or a defect in eight of the nine tasks executed so far:
 
 | Task | What the block got wrong | Caught by |
 |---|---|---|
@@ -108,8 +108,9 @@ verbatim has produced a failure or a defect in seven of the eight tasks executed
 | 12 | Nothing — the block's labels, config reference and cited banner all check out. Its *tests* assert the same literals the table declares, so none of them would notice a mistyped label | re-deriving the table from Stage 0's summary |
 | 13 | Step 4's reader infers `vintage` as `Int64`, so Step 4's own filter raises `ComputeError`; Step 4's docstring wraps a phrase Step 2's test asserts unbroken | running Step 1, then reading the frame |
 | 14 | Step 1's fixture omits the `variables.json` Step 3 requires, so all three tests error; adding it exposes a `*.json` glob that parses metadata as a data response | reading Task 14 and Task 16 together |
+| 15 | `apply_universe_filter` is created and called by nothing — REQ-002 ships as a helper, not a pipeline guarantee. Step 3 also names a test that lives in another file | asking what calls it |
 
-**Four of those seven passed the task's own tests.** A green run here means the plan's assertions
+**Five of those eight passed the task's own tests.** A green run here means the plan's assertions
 held, not that the code is right. Task 11 sharpens the point: its defect was invisible not because
 the tests were weak but because **the plan's fixture list excluded the data that exhibits it**.
 Check what a fixture set cannot show you, not only what it does.
@@ -122,7 +123,7 @@ What has actually found them, every time:
    test dies. If nothing dies, the behaviour is untested regardless of the pass count.
 
 Deviations are annotated inline at the step they affect, marked **DEVIATION**. Ticked boxes on
-Tasks 8 through 14 do **not** mean "done as written" — read the annotation. Items raised and
+Tasks 8 through 15 do **not** mean "done as written" — read the annotation. Items raised and
 deliberately not fixed are in `specs/deferred_items.md`.
 
 ---
@@ -4058,7 +4059,7 @@ report **measures and records**; it does not re-derive the branch verdict, and i
 facts: how many state cells are suppressed, whether any non-state area appears, and whether the
 national row is present at all.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_universe.py`:
 
@@ -4154,12 +4155,12 @@ def test_alignment_fails_when_ownership_differs_between_levels() -> None:
         universe.assert_definitional_alignment(doctored)
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `uv run pytest tests/unit/test_universe.py -v`
 Expected: FAIL — `ImportError: cannot import name 'SUPPRESSION_TYPES'`.
 
-- [ ] **Step 3: Add `suppression_type` to the contract**
+- [x] **Step 3: Add `suppression_type` to the contract**
 
 In `contracts.py`, add above the schemas:
 
@@ -4175,7 +4176,7 @@ and append `"suppression_type": pl.String` to `QCEW_MONTHLY_SCHEMA` as its final
 to that test's expected list — update the test, and note in your report that the field is this
 package's addition, not one §7.3 names.
 
-- [ ] **Step 4: Add the universe filter to `ingest/qcew.py`**
+- [x] **Step 4: Add the universe filter to `ingest/qcew.py`**
 
 ```python
 from ..constants import NATIONAL_AREA, PRIVATE_OWN_CODE, STATE_AREAS
@@ -4200,7 +4201,7 @@ and set the default in `parse_qcew_monthly`, alongside the other literal columns
             pl.lit("unknown").alias("suppression_type"),
 ```
 
-- [ ] **Step 5: Write `harmonize/universe.py`**
+- [x] **Step 5: Write `harmonize/universe.py`**
 
 ```python
 """The SRC-QCEW-006 universe check and the SRC-QCEW-007 alignment check, in code.
@@ -4272,13 +4273,37 @@ def assert_definitional_alignment(frame: pl.DataFrame) -> None:
             )
 ```
 
-- [ ] **Step 6: Run to verify it passes**
+> **DEVIATION (2026-09-05): the filter is wired into the build path, and one file reference is
+> wrong.**
+>
+> 1. **`apply_universe_filter` was called by nothing.** Task 15 creates it and Task 14's
+>    `build_harmonized` — written one task earlier — does not call it, so REQ-002 would have
+>    shipped as an available helper rather than a pipeline guarantee. That is exactly the shape
+>    of Task 10's third defect ("the dimensionality assertion is never called from the build
+>    path"), which this plan's own execution notes record. `build.py`'s QCEW branch now applies
+>    it, and an integration test reads the persisted table back: the fixture quarter carries
+>    public-ownership rows, county rows and Puerto Rico, so the assertion can fail.
+> 2. **Step 3 names the wrong test.** `test_qcew_monthly_carries_every_field_the_spec_names` is in
+>    `tests/unit/test_contracts.py`, not Task 9's `test_qcew_parser.py`. Its expected list is
+>    updated there, plus a test pinning that `suppression_type` is last and is this package's
+>    addition rather than a field §7.3 names. No fingerprint literal is pinned anywhere, so
+>    appending the column breaks nothing else.
+>
+> Shipped at 14 tests in `test_universe.py` rather than the plan's 9. The five additions each
+> close a case where the plan's version could not fail: that the filter removes rows the fixture
+> actually contains (otherwise a no-op filter passes every assertion), that the labelled
+> suppression types appear on no parsed row, that a month missing its national row is
+> distinguished from a month with a suppressed cell, that every month appears in every per-month
+> mapping, and that the alignment check catches a NAICS-vintage disagreement and not only an
+> ownership one.
+
+- [x] **Step 6: Run to verify it passes**
 
 Run: `uv run pytest tests/unit/test_universe.py tests/unit/test_qcew_parser.py -v`
 Expected: PASS. If `test_qcew_monthly_carries_every_field_the_spec_names` still fails, you have not
 updated its expected list — do that, do not drop the column.
 
-- [ ] **Step 7: Prove SRC-QCEW-005's preliminary/final distinction survives**
+- [x] **Step 7: Prove SRC-QCEW-005's preliminary/final distinction survives**
 
 Add to `tests/unit/test_qcew_parser.py`:
 
@@ -4302,7 +4327,7 @@ def test_release_status_distinguishes_preliminary_from_final() -> None:
 Run: `uv run pytest tests/unit/test_qcew_parser.py -v`
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/logging_employment/ingest/qcew.py src/logging_employment/contracts.py \

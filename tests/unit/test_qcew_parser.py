@@ -231,3 +231,25 @@ def test_the_hash_is_stable_across_release_vintages() -> None:
     assert first["source_row_hash"].to_list() == revised["source_row_hash"].to_list()
     stacked = pl.concat([first, revised])
     assert stacked.n_unique(subset=["source_row_hash", "release_vintage"]) == stacked.height
+
+
+def test_release_status_distinguishes_preliminary_from_final() -> None:
+    final = qcew.parse_qcew_monthly(
+        _row(),
+        snapshot_id="s",
+        release_vintage="v",
+        release_status="final",
+        naics_vintage="NAICS 2017",
+    )
+    prelim = qcew.parse_qcew_monthly(
+        _row(),
+        snapshot_id="s",
+        release_vintage="v",
+        release_status="preliminary",
+        naics_vintage="NAICS 2017",
+    )
+    assert final["release_status"].unique().to_list() == ["final"]
+    assert prelim["release_status"].unique().to_list() == ["preliminary"]
+    # SRC-QCEW-005: a final national control may not be combined with preliminary state values in
+    # a hard equation. The column is what lets Stage 2 refuse that combination.
+    assert "release_status" in final.columns

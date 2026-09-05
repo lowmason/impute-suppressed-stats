@@ -93,13 +93,18 @@ def build_harmonized(
         raise ValueError("build_harmonized never fetches; use `fetch` to acquire bytes first")
     hashes: dict[str, str] = {}
 
+    # REQ-002 binds the pipeline, not the parser: `parse_qcew_monthly` returns whatever rows it
+    # is given, which is right for a parser, so the universe filter is applied here -- on the
+    # build path -- rather than living as a function nothing calls.
     qcew_frames = [
-        qcew.parse_qcew_monthly(
-            qcew.read_slice_csv(path.read_bytes()),
-            snapshot_id=path.stem,
-            release_vintage=path.stem,
-            release_status=cfg.sources.qcew.release_status,
-            naics_vintage=vintage_for_year(int(path.stem[:4])),
+        qcew.apply_universe_filter(
+            qcew.parse_qcew_monthly(
+                qcew.read_slice_csv(path.read_bytes()),
+                snapshot_id=path.stem,
+                release_vintage=path.stem,
+                release_status=cfg.sources.qcew.release_status,
+                naics_vintage=vintage_for_year(int(path.stem[:4])),
+            )
         )
         for path in sorted((raw_root / "qcew").rglob("*.csv"))
     ]

@@ -147,3 +147,21 @@ def test_a_shuffled_frame_writes_the_same_bytes(tmp_path: Path) -> None:
 def test_build_harmonized_refuses_to_fetch(frozen_raw: Path, tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="never fetches"):
         build_harmonized(_cfg(), raw_root=frozen_raw, out_root=tmp_path / "f", allow_network=True)
+
+
+def test_the_persisted_qcew_table_is_the_estimand_universe(
+    frozen_raw: Path, tmp_path: Path
+) -> None:
+    # REQ-002. `apply_universe_filter` exists in `ingest.qcew`; what makes it a pipeline guarantee
+    # rather than an available helper is that the build path calls it. The fixture quarter carries
+    # public-ownership rows, county rows and Puerto Rico, so this can fail.
+    from logging_employment import constants
+
+    out = tmp_path / "g"
+    build_harmonized(_cfg(), raw_root=frozen_raw, out_root=out)
+    frame = pl.read_parquet(out / "qcew_monthly.parquet")
+    assert frame["ownership_code"].unique().to_list() == [constants.PRIVATE_OWN_CODE]
+    assert set(frame["area_fips"].unique().to_list()) <= (
+        constants.STATE_AREAS | {constants.NATIONAL_AREA}
+    )
+    assert frame["suppression_type"].unique().to_list() == ["unknown"]
