@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import numpy as np
 import polars as pl
-import pytest
 
 from logging_employment.baselines.interfaces import EstimatorContext
 from logging_employment.baselines.regression import ConstrainedRegression, fit_log_intensity
