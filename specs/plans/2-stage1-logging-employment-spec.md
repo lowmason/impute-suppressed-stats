@@ -1760,7 +1760,7 @@ mkdir -p tests/fixtures/qcew
 cp data/raw/audit/qcew_routes/slices/2017q1.csv tests/fixtures/qcew/slice_2017q1.csv
 ```
 
-- [ ] **Step 1: Copy the fixture and record its hash**
+- [x] **Step 1: Copy the fixture and record its hash**
 
 Run the two commands above, then:
 
@@ -1769,7 +1769,7 @@ Expected: a 64-hex digest. Compare it against the row for that path in
 `specs/findings/source-audit-extracts.csv` and record both in your implementer report. If they
 differ, stop — the copy is not the audited object.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `tests/unit/test_qcew_routes.py`:
 
@@ -1835,12 +1835,12 @@ def test_the_fixture_carries_the_columns_the_parser_needs() -> None:
         assert column in frame.columns
 ```
 
-- [ ] **Step 3: Run to verify it fails**
+- [x] **Step 3: Run to verify it fails**
 
 Run: `uv run pytest tests/unit/test_qcew_routes.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'logging_employment.ingest.qcew'`.
 
-- [ ] **Step 4: Write the slice half of `ingest/qcew.py`**
+- [x] **Step 4: Write the slice half of `ingest/qcew.py`**
 
 ```python
 """QCEW quarterly acquisition over both published routes, and the monthly parser.
@@ -1902,12 +1902,12 @@ def fetch_slice(fetcher: HttpFetcher, year: int, qtr: int, industry: str) -> Fet
     return fetcher.get(slice_url(year, qtr, industry))
 ```
 
-- [ ] **Step 5: Run to verify it passes**
+- [x] **Step 5: Run to verify it passes**
 
 Run: `uv run pytest tests/unit/test_qcew_routes.py -v`
 Expected: PASS, 5 passed.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/logging_employment/ingest/qcew.py tests/fixtures/qcew/slice_2017q1.csv \
@@ -1938,7 +1938,7 @@ today's boundary at 2014, no window year routes to bulk, so the branch is unreac
 production. An unexercised branch is exactly the defect Stage 0's own deferred list records
 against `scripts/audit/qcew_routes.py`. The test below forces it with a synthetic boundary.
 
-- [ ] **Step 1: Copy the bulk fixture**
+- [x] **Step 1: Copy the bulk fixture**
 
 ```bash
 cp data/raw/audit/qcew_routes/bulk/2017_qtrly_by_industry.zip tests/fixtures/qcew/bulk_2017.zip
@@ -1947,7 +1947,7 @@ cp data/raw/audit/qcew_routes/bulk/2017_qtrly_by_industry.zip tests/fixtures/qce
 Run: `shasum -a 256 tests/fixtures/qcew/bulk_2017.zip` and compare against
 `specs/findings/source-audit-extracts.csv` as in Task 7 Step 1.
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Append to `tests/unit/test_qcew_routes.py`:
 
@@ -1988,12 +1988,12 @@ def test_bulk_only_title_columns_are_dropped() -> None:
         assert title_column not in frame.columns
 ```
 
-- [ ] **Step 3: Run to verify they fail**
+- [x] **Step 3: Run to verify they fail**
 
 Run: `uv run pytest tests/unit/test_qcew_routes.py -v`
 Expected: FAIL — `AttributeError: module 'logging_employment.ingest.qcew' has no attribute 'route_for_year'`.
 
-- [ ] **Step 4: Add the bulk half to `ingest/qcew.py`**
+- [x] **Step 4: Add the bulk half to `ingest/qcew.py`**
 
 ```python
 import zipfile
@@ -2049,12 +2049,12 @@ def read_bulk_zip(raw: bytes, industry: str) -> pl.DataFrame:
     return frame.drop([c for c in BULK_ONLY_TITLE_COLUMNS if c in frame.columns])
 ```
 
-- [ ] **Step 5: Run to verify they pass**
+- [x] **Step 5: Run to verify they pass**
 
 Run: `uv run pytest tests/unit/test_qcew_routes.py -v`
 Expected: PASS, 9 passed.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/logging_employment/ingest/qcew.py tests/fixtures/qcew/bulk_2017.zip \
