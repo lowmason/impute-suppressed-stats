@@ -19,6 +19,10 @@ class UnknownDisclosureRegimeError(LoggingEmploymentError):
     """A CBP reference year carries no established disclosure regime."""
 
 
+class UnknownSizeCodeError(LoggingEmploymentError):
+    """A QCEW establishment-size code reached the parser with no published bounds."""
+
+
 class SchemaMismatchError(LoggingEmploymentError):
     """A fetched file's columns do not match the schema the parser declares."""
 
