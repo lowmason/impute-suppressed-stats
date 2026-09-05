@@ -48,6 +48,11 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       identity is untestable on a complete published state sum. Stage 3 must name
       a substitute anchor or accept a weaker assumption. Recorded in the plan's own
       `> Deviation` note at Task 5 Step 6.
+      **Confirmed by measurement 2026-09-05 at the Stage 2 gate, still open.** The engine
+      reports all 1,227 suppressed state-month cells as `bound_status = 'unbounded'` with a
+      null `selected_upper`; nonnegativity is the only public fact that touches one. The item
+      is no longer an inference from Stage 0's verdict, and Stage 3's anchor must also cope
+      with a null upper endpoint rather than two finite ones.
 - [x] **`cbp_metadata.lfo_by_year` is null for all eight window years** — the one
       roadmap-named field that shipped no value. Human ruling at this gate: carry
       as a §1.2 row rather than re-run. The "why" is recorded in the summary's
@@ -239,3 +244,43 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       harmonized layer's row count and every `build-harmonized` run pays for it twice
       under the byte-identity check. Revisit if the rebuild gets slow, together with the
       `map_elements` item above.
+
+## 3-stage2-logging-employment-spec — 2026-09-05
+
+Stage 2 shipped every task and every roadmap `Exit:` clause, verified on the real D1 window.
+Nothing was descoped. The three items below are the ones the stage deliberately did not close.
+
+- [ ] **`evidence_kind` has no column of its own.** §7.8's field list has no place for the warrant
+      behind a restriction, so `constraints/rows.py` writes it into `provenance_text` behind a
+      fixed `EVIDENCE_PREFIX` (`evidence_kind=`). That keeps it queryable in the persisted
+      `constraint_row` table and lets §9.3's forbidden warrants be refused by name, but it is
+      stringly typed: a query for assumed-threshold rows is a substring match, not a column
+      predicate. Promoting it to a real column is a spec amendment to §7.8, which this plan
+      deliberately did not make. Deferred by the plan itself ("Record it as a deferred item at
+      completion"). Closing it means amending §7.8, adding the column to `CONSTRAINT_ROW_SCHEMA`
+      in `src/logging_employment/contracts.py`, and dropping the prefix from the factory.
+
+- [ ] **No check covers a hard row spanning two area-months with differing release vintages.**
+      `constraints/cells.py::_assert_one_vintage_per_cell` groups by `(area_fips,
+      reference_month)` and catches one area-month published under two release vintages.
+      `constraints/rows.py::vintage_status` reads `naics_vintage`, which is the only vintage
+      `TARGET_CELL_SCHEMA` carries. Neither sees a row whose cells span two area-months published
+      under different release vintages. On the D1 window this silence is correct rather than a
+      hole — `qcew_monthly` carries 32 release vintages, one per reference quarter, so
+      period-to-period variation is the ordinary state of a retrospective panel, and no Stage 2
+      builder emits a row spanning more than one month. It becomes reachable the moment a builder
+      couples two periods (a Stage 6 model constraint, or any across-period margin). Closing it
+      means carrying `release_vintage` onto `target_cell` — a §7.7 amendment — and feeding it to
+      `vintage_status` alongside `naics_vintage`.
+
+- [ ] **`classify_bound_status` labels an integer interval containing no integer
+      `partially_identified`.** `constraints/bounds.py` applies §9.6's `ceil(L) == floor(U)` rule;
+      for an interval like `[41.2, 41.9]` that is false, so the cell is reported as partially
+      identified even though an integer-valued cell cannot lie anywhere in it. Unreachable while
+      `constraints.enforce_integrality` is `true`, because an interval that narrow triggers the
+      MILP re-solve, which reports the component infeasible first. It becomes reachable if that
+      config key is flipped to `false`. Pinned by
+      `tests/unit/test_bound_status.py::test_an_integer_interval_containing_no_integer_is_not_called_exactly_recoverable`
+      so the behaviour is recorded rather than assumed. Closing it means deciding whether an
+      empty integer interval is an infeasibility (raising) or a distinct `bound_status`, which is
+      a §7.10 question.

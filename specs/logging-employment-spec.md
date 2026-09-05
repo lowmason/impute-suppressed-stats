@@ -2251,3 +2251,39 @@ Other §21 rows keep their Appendix A defaults until a stage's plan or finding c
 >   raises. Any `Consumes` block assuming CBP covers the full D1 window is still wrong by one year.
 
 - Roadmap: specs/logging-employment-spec-roadmap.md, Stage 2 — on plan completion, tick the stage and re-validate later stages against what shipped.
+> Stage 2: COMPLETE (2026-09-05) — implemented by plan 3 (specs/plans/completed/3-stage2-logging-employment-spec.md).
+> Next: resume the roadmap.
+>
+> **What the engine measured, for stages that consume it:**
+> - **Every one of the 1,227 suppressed state-month employment cells is `unbounded`.** Measured,
+>   not predicted: `selected_lower` is 0 and `selected_upper` is **null**. `SRC-QCEW-006`'s
+>   `decline` leaves nonnegativity as the only public fact touching a state cell.
+> - **The identifying content is 14 cells.** The suppressed national size classes come back
+>   `partially_identified` at widths of 130–894 employees. No cell anywhere is
+>   `exactly_recoverable`, and `exact_reconstruction_flag` fires nowhere on real data.
+> - **`narrow_feasible_interval_flag` fires exactly once**, on 2023 class 6 (width 184, relative
+>   width 0.232 against the 0.25 threshold).
+>
+> **Later stages re-validated against what Stage 2 actually shipped:**
+> - **Stage 3 (reconciliation) — a null upper bound is the normal case, not an edge case.** Any
+>   reconciliation that clips a draw into `[selected_lower, selected_upper]` meets a null upper on
+>   1,227 of the 1,241 unknown cells. Code that assumes two finite endpoints will fail or, worse,
+>   coerce null to a number and invent the cap §9.3 forbids. The substitute anchor Stage 3 must
+>   name is now confirmed by measurement rather than inferred from Stage 0's verdict.
+> - **Stage 3 (CBP as `empirical_measurement`).** The INV-005 `is_hard` filter in
+>   `constraints/bounds.py` is exercised today only by tests, because every row this stage builds
+>   is hard. Stage 3 is where a soft row first reaches the model and where that filter starts
+>   doing visible work; `column_specs` and `matrix_rows` both apply it and must stay in agreement.
+> - **Stage 5 (INV-008).** `deterministic_bounds` carries no posterior column and its
+>   `selected_*` values are solver output only. The other half of "kept separate" needs a
+>   posterior to be separate from, so it remains untestable until Stage 5 exists.
+> - **Stage 6 (model constraints reuse these builders).** `rows.size_support_rows` refuses a
+>   non-March size row (INV-011) *and* a frame carrying more than one industry. The second refusal
+>   is not in the plan: the builder matches a size row to a cell on `(reference_month,
+>   size_class)` and never on industry, so an unfiltered `qcew_national_size` silently produced
+>   3,857 support rows carrying 14 distinct `constraint_id`s.
+> - **Stage 6 / any stage reading INV-007.** Neither vintage check is a general INV-007 guarantee.
+>   `cells._assert_one_vintage_per_cell` catches one area-month published under two *release*
+>   vintages; `rows.vintage_status` catches a row spanning two *NAICS* vintages. Neither sees a
+>   hard row spanning two different area-months whose release vintages differ — which on this
+>   window is correct, since `qcew_monthly` carries 32 release vintages, one per reference quarter.

@@ -1,5 +1,7 @@
 # Stage 2: Deterministic Identification Engine — Implementation Plan
 
+**Status: COMPLETE (2026-09-05)** — executed via executing-plans; deferred items in specs/deferred_items.md
+
 > **For agentic workers:** REQUIRED SUB-SKILL: implement this plan task-by-task via
 > subagent-driven-development (the default) — or executing-plans when your human partner chose
 > inline execution at the handoff. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -1365,6 +1367,12 @@ Expected: FAIL with `ImportError: cannot import name 'compat'`.
 
 Create `src/logging_employment/constraints/compat.py`:
 
+> Deviation: the vintage check uses `ne_missing` rather than `!=`. A plain inequality yields
+> null when either side is null and `filter` drops a null predicate, so a national row with no
+> recorded NAICS vintage passed a gate whose only job is to halt. Pinned by
+> `test_a_null_national_vintage_is_a_conflict_rather_than_a_silent_pass`, which fails against
+> the plan's original expression.
+
 ```python
 """The §5.5 compatibility gates that run before any constraint row is created.
 
@@ -1560,7 +1568,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
   -> None`; and `to_frames(drafts: Sequence[ConstraintDraft]) -> tuple[pl.DataFrame, pl.DataFrame]`
   returning `(constraint_row, constraint_coefficient)` frames.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_constraint_rows.py`:
 
@@ -1721,14 +1729,18 @@ def test_to_frames_matches_both_schemas_and_is_sorted() -> None:
     assert row_frame["component_id"].null_count() == row_frame.height
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_constraint_rows.py -v`
 Expected: FAIL with `ImportError: cannot import name 'rows'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `src/logging_employment/constraints/rows.py`:
+
+> Deviation: the module docstring and refusal 3 no longer claim the guard covers "release or
+> NAICS vintages". It cannot: `target_cell` carries `naics_vintage` and no `release_vintage`,
+> so `vintage_status` only ever sees the NAICS one. The corrected text is in the block below.
 
 ```python
 """§7.8 constraint rows: the factory, and the four restrictions it refuses to build.
@@ -1952,12 +1964,12 @@ def to_frames(drafts: Sequence[ConstraintDraft]) -> tuple[pl.DataFrame, pl.DataF
     return row_frame, coefficient_frame
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_constraint_rows.py -v`
 Expected: PASS, all eleven tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/constraints/rows.py tests/unit/test_constraint_rows.py
@@ -1989,7 +2001,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
   `rounding_interval_row(constraint_id: str, cell_id: str, *, published_value: float,
   grid_width: float, endpoint_rule: str, **scope) -> ConstraintDraft`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_constraint_builders.py`:
 
@@ -2123,13 +2135,13 @@ def test_a_rounding_interval_becomes_a_range_and_records_its_endpoint_rule() -> 
     assert "upper open" in draft.provenance_text
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_constraint_builders.py -v`
 Expected: FAIL with `AttributeError: module 'logging_employment.constraints.rows' has no attribute
 'observed_value_rows'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Append to `src/logging_employment/constraints/rows.py` (and add
 `from ..errors import ConceptViolationError` and `from .cells import KIND_NATIONAL_SIZE,
@@ -2397,12 +2409,18 @@ def rounding_interval_row(
     )
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_constraint_builders.py -v`
+
+> Deviation: `size_support_rows` gained an industry guard the plan did not specify. It matches
+> a size row to a cell on `(reference_month, size_class)` and never on industry, so the real
+> unfiltered `qcew_national_size` produced 3,857 support rows carrying 14 distinct
+> `constraint_id`s -- each Logging cell bounded by another industry's establishment count, with
+> nothing raised. Also: `TOTAL_SIZE_CLASS` is not imported, being unused by this block.
 Expected: PASS, all seven tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/constraints/rows.py tests/unit/test_constraint_builders.py
@@ -2434,7 +2452,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
   `run_id(config: Config, input_digests: Mapping[str, str]) -> str` and
   `run_dir(config: Config, identifier: str) -> Path`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_constraint_system.py`:
 
@@ -2582,12 +2600,12 @@ def test_the_run_directory_sits_under_the_configured_output_root() -> None:
     assert runs.run_dir(cfg, "abc123abc123") == Path(cfg.storage.output_uri) / "abc123abc123"
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_constraint_system.py -v`
 Expected: FAIL with `ImportError: cannot import name 'runs'`.
 
-- [ ] **Step 3: Write `runs.py`**
+- [x] **Step 3: Write `runs.py`**
 
 Create `src/logging_employment/runs.py`:
 
@@ -2626,7 +2644,10 @@ def run_dir(config: Config, identifier: str) -> Path:
     return Path(config.storage.output_uri) / identifier
 ```
 
-- [ ] **Step 4: Write `system.py`**
+- [x] **Step 4: Write `system.py`**
+
+> Deviation: added the `from ..constants import PRIVATE_OWN_CODE` import. The plan's block
+> references `PRIVATE_OWN_CODE` in `build_constraint_system` but never imports it.
 
 Create `src/logging_employment/constraints/system.py`:
 
@@ -2746,12 +2767,12 @@ Add `from ..constants import PRIVATE_OWN_CODE` to the imports. The ownership cod
 `constants`, not from a literal, because `config.project.ownership` is the word `private` while
 QCEW's `own_code` is `'5'`, and the mapping between them is Stage 1's.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_constraint_system.py -v`
 Expected: PASS, all eight tests.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/logging_employment/constraints/system.py src/logging_employment/runs.py tests/unit/test_constraint_system.py
@@ -2781,7 +2802,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
   pl.DataFrame` with columns `component_id`, `cell_count`, `constraint_count`, `constraint_ids`,
   `source_snapshot_ids`, `hard_constraint_count`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_constraint_graph.py`:
 
@@ -2880,12 +2901,12 @@ def test_provenance_names_the_constraints_and_snapshots_behind_each_component(
     assert "2024_q1_by_size" in coupled["source_snapshot_ids"]
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_constraint_graph.py -v`
 Expected: FAIL with `ImportError: cannot import name 'graph'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `src/logging_employment/constraints/graph.py`:
 
@@ -2996,12 +3017,16 @@ def component_provenance(built: BuiltSystem) -> pl.DataFrame:
     return per_cell.join(per_row, on="component_id", how="left").sort("component_id")
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_constraint_graph.py -v`
+
+> Deviation: `component_provenance` splits `source_snapshot_ids` before de-duplicating. Each
+> row carries its own comma-joined list, so a margin row's "a,b" was a third distinct value
+> beside "a" and "b" and the component reported four tokens for two snapshots.
 Expected: PASS, all five tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/constraints/graph.py tests/unit/test_constraint_graph.py
@@ -3030,7 +3055,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
   rank_tolerance, cache) -> RankRecord`; and `rank_table(built, *, rank_tolerance) -> pl.DataFrame`
   with one row per component and the `RankRecord` fields as columns.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_constraint_rank.py`:
 
@@ -3164,12 +3189,12 @@ def two_identical_years(make_monthly, make_size) -> pl.DataFrame:
     return rank.rank_table(built, rank_tolerance=cfg.constraints.rank_tolerance)
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_constraint_rank.py -v`
 Expected: FAIL with `ImportError: cannot import name 'rank'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `src/logging_employment/constraints/rank.py`:
 
@@ -3311,12 +3336,12 @@ def rank_table(built: BuiltSystem, *, rank_tolerance: float) -> pl.DataFrame:
     return pl.DataFrame([record.__dict__ for record in records])
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_constraint_rank.py -v`
 Expected: PASS, all five tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/constraints/rank.py tests/unit/test_constraint_rank.py
@@ -3348,7 +3373,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
   dict[str, tuple[float | None, float | None, str]]` mapping each unknown cell to
   `(lower, upper, solver_status)`, raising `SolverError` on any other solver status.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_constraint_bounds.py`:
 
@@ -3528,14 +3553,18 @@ def test_column_specs_fold_single_cell_rows_into_bounds_and_leave_the_margin_in_
     assert len(bounds.matrix_rows(built, coupled)) == 1  # the size margin only
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_constraint_bounds.py -v`
 Expected: FAIL with `ImportError: cannot import name 'bounds'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `src/logging_employment/constraints/bounds.py`:
+
+> Deviation: `_optimize` now reads `objective_function_value` *before* clearing the column
+> cost. HiGHS evaluates that value against the current cost vector, so clearing first returned
+> 0.0 for every solve -- every bound in the engine. Caught by the plan's own real-2024 test.
 
 ```python
 """§9.6: sharp LP bounds for every unknown cell, one HiGHS model per component.
@@ -3746,14 +3775,14 @@ def solve_component(
     return solved
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_constraint_bounds.py -v`
 Expected: PASS, all five tests. The first is the important one: `(400.0, 530.0)` and
 `(250.0, 380.0)` are the published-data bounds, and a mismatch means the margin or the support is
 wrong, not that the solver is.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/constraints/bounds.py tests/unit/test_constraint_bounds.py
@@ -3786,7 +3815,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
   quarantined: Collection[str] = ()) -> BoundResult` with `bounds` matching
   `DETERMINISTIC_BOUNDS_SCHEMA`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_bound_status.py`:
 
@@ -3919,13 +3948,13 @@ def test_solve_bounds_returns_one_row_per_cell_in_the_shipped_schema(
     assert result.components["component_id"].n_unique() == result.components.height
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_bound_status.py -v`
 Expected: FAIL with `AttributeError: module 'logging_employment.constraints.bounds' has no
 attribute 'classify_bound_status'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Append to `src/logging_employment/constraints/bounds.py` (adding `import math`,
 `from collections.abc import Collection`, `from ..contracts import DETERMINISTIC_BOUNDS_SCHEMA`,
@@ -4101,14 +4130,18 @@ def solve_bounds(
     )
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_bound_status.py -v`
+
+> Deviation: the integer-exactness test asserted `[41.2, 41.9]` was exactly recoverable, but
+> `ceil` is 42 and `floor` is 41 there, so no integer lies in that interval at all. The case is
+> now `[41.6, 42.3]` at the same width, and the empty interval is pinned by its own test.
 Expected: PASS, all eight tests. Task 12 supplies `diagnostics.diagnose` and
 `diagnostics.render`; write a two-line stub for them first if you are running this task in
 isolation, and delete the stub when Task 12 lands.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/constraints/bounds.py tests/unit/test_bound_status.py
@@ -4137,7 +4170,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
   `diagnose(built, component_id, membership, config) -> InfeasibilityDiagnostic`; and
   `render(report: InfeasibilityDiagnostic) -> str`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_constraint_diagnostics.py`:
 
@@ -4246,12 +4279,12 @@ def test_an_explicitly_quarantined_component_records_infeasible_instead_of_halti
     assert len(result.diagnostics) == 1
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_constraint_diagnostics.py -v`
 Expected: FAIL with `ImportError: cannot import name 'diagnostics'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `src/logging_employment/constraints/diagnostics.py`:
 
@@ -4403,12 +4436,12 @@ def render(report: InfeasibilityDiagnostic) -> str:
     return "\n".join(lines)
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_constraint_diagnostics.py tests/unit/test_bound_status.py -v`
 Expected: PASS. Both modules, because Task 11's stub is now replaced by the real module.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/constraints/diagnostics.py tests/unit/test_constraint_diagnostics.py
@@ -4438,7 +4471,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
   `narrow_feasible_interval_flag`; and `build_flags(bounds: pl.DataFrame, cells: pl.DataFrame,
   config: DisclosureConfig) -> pl.DataFrame`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_disclosure_flags.py`:
 
@@ -4552,12 +4585,12 @@ def test_an_unbounded_cell_carries_no_width_and_no_flag() -> None:
 
 Add `import pytest` at the top of that module.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_disclosure_flags.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'logging_employment.disclosure'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `src/logging_employment/disclosure/__init__.py`:
 
@@ -4635,12 +4668,14 @@ def build_flags(
     )
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_disclosure_flags.py -v`
+
+> Deviation: added the missing `import pytest` to the test module, which uses `pytest.approx`.
 Expected: PASS, all six tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/disclosure tests/unit/test_disclosure_flags.py
@@ -4672,7 +4707,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
   `runs/<run_id>/constraint_manifest.parquet`, `runs/<run_id>/deterministic_bounds.parquet`,
   `runs/<run_id>/component_rank.parquet`, `runs/<run_id>/disclosure_flags.parquet`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/integration/test_constraint_cli.py`:
 
@@ -4790,7 +4825,7 @@ def test_solve_bounds_refuses_inputs_that_did_not_produce_the_constraint_tables(
     assert not list(Path(cfg.storage.output_uri).rglob("deterministic_bounds.parquet"))
 ```
 
-- [ ] **Step 2: Build the golden staged fixture**
+- [x] **Step 2: Build the golden staged fixture**
 
 The fixture is 2024's real published margin plus two state cells, small enough to commit and
 public in every value. Write and run this script once, then commit the four Parquet files:
@@ -4880,12 +4915,12 @@ PY
 Expected: `3 7 rows; 0 estab gap`. A non-zero gap means a typo in the published numbers, and the
 Task 4 gate would reject the fixture.
 
-- [ ] **Step 3: Run the tests to verify they fail**
+- [x] **Step 3: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/integration/test_constraint_cli.py -v`
 Expected: FAIL with `Error: No such command 'build-constraints'`.
 
-- [ ] **Step 4: Add `load_system` to `system.py`**
+- [x] **Step 4: Add `load_system` to `system.py`**
 
 ```python
 def load_system(constraints_dir: Path, *, expected_hash: str | None = None) -> BuiltSystem:
@@ -4929,7 +4964,7 @@ def load_system(constraints_dir: Path, *, expected_hash: str | None = None) -> B
 Add `from pathlib import Path` and `from ..errors import IncompatibleMarginError` to
 `system.py`'s imports.
 
-- [ ] **Step 5: Add both commands to `cli.py`**
+- [x] **Step 5: Add both commands to `cli.py`**
 
 ```python
 def _constraints_dir(cfg: "Config") -> Path:
@@ -5058,13 +5093,13 @@ def solve_bounds_command(
 
 Add `from .config import Config` under `TYPE_CHECKING` in `cli.py` for the two helper annotations.
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/integration/test_constraint_cli.py -v`
 Expected: PASS, all five tests. The second is the §16.1 idempotence criterion (one run
 directory, identical bytes); the fifth is the guard that makes the hash load-bearing.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/logging_employment/cli.py src/logging_employment/constraints/system.py tests/integration/test_constraint_cli.py tests/fixtures/constraints
@@ -5102,7 +5137,7 @@ hierarchies and overlapping row/column margins do not exist in the harmonized la
 ingested one industry at one ownership — so a test that waited for real data to exercise them would
 never run. §17.2 says "use generated toy tables" for exactly this reason.
 
-- [ ] **Step 1: Write the property tests**
+- [x] **Step 1: Write the property tests**
 
 Create `tests/unit/test_constraint_properties.py`:
 
@@ -5311,13 +5346,13 @@ def test_components_solve_independently() -> None:
     assert together["d"] == (50.0, 50.0, "exactly_recoverable")
 ```
 
-- [ ] **Step 2: Run the property tests**
+- [x] **Step 2: Run the property tests**
 
 Run: `uv run pytest tests/unit/test_constraint_properties.py -v`
 Expected: PASS, all eight tests. Every one of §17.2's eight Stage 2 bullets is now covered by a
 named test; if one fails, the engine is wrong, not the toy.
 
-- [ ] **Step 3: Generate the two golden fixtures**
+- [x] **Step 3: Generate the two golden fixtures**
 
 ```bash
 uv run python - <<'PY'
@@ -5349,7 +5384,7 @@ Expected: a table in which the two suppressed national size cells read `400.0, 5
 with `unbounded`. **If those three rows read anything else, stop and fix the engine — do not
 regenerate the golden.**
 
-- [ ] **Step 4: Write the golden test**
+- [x] **Step 4: Write the golden test**
 
 Create `tests/integration/test_constraint_golden.py`:
 
@@ -5414,12 +5449,12 @@ def test_the_golden_carries_the_two_hand_derived_bounds() -> None:
     assert by_class["7"] == (250.0, 380.0)
 ```
 
-- [ ] **Step 5: Run every test written so far**
+- [x] **Step 5: Run every test written so far**
 
 Run: `uv run pytest tests/unit tests/integration -q`
 Expected: PASS. This is the first run over the whole Stage 2 suite together.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tests/unit/test_constraint_properties.py tests/integration/test_constraint_golden.py tests/fixtures/constraints
@@ -5449,7 +5484,7 @@ gitignored: 562 MB of source bytes rebuild them, and no CI runner has them. It i
 roadmap states, so it must exist and must have been run on the owner's machine before the stage is
 called complete — record the run's output in the completion notes.
 
-- [ ] **Step 1: Write the acceptance test**
+- [x] **Step 1: Write the acceptance test**
 
 Create `tests/integration/test_d1_acceptance.py`:
 
@@ -5562,7 +5597,7 @@ def test_no_hard_constraint_rests_on_an_assumed_threshold(solved) -> None:
     assert hard.filter(pl.col("provenance_text").str.contains("assumed_threshold")).height == 0
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 ```bash
 uv run pytest tests/integration/test_d1_acceptance.py -v -m slow
@@ -5571,7 +5606,7 @@ uv run pytest tests/integration/test_d1_acceptance.py -v -m slow
 Expected: PASS, all five tests. Record the output in the completion notes — this is the evidence
 for the roadmap's Stage 2 `Exit:` line.
 
-- [ ] **Step 3: Run the two commands end to end on the real window**
+- [x] **Step 3: Run the two commands end to end on the real window**
 
 ```bash
 uv run logging-estimates build-constraints --config config.yaml
@@ -5581,7 +5616,7 @@ uv run logging-estimates solve-bounds --config config.yaml
 Expected from `solve-bounds`, in some order: `observed` for the published cells, `unbounded 1227`,
 `partially_identified 14`, and `flagged 1 narrow, 0 exact`.
 
-- [ ] **Step 4: Run the whole suite and the linters**
+- [x] **Step 4: Run the whole suite and the linters**
 
 ```bash
 uv run pytest tests/unit tests/integration -q
@@ -5593,7 +5628,7 @@ uv run interrogate -c pyproject.toml src
 Expected: all green. `tests/audit/` is excluded from the ruff and black commands on purpose:
 plan 2 recorded that 14 files there fail both, and sweeping them is not this stage's work.
 
-- [ ] **Step 5: Document the two commands in the README**
+- [x] **Step 5: Document the two commands in the README**
 
 Add to the README's usage section:
 
@@ -5615,7 +5650,7 @@ margin exists to constrain a state cell, and nonnegativity is the only public fa
 one. Stages 3–5 are what narrow them.
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tests/integration/test_d1_acceptance.py README.md
@@ -5629,6 +5664,19 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
 ---
+
+## Execution notes (2026-09-05)
+
+Eight steps deviated from the plan; each carries a `> Deviation:` note above. Seven were
+defects in the plan's own code blocks -- one (`_optimize`) would have returned `0.0` for every
+bound in the system. Separately, mechanical lint fixes were applied to several extracted blocks
+(unused `Callable` and `dict()` calls, `startswith` tuple form, import ordering, an unasserted
+unpacked value) with no behavioural change; ruff, black and interrogate are green on `src`,
+`tests/unit` and `tests/integration`.
+
+**A ninth known-empty result, not in the list below.** `rows.vintage_status` never returns
+`incompatible` on D1 data: no builder emits a row spanning more than one reference month, so no
+row can span two NAICS vintages. Guard 4 is exercised by Task 5's unit test only.
 
 ## Self-review notes
 
