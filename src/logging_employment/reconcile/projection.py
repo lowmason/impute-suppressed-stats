@@ -24,9 +24,11 @@ decision and lives in `config.reconciliation.zero_seed_floor`.
 WHY `weighted_quadratic` IS NOT IMPLEMENTED HERE. §12.4 permits it but requires the objective and
 weights to be "versioned and validation-tested". Nothing in Stage 3 validates a second objective,
 so the config value is accepted as a version marker and `require_supported_method` raises rather
-than quietly running KL under a different name. The guard belongs wherever the config is actually
-read -- `reconcile_draws` and the CLI commands -- because neither `kl_project` nor
-`reconcile_matrix` takes a config argument.
+than quietly running KL under a different name. The guard belongs wherever `general_method` is
+actually read -- the CLI commands, and Stage 6 when it wires the matrix path -- because neither
+`kl_project` nor `reconcile_matrix` takes a config argument. Notably NOT `reconcile_draws`: that
+function takes §12.3's bounded-scaling path, which `single_margin_method` governs, so a
+`general_method` refusal there would halt draw reconciliation over a setting it never consults.
 """
 
 from __future__ import annotations
