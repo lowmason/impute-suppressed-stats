@@ -39,8 +39,13 @@ from ..contracts import (
     HARD_ELIGIBLE_CLASSES,
     RELATIONS,
 )
-from ..errors import HardConstraintClassError, IncompatibleMarginError
-from .cells import KIND_NATIONAL_TOTAL, KIND_STATE_TOTAL
+from ..errors import ConceptViolationError, HardConstraintClassError, IncompatibleMarginError
+from .cells import (
+    KIND_NATIONAL_SIZE,
+    KIND_NATIONAL_TOTAL,
+    KIND_STATE_TOTAL,
+    NATIONAL_STATE_FIPS,
+)
 
 
 @dataclass(frozen=True)
@@ -221,3 +226,272 @@ def to_frames(drafts: Sequence[ConstraintDraft]) -> tuple[pl.DataFrame, pl.DataF
         coefficient_records, schema=CONSTRAINT_COEFFICIENT_SCHEMA
     ).sort(["constraint_id", "cell_id"])
     return row_frame, coefficient_frame
+
+
+def _scope(cell: dict[str, object]) -> dict[str, str]:
+    """The four §7.8 scope fields for a restriction that touches exactly one cell."""
+    return {
+        "period_scope": str(cell["reference_month"]),
+        "geography_scope": str(cell["state_fips"]),
+        "industry_scope": str(cell["industry_code"]),
+        "ownership_scope": str(cell["ownership_code"]),
+    }
+
+
+def observed_value_rows(cells_frame: pl.DataFrame) -> list[ConstraintDraft]:
+    """Pin every observed and true-zero cell to its published value (INV-001, §9.3 first bullet).
+
+    True zeros are pinned alongside observed values because Stage 1 established them with a
+    source-specific rule (INV-003): a cell with no establishments has no employment. A cell whose
+    zero was never established that way carries `observation_status = 'suppressed'` and is left
+    free here.
+    """
+    published = cells_frame.filter(pl.col("observation_status").is_in(["observed", "true_zero"]))
+    return [
+        constraint(
+            constraint_id=f"fix|{cell['cell_id']}",
+            constraint_class="public_accounting_fact",
+            relation="eq",
+            coefficients=((str(cell["cell_id"]), 1.0),),
+            rhs_lower=float(cell["observed_value"]),
+            rhs_upper=float(cell["observed_value"]),
+            is_hard=True,
+            evidence_kind="published_value",
+            source_snapshot_ids=str(cell["source_snapshot_id"]),
+            provenance_text=(
+                f"published QCEW value {cell['observed_value']} for {cell['cell_id']}, "
+                f"disclosure code {cell['qcew_disclosure_code']!r}"
+            ),
+            vintage_compatibility_status="compatible",
+            **_scope(cell),
+        )
+        for cell in published.iter_rows(named=True)
+    ]
+
+
+def nonnegativity_rows(cells_frame: pl.DataFrame) -> list[ConstraintDraft]:
+    """`x >= 0` for every unknown cell (§9.1, §9.3 nonnegativity bullet).
+
+    Emitted per cell rather than declared once for the system: §7.9's coefficient table is the
+    single source of truth for what the solver sees, and a restriction that lives only in a
+    docstring carries no INV-004 label.
+    """
+    return [
+        constraint(
+            constraint_id=f"nonneg|{cell['cell_id']}",
+            constraint_class="definitional_support",
+            relation="ge",
+            coefficients=((str(cell["cell_id"]), 1.0),),
+            rhs_lower=0.0,
+            rhs_upper=None,
+            is_hard=True,
+            evidence_kind="unit_definition",
+            source_snapshot_ids=str(cell["source_snapshot_id"]),
+            provenance_text="employment is a count of jobs and cannot be negative",
+            vintage_compatibility_status="compatible",
+            **_scope(cell),
+        )
+        for cell in cells_frame.filter(pl.col("observation_status") == "suppressed").iter_rows(
+            named=True
+        )
+    ]
+
+
+def integrality_rows(cells_frame: pl.DataFrame) -> list[ConstraintDraft]:
+    """Integrality for every unknown cell (§9.3 integrality bullet, §9.6 step 2)."""
+    return [
+        constraint(
+            constraint_id=f"integer|{cell['cell_id']}",
+            constraint_class="definitional_support",
+            relation="integrality",
+            coefficients=((str(cell["cell_id"]), 1.0),),
+            rhs_lower=None,
+            rhs_upper=None,
+            is_hard=True,
+            evidence_kind="unit_definition",
+            source_snapshot_ids=str(cell["source_snapshot_id"]),
+            provenance_text="QCEW employment is an integer count of jobs",
+            vintage_compatibility_status="compatible",
+            **_scope(cell),
+        )
+        for cell in cells_frame.filter(pl.col("observation_status") == "suppressed").iter_rows(
+            named=True
+        )
+    ]
+
+
+def size_margin_rows(cells_frame: pl.DataFrame) -> list[ConstraintDraft]:
+    """One equality per March: the published size classes sum to the published all-sizes total.
+
+    Written as `sum(classes) - total = 0` rather than `sum(classes) = <number>`, so the national
+    all-sizes cell is a cell of the system and INV-001 pins it through its own fixing row. A number
+    lifted into a right-hand side would leave that value unpinned and unauditable.
+
+    This is the *only* margin this stage builds. There is no state-sum equivalent:
+    `SRC-QCEW-006` came back `decline`.
+    """
+    drafts: list[ConstraintDraft] = []
+    size_cells = cells_frame.filter(pl.col("cell_id").str.starts_with(f"{KIND_NATIONAL_SIZE}|"))
+    total_cells = {
+        cell["reference_month"]: cell
+        for cell in cells_frame.filter(
+            pl.col("cell_id").str.starts_with(f"{KIND_NATIONAL_TOTAL}|")
+        ).iter_rows(named=True)
+    }
+    for month, group in size_cells.group_by("reference_month", maintain_order=True):
+        reference_month = str(month[0])
+        total = total_cells[reference_month]
+        members = group.sort("size_class")
+        coefficients = tuple(
+            (str(cell["cell_id"]), 1.0) for cell in members.iter_rows(named=True)
+        ) + ((str(total["cell_id"]), -1.0),)
+        snapshots = sorted(
+            {*members["source_snapshot_id"].to_list(), str(total["source_snapshot_id"])}
+        )
+        drafts.append(
+            constraint(
+                constraint_id=f"size_margin|{reference_month}",
+                constraint_class="public_accounting_fact",
+                relation="eq",
+                coefficients=coefficients,
+                rhs_lower=0.0,
+                rhs_upper=0.0,
+                is_hard=True,
+                evidence_kind="published_value",
+                period_scope=reference_month,
+                geography_scope=NATIONAL_STATE_FIPS,
+                industry_scope=str(total["industry_code"]),
+                ownership_scope=str(total["ownership_code"]),
+                source_snapshot_ids=",".join(snapshots),
+                provenance_text=(
+                    f"published national size classes {members['size_class'].to_list()} sum to the "
+                    f"published all-sizes national total for {reference_month}"
+                ),
+                vintage_compatibility_status=vintage_status(
+                    [*members["naics_vintage"].to_list(), str(total["naics_vintage"])]
+                ),
+            )
+        )
+    return drafts
+
+
+def size_support_rows(cells_frame: pl.DataFrame, size_rows: pl.DataFrame) -> list[ConstraintDraft]:
+    """The §9.3 "documented size support" for every suppressed class.
+
+    A class of `n` establishments each holding between `lower` and `upper` employees holds between
+    `n * lower` and `n * upper` in total. `compat.assert_size_support_holds` measures that rule
+    against every observed row before this builder runs, so the support is documented rather than
+    assumed.
+
+    INV-011 is enforced here rather than trusted from the data: this builder refuses a non-March
+    row outright, so a later stage that reuses it cannot produce a March class bound for June.
+    An open-ended top class emits its lower bound only -- §9.3 forbids arbitrary top-class caps,
+    and a number invented to close the band would be one.
+    """
+    industries = size_rows["industry_code"].unique().to_list()
+    if len(industries) > 1:
+        raise ConceptViolationError(
+            f"the size frame carries {len(industries)} industries "
+            f"({sorted(industries)[:3]}...); this builder matches a size row to a cell on "
+            "(reference_month, size_class) and never on industry, so a second industry would "
+            "bound this industry's cell by its own establishment count. Filter to "
+            "`project.industry_code_used` before calling"
+        )
+
+    off_march = size_rows.filter(~pl.col("reference_month").str.ends_with("-03"))
+    if off_march.height:
+        raise ConceptViolationError(
+            f"{off_march.height} size row(s) are not March-referenced, e.g. "
+            f"{off_march['reference_month'][0]}; a March-reference class support may not be built "
+            "outside its valid reference period (INV-011)"
+        )
+    by_cell = {
+        cell["cell_id"]: cell
+        for cell in cells_frame.filter(
+            pl.col("cell_id").str.starts_with(f"{KIND_NATIONAL_SIZE}|")
+            & (pl.col("observation_status") == "suppressed")
+        ).iter_rows(named=True)
+    }
+    drafts: list[ConstraintDraft] = []
+    for row in size_rows.filter(pl.col("observation_status") == "suppressed").iter_rows(named=True):
+        identifier = None
+        for cell_id, cell in by_cell.items():
+            if (
+                cell["reference_month"] == row["reference_month"]
+                and cell["size_class"] == row["size_class"]
+            ):
+                identifier = cell_id
+                break
+        if identifier is None:
+            continue
+        lower = float(row["establishments"] * row["size_lower"])
+        upper = (
+            None if row["size_upper"] is None else float(row["establishments"] * row["size_upper"])
+        )
+        drafts.append(
+            constraint(
+                constraint_id=f"size_support|{identifier}",
+                constraint_class="definitional_support",
+                relation="range" if upper is not None else "ge",
+                coefficients=((identifier, 1.0),),
+                rhs_lower=lower,
+                rhs_upper=upper,
+                is_hard=True,
+                evidence_kind="class_definition",
+                source_snapshot_ids=str(row["snapshot_id"]),
+                provenance_text=(
+                    f"{row['establishments']} published establishment(s) in class "
+                    f"{row['size_class']} ([{row['size_lower']}, {row['size_upper']}] employees "
+                    "per establishment, March reference)"
+                ),
+                vintage_compatibility_status="compatible",
+                **_scope(by_cell[identifier]),
+            )
+        )
+    return drafts
+
+
+def rounding_interval_row(
+    constraint_id: str,
+    cell_id: str,
+    *,
+    published_value: float,
+    grid_width: float,
+    endpoint_rule: str,
+    period_scope: str,
+    geography_scope: str,
+    industry_scope: str,
+    ownership_scope: str,
+    source_snapshot_ids: str,
+) -> ConstraintDraft:
+    """§9.4: a value rounded to grid width `r` enters as `[y - r/2, y + r/2]`, never as an equality.
+
+    §9.4 writes the upper endpoint as strictly open. A linear program has no strict inequality, so
+    the interval is encoded closed and `endpoint_rule` records what the source documents. That is a
+    conservative widening -- it can only make a bound looser, never falsely exact, which is the
+    direction INV-006 cares about.
+
+    No QCEW field this stage reads is rounded, so nothing in the D1 run calls this. It exists
+    because §9.4 requires rounding rules to be field-specific and encodable, and the §17.2 property
+    "rounding intervals avoid false exact recovery" exercises it.
+    """
+    return constraint(
+        constraint_id=constraint_id,
+        constraint_class="definitional_support",
+        relation="range",
+        coefficients=((cell_id, 1.0),),
+        rhs_lower=published_value - grid_width / 2,
+        rhs_upper=published_value + grid_width / 2,
+        is_hard=True,
+        evidence_kind="rounding_documentation",
+        period_scope=period_scope,
+        geography_scope=geography_scope,
+        industry_scope=industry_scope,
+        ownership_scope=ownership_scope,
+        source_snapshot_ids=source_snapshot_ids,
+        provenance_text=(
+            f"published value {published_value} rounded to grid width {grid_width}; "
+            f"endpoint behaviour: {endpoint_rule}"
+        ),
+        vintage_compatibility_status="compatible",
+    )
