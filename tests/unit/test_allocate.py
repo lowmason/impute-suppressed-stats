@@ -83,3 +83,16 @@ def test_weights_against_an_empty_missing_set_are_refused_not_ignored() -> None:
     """
     with pytest.raises(WeightDomainError):
         allocate(_anchor(residual=0.0, cells=()), _weights({"01": 1.0}))
+
+
+def test_a_negative_residual_is_refused_rather_than_allocated_negatively() -> None:
+    """The unbounded path must agree with the bounded one, which already fails closed.
+
+    Otherwise the shared entry point every estimator is required to pass through is precisely the
+    one that returns negative employment without comment. Stage 4's masks recompute R_t' and can
+    drive it below zero.
+    """
+    from logging_employment.errors import InfeasibleResidualError
+
+    with pytest.raises(InfeasibleResidualError, match="negative"):
+        allocate(_anchor(residual=-100.0), _weights({"01": 1.0, "02": 2.0, "04": 1.0}))

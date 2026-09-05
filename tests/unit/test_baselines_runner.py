@@ -130,3 +130,39 @@ def test_weight_basis_counts_are_recoverable_from_the_results(
         "own_estimator",
         "establishment_fallback",
     }
+
+
+def test_an_unweightable_cell_declines_the_month_rather_than_killing_the_run(
+    harmonized_toy, appendix_a_config
+) -> None:
+    """ "Decline, never fabricate" — but also never abort ten estimators over one cell.
+
+    A suppressed cell with no usable establishment count makes `allocate` refuse the weight
+    vector. That must land as a `declined` row for the estimator that hit it, leaving every other
+    estimator and every other month intact. `qtrly_establishments` is >= 1 on all 1,227 suppressed
+    cells today, but that is a measurement a revision can move, not an invariant.
+    """
+    jan = pl.col("reference_month") == "2023-01"
+    # State 04 loses its establishment count, and the national row loses the same 5 — the universe
+    # must still close, or the gate halts first and this tests nothing about the runner.
+    broken = harmonized_toy.qcew_monthly.with_columns(
+        pl.when(jan & (pl.col("state_fips") == "04"))
+        .then(0)
+        .when(jan & (pl.col("area_type") == "national"))
+        .then(pl.col("qtrly_establishments") - 5)
+        .otherwise(pl.col("qtrly_establishments"))
+        .alias("qtrly_establishments")
+    )
+    data = HarmonizedData(
+        broken,
+        harmonized_toy.qcew_national_size,
+        harmonized_toy.cbp_state_size,
+        harmonized_toy.bridge,
+    )
+    results, _ = run_baselines(data, appendix_a_config)
+    assert set(results["estimator_id"].unique().to_list()) == {e.estimator_id for e in REGISTRY}
+    jan = results.filter(pl.col("reference_month") == "2023-01")
+    assert "declined" in jan["reconciliation_status"].unique().to_list()
+    # The other month is untouched: one bad cell must not take the window with it.
+    feb = results.filter(pl.col("reference_month") == "2023-02")
+    assert "anchored_and_reconciled" in feb["reconciliation_status"].unique().to_list()

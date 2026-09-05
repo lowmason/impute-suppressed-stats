@@ -103,6 +103,14 @@ def _disclosed_sum(partition: Partition, reference_month: str) -> float:
     point of the mask-parameterised signature), so the D_t/M_t confusion is refused here rather
     than trusted not to happen.
     """
+    for name, frame in (("disclosed", partition.disclosed), ("missing", partition.missing)):
+        strays = set(frame["reference_month"].to_list()) - {reference_month}
+        if strays:
+            raise ConceptViolationError(
+                f"{reference_month}: the {name} frame carries rows for {sorted(strays)}; a "
+                "partition belongs to exactly one month, and summing another month's rows into "
+                "this month's disclosed total silently moves the residual"
+            )
     nulls = partition.disclosed.filter(pl.col("employment_value").is_null())
     if nulls.height:
         raise ConceptViolationError(

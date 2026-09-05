@@ -318,3 +318,51 @@ def test_a_null_employment_in_the_disclosed_set_halts_rather_than_summing_as_zer
     confused = Partition(disclosed=states, missing=states.head(0))
     with pytest.raises(ConceptViolationError, match="02"):
         national_residual(monthly, confused, reference_month="2024-03")
+
+
+def test_a_partition_from_another_month_is_refused(make_monthly) -> None:
+    """A partition belongs to exactly one month, and nothing but this check says so.
+
+    `_disclosed_sum` sums whatever frame it is handed, and `reference_month` was used only to find
+    the national row. A partition spanning two months therefore returned a residual computed
+    against the wrong disclosed total, silently — the same D_t confusion the null guard refuses,
+    in a different shape.
+    """
+    monthly = make_monthly(
+        {
+            "area_type": "national",
+            "area_fips": "US000",
+            "state_fips": None,
+            "aggregation_level": "18",
+            "reference_month": "2024-03",
+            "employment_value": 300,
+            "qtrly_establishments": 12,
+        },
+        {
+            "state_fips": "01",
+            "area_fips": "01000",
+            "reference_month": "2024-03",
+            "employment_value": 100,
+            "qtrly_establishments": 6,
+        },
+        {
+            "area_type": "national",
+            "area_fips": "US000",
+            "state_fips": None,
+            "aggregation_level": "18",
+            "reference_month": "2024-04",
+            "employment_value": 300,
+            "qtrly_establishments": 12,
+        },
+        {
+            "state_fips": "01",
+            "area_fips": "01000",
+            "reference_month": "2024-04",
+            "employment_value": 100,
+            "qtrly_establishments": 6,
+        },
+    )
+    both_months = monthly.filter(pl.col("area_type") == "state")
+    straddling = Partition(disclosed=both_months, missing=both_months.head(0))
+    with pytest.raises(ConceptViolationError, match="2024-04"):
+        national_residual(monthly, straddling, reference_month="2024-03")

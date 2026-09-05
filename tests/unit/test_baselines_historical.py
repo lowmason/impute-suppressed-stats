@@ -14,7 +14,7 @@ from logging_employment.baselines.historical import (
     observed_share_history,
 )
 from logging_employment.baselines.interfaces import FALLBACK, OWN, EstimatorContext
-from logging_employment.reconcile.anchor import Anchor, observed_partition
+from logging_employment.reconcile.anchor import Anchor, Partition, observed_partition
 
 ALL_FIVE = [
     LastObservedShare,
@@ -148,6 +148,7 @@ def test_a_lookback_stops_at_the_naics_vintage_break(make_monthly, appendix_a_co
     # said nothing about classification consistency at all.
     kept = observed_share_history(
         monthly,
+        observed_partition(monthly),
         state_fips="01",
         before="2022-03",
         lookback_months=24,
@@ -157,6 +158,7 @@ def test_a_lookback_stops_at_the_naics_vintage_break(make_monthly, appendix_a_co
     assert kept["reference_month"].to_list() == ["2021-12"]
     history = observed_share_history(
         monthly,
+        observed_partition(monthly),
         state_fips="01",
         before="2022-03",
         lookback_months=24,
@@ -190,6 +192,7 @@ def test_crossing_the_break_is_possible_only_when_config_permits(
     )
     history = observed_share_history(
         monthly,
+        observed_partition(monthly),
         state_fips="01",
         before="2022-03",
         lookback_months=24,
@@ -197,3 +200,166 @@ def test_crossing_the_break_is_possible_only_when_config_permits(
         vintage="NAICS 2022",
     )
     assert history["reference_month"].to_list() == ["2021-12"]
+
+
+def test_the_history_comes_from_the_partition_not_from_observation_status(
+    make_monthly, appendix_a_config
+) -> None:
+    """§13.4's leakage control, made structural rather than remembered.
+
+    Under a Stage 4 pseudo-suppression mask the held-out cell still carries its published value in
+    `qcew_monthly`. A history filtered on `observation_status` therefore hands this estimator the
+    very number it is being scored against: with state 01 published at 400 of a national 1000 and
+    masked in 2024-02, the table-based filter returned an own weight of exactly 400.0 — the
+    held-out value, laundered through the share. Reading the partition makes that impossible
+    instead of forbidden.
+    """
+    monthly = make_monthly(
+        {
+            "area_type": "national",
+            "area_fips": "US000",
+            "state_fips": None,
+            "aggregation_level": "18",
+            "reference_month": "2024-02",
+            "employment_value": 1000,
+            "qtrly_establishments": 20,
+        },
+        {
+            "state_fips": "01",
+            "area_fips": "01000",
+            "reference_month": "2024-02",
+            "employment_value": 400,
+            "qtrly_establishments": 10,
+        },
+        {
+            "state_fips": "02",
+            "area_fips": "02000",
+            "reference_month": "2024-02",
+            "employment_value": 600,
+            "qtrly_establishments": 10,
+        },
+        {
+            "area_type": "national",
+            "area_fips": "US000",
+            "state_fips": None,
+            "aggregation_level": "18",
+            "reference_month": "2024-03",
+            "employment_value": 1000,
+            "qtrly_establishments": 20,
+        },
+        {
+            "state_fips": "01",
+            "area_fips": "01000",
+            "reference_month": "2024-03",
+            "employment_value": 400,
+            "qtrly_establishments": 10,
+        },
+        {
+            "state_fips": "02",
+            "area_fips": "02000",
+            "reference_month": "2024-03",
+            "employment_value": 600,
+            "qtrly_establishments": 10,
+        },
+    )
+    states = monthly.filter(pl.col("area_type") == "state")
+    feb = states.filter(pl.col("reference_month") == "2024-02")
+    masked = {
+        "2024-02": Partition(
+            disclosed=feb.filter(pl.col("state_fips") == "02"),
+            missing=feb.filter(pl.col("state_fips") == "01"),
+        ),
+        "2024-03": observed_partition(monthly)["2024-03"],
+    }
+    context = EstimatorContext(
+        monthly=monthly, cbp=pl.DataFrame(), partitions=masked, config=appendix_a_config
+    )
+    history = observed_share_history(
+        monthly,
+        masked,
+        state_fips="01",
+        before="2024-03",
+        lookback_months=24,
+        may_cross_vintage=True,
+        vintage="NAICS 2022",
+    )
+    assert history["share"].to_list() == []
+    out = LastObservedShare().weights(
+        context, Anchor("2024-03", 400.0, ("01",), "declared_national_total")
+    )
+    assert out.basis["01"] == FALLBACK
+
+
+def test_a_published_zero_enters_the_history_as_a_zero_share(
+    make_monthly, appendix_a_config
+) -> None:
+    """`disclosed` is observed PLUS true_zero, so a published zero is a datum, not a gap.
+
+    Filtering on `observation_status == "observed"` skipped past a published zero to whatever
+    older positive value happened to precede it — reporting a stale level as the state's latest
+    share. The zero is now the latest share, and since §12.2 requires positive weights the cell
+    takes the declared fallback instead.
+    """
+    monthly = make_monthly(
+        {
+            "area_type": "national",
+            "area_fips": "US000",
+            "state_fips": None,
+            "aggregation_level": "18",
+            "reference_month": "2024-01",
+            "employment_value": 1000,
+            "qtrly_establishments": 20,
+        },
+        {
+            "state_fips": "01",
+            "area_fips": "01000",
+            "reference_month": "2024-01",
+            "employment_value": 400,
+            "qtrly_establishments": 10,
+        },
+        {
+            "area_type": "national",
+            "area_fips": "US000",
+            "state_fips": None,
+            "aggregation_level": "18",
+            "reference_month": "2024-02",
+            "employment_value": 1000,
+            "qtrly_establishments": 20,
+        },
+        {
+            "state_fips": "01",
+            "area_fips": "01000",
+            "reference_month": "2024-02",
+            "employment_value": 0,
+            "qtrly_establishments": 10,
+            "observation_status": "true_zero",
+        },
+        {
+            "area_type": "national",
+            "area_fips": "US000",
+            "state_fips": None,
+            "aggregation_level": "18",
+            "reference_month": "2024-03",
+            "employment_value": 1000,
+            "qtrly_establishments": 20,
+        },
+        {
+            "state_fips": "01",
+            "area_fips": "01000",
+            "reference_month": "2024-03",
+            "observation_status": "suppressed",
+            "employment_value": None,
+            "qtrly_establishments": 10,
+        },
+    )
+    history = observed_share_history(
+        monthly,
+        observed_partition(monthly),
+        state_fips="01",
+        before="2024-03",
+        lookback_months=24,
+        may_cross_vintage=True,
+        vintage="NAICS 2022",
+    )
+    assert history["reference_month"].to_list() == ["2024-01", "2024-02"]
+    assert history["share"].to_list()[-1] == 0.0

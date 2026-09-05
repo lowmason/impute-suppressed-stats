@@ -23,7 +23,7 @@ import polars as pl
 from ..config import Config
 from ..constraints.cells import KIND_STATE_TOTAL, TOTAL_SIZE_CLASS, cell_id
 from ..contracts import BASELINE_RESULT_SCHEMA, HarmonizedData
-from ..errors import InfeasibleResidualError
+from ..errors import InfeasibleResidualError, WeightDomainError
 from ..reconcile.allocate import allocate
 from ..reconcile.anchor import (
     assert_universe_closes,
@@ -116,7 +116,23 @@ def run_baselines(
             continue
         ids = _cell_ids(partitions[month], anchor)
         for estimator in REGISTRY:
-            outcome = estimator.weights(context, anchor)
+            try:
+                outcome = estimator.weights(context, anchor)
+            except WeightDomainError as exc:
+                # An estimator whose fallback cannot cover a cell raises rather than returning a
+                # `Decline`, and `compose`'s docstring is right that the two are different things:
+                # one is a data problem, the other a considered refusal. But the plan's "decline,
+                # never fabricate" rule is about the OUTPUT, and it requires a visible row either
+                # way — an absent row is indistinguishable from a bug. So the raise is preserved
+                # inside `compose`, and here it becomes a `declined` row carrying the exception's
+                # own words, which name it as the data problem it is. Without this, one cell with
+                # no usable establishment count kills all ten estimators across every month.
+                rows.extend(
+                    _decline_rows(
+                        estimator.estimator_id, anchor, str(exc), constraint_set_hash, ids
+                    )
+                )
+                continue
             if isinstance(outcome, Decline):
                 rows.extend(
                     _decline_rows(
@@ -124,7 +140,20 @@ def run_baselines(
                     )
                 )
                 continue
-            allocated = allocate(anchor, outcome)
+            try:
+                allocated = allocate(anchor, outcome)
+            except WeightDomainError as exc:
+                # A cell the estimator could not weight is a DECLINE, per the plan's "decline,
+                # never fabricate" rule — not a dead run. `qtrly_establishments` is currently >= 1
+                # on every suppressed cell, but that is a measurement a revision can move, and one
+                # such cell would otherwise abort all ten estimators across all months.
+                # `UniverseClosureError` stays a whole-run halt: that one really is global.
+                rows.extend(
+                    _decline_rows(
+                        estimator.estimator_id, anchor, str(exc), constraint_set_hash, ids
+                    )
+                )
+                continue
             # The margin the integers must honour is the anchor's residual -- the published
             # quantity being allocated -- so it is taken from the anchor rather than re-derived
             # from the allocation. `allocate` already guarantees the values sum to R_t, so the two

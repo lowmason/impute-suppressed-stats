@@ -35,11 +35,12 @@ would decline in 96/96 months and §10.8's rung 3 would be permanently empty.
 from __future__ import annotations
 
 import statistics
+from collections.abc import Mapping
 
 import polars as pl
 
 from ..reconcile.allocate import Weights
-from ..reconcile.anchor import Anchor
+from ..reconcile.anchor import Anchor, Partition
 from .interfaces import Decline, EstimatorContext, compose
 from .simple import establishment_fallback_in_employees
 
@@ -53,6 +54,7 @@ def _months_before(month: str, count: int) -> str:
 
 def observed_share_history(
     monthly: pl.DataFrame,
+    partitions: Mapping[str, Partition],
     *,
     state_fips: str,
     before: str,
@@ -60,22 +62,32 @@ def observed_share_history(
     may_cross_vintage: bool,
     vintage: str,
 ) -> pl.DataFrame:
-    """One state's observed shares of the national total, most recent last.
+    """One state's disclosed shares of the national total, most recent last.
 
-    A share is only defined where both the state row is observed and the national row is published,
-    so months failing either are absent rather than zero.
+    VISIBILITY COMES FROM THE PARTITION, NEVER FROM `observation_status`. This is the same
+    mask-parameterised rule the anchor follows, and here it is a leakage control rather than a
+    matter of taste: under a Stage 4 pseudo-suppression mask the held-out cell still carries its
+    published value in `qcew_monthly`, so a history filtered on the table would hand this
+    estimator the very value it is being tested on. Measured on a two-month panel, the table-based
+    filter returned a masked cell's own published employment back to it exactly, through the
+    share. §13.4 forbids a derived feature retaining a held-out value, and a share of it is one.
+
+    Reading the partition also fixes what the table filter got wrong even unmasked: `disclosed`
+    holds `true_zero` as well as `observed`, so a published zero now enters the history as the
+    zero share it is. Filtering on `== "observed"` skipped past it to an older positive value.
     """
     national = monthly.filter(pl.col("area_type") == "national").select(
         ["reference_month", pl.col("employment_value").alias("national_value")]
     )
+    floor = _months_before(before, lookback_months)
+    windows = [
+        partition.disclosed for month, partition in partitions.items() if floor <= month < before
+    ]
+    if not windows:
+        return pl.DataFrame(schema={"reference_month": pl.String, "share": pl.Float64})
     rows = (
-        monthly.filter(
-            (pl.col("area_type") == "state")
-            & (pl.col("state_fips") == state_fips)
-            & (pl.col("observation_status") == "observed")
-            & (pl.col("reference_month") < before)
-            & (pl.col("reference_month") >= _months_before(before, lookback_months))
-        )
+        pl.concat(windows)
+        .filter(pl.col("state_fips") == state_fips)
         .join(national, on="reference_month", how="inner")
         .filter(pl.col("national_value") > 0)
     )
@@ -125,6 +137,7 @@ class _ShareBaseline:
         for cell in anchor.missing_cells:
             history = observed_share_history(
                 context.monthly,
+                context.partitions,
                 state_fips=cell,
                 before=anchor.reference_month,
                 lookback_months=cfg.historical_lookback_months,

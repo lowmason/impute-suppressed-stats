@@ -19,7 +19,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from ..errors import WeightDomainError
+from ..errors import InfeasibleResidualError, WeightDomainError
 from .anchor import Anchor
 
 
@@ -76,6 +76,14 @@ def allocate(anchor: Anchor, weights: Weights) -> dict[str, float]:
     shortcut, which is the case that legitimately allocates nothing.
     """
     check_domain(weights, anchor)
+    if anchor.residual < 0.0:
+        # `scale_into_bounds` fails closed on this input; the unbounded path must agree, or the
+        # shared entry point every estimator passes through is the one that quietly returns
+        # negative employment. Stage 4's masks recompute R_t' and can drive it below zero.
+        raise InfeasibleResidualError(
+            f"{anchor.reference_month}: residual {anchor.residual} is negative, so every "
+            "allocation would be negative employment; §12.3's predicate refuses this"
+        )
     if not anchor.missing_cells:
         return {}
     total = sum(weights.values.values())
