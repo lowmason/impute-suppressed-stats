@@ -37,3 +37,19 @@ class ConceptViolationError(LoggingEmploymentError):
 
 class AmbiguousSnapshotError(LoggingEmploymentError):
     """A reference key has more than one stored snapshot and nothing says which one to build."""
+
+
+class IncompatibleMarginError(LoggingEmploymentError):
+    """Two source margins failed the §5.5 compatibility gate and must not be stacked (INV-007)."""
+
+
+class InfeasibleComponentError(LoggingEmploymentError):
+    """A constraint component has no feasible point; §9.6 forbids silently relaxing it."""
+
+
+class HardConstraintClassError(LoggingEmploymentError):
+    """A caller asked for `is_hard=true` on a restriction that is not eligible for it."""
+
+
+class SolverError(LoggingEmploymentError):
+    """The solver returned a status that is neither an optimum nor a recognised refusal."""

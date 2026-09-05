@@ -1,0 +1,11 @@
+cell_id,selected_lower,selected_upper,bound_status,exactly_identified
+national_size|US|2024-03|5|113310|NAICS 2022|1,7630.0,7630.0,observed,true
+national_size|US|2024-03|5|113310|NAICS 2022|2,9955.0,9955.0,observed,true
+national_size|US|2024-03|5|113310|NAICS 2022|3,10480.0,10480.0,observed,true
+national_size|US|2024-03|5|113310|NAICS 2022|4,10316.0,10316.0,observed,true
+national_size|US|2024-03|5|113310|NAICS 2022|5,2507.0,2507.0,observed,true
+national_size|US|2024-03|5|113310|NAICS 2022|6,400.0,530.0,partially_identified,false
+national_size|US|2024-03|5|113310|NAICS 2022|7,250.0,380.0,partially_identified,false
+national_total|US|2024-03|5|113310|NAICS 2022|ALL,41668.0,41668.0,observed,true
+state_total|01|2024-03|5|113310|NAICS 2022|ALL,2500.0,2500.0,observed,true
+state_total|02|2024-03|5|113310|NAICS 2022|ALL,0.0,,unbounded,false

@@ -31,3 +31,17 @@ sources:
     enabled: true
     api_key_env: 'CENSUS_API_KEY'
     fail_on_unknown_disclosure_regime: true
+constraints:
+  enforce_integrality: true
+  use_milp_when_lp_interval_width_below: 25
+  solver: 'highs'
+  feasibility_tolerance: 1.0e-7
+  rank_tolerance: 1.0e-10
+
+disclosure:
+  exact_reconstruction_action: 'withhold'
+  narrow_interval_action: 'manual_review'
+  publish_label_required: true
+  # Resolves §21's "Disclosure thresholds" row: policy, not evidence. See plan 3.
+  narrow_interval_absolute_width: 10
+  narrow_interval_relative_width: 0.25

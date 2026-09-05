@@ -52,3 +52,121 @@ def test_validate_frame_names_the_offending_columns() -> None:
     frame = pl.DataFrame({"x": ["a"]})
     with pytest.raises(SchemaMismatchError, match="y"):
         contracts.validate_frame(frame, {"x": pl.String, "y": pl.Int64}, "toy")
+
+
+def test_the_four_schemas_carry_exactly_the_fields_the_spec_lists() -> None:
+    assert list(contracts.TARGET_CELL_SCHEMA) == [
+        "cell_id",
+        "state_fips",
+        "reference_month",
+        "size_concept",
+        "size_class",
+        "ownership_code",
+        "industry_code",
+        "naics_vintage",
+        "observation_status",
+        "observed_value",
+        "source_snapshot_id",
+        "qcew_disclosure_code",
+    ]
+    assert list(contracts.CONSTRAINT_ROW_SCHEMA) == [
+        "constraint_id",
+        "component_id",
+        "constraint_class",
+        "relation",
+        "rhs_lower",
+        "rhs_upper",
+        "is_hard",
+        "period_scope",
+        "geography_scope",
+        "industry_scope",
+        "ownership_scope",
+        "source_snapshot_ids",
+        "provenance_text",
+        "vintage_compatibility_status",
+    ]
+    assert list(contracts.CONSTRAINT_COEFFICIENT_SCHEMA) == [
+        "constraint_id",
+        "cell_id",
+        "coefficient",
+    ]
+    assert list(contracts.DETERMINISTIC_BOUNDS_SCHEMA) == [
+        "cell_id",
+        "component_id",
+        "rank",
+        "nullity",
+        "lp_lower",
+        "lp_upper",
+        "milp_lower",
+        "milp_upper",
+        "selected_lower",
+        "selected_upper",
+        "bound_status",
+        "exactly_identified",
+        "integer_exactly_identified",
+        "solver_status",
+        "solver_tolerance",
+        "constraint_set_hash",
+    ]
+
+
+def test_only_the_first_two_constraint_classes_may_be_hard() -> None:
+    # §7.8: "Only the first two may have is_hard=true."
+    assert contracts.CONSTRAINT_CLASSES == (
+        "public_accounting_fact",
+        "definitional_support",
+        "empirical_measurement",
+        "modeling_assumption",
+        "sensitivity_assumption",
+    )
+    assert contracts.HARD_ELIGIBLE_CLASSES == contracts.CONSTRAINT_CLASSES[:2]
+
+
+def test_the_seven_bound_statuses_are_the_ones_7_10_suggests() -> None:
+    assert contracts.BOUND_STATUSES == (
+        "observed",
+        "exactly_recoverable",
+        "partially_identified",
+        "model_estimable",
+        "model_only",
+        "unbounded",
+        "infeasible",
+    )
+
+
+def test_an_assumed_threshold_is_an_evidence_kind_so_it_can_be_refused_by_name() -> None:
+    assert "assumed_threshold" in contracts.EVIDENCE_KINDS
+    assert contracts.RELATIONS == ("eq", "le", "ge", "range", "integrality")
+
+
+def test_harmonized_data_loads_the_four_stage_one_tables(tmp_path) -> None:
+    for name, schema in (
+        ("qcew_monthly", {"reference_month": pl.String}),
+        ("qcew_national_size", {"reference_year": pl.Int64}),
+        ("cbp_state_size", {"reference_year": pl.Int64}),
+        ("bridge", {"bridge_id": pl.String}),
+    ):
+        pl.DataFrame(schema=schema).write_parquet(tmp_path / f"{name}.parquet")
+    data = contracts.HarmonizedData.load(tmp_path)
+    assert data.qcew_monthly.height == 0
+    assert data.bridge.columns == ["bridge_id"]
+
+
+def test_a_missing_harmonized_table_names_the_path_rather_than_raising_from_polars(
+    tmp_path,
+) -> None:
+    with pytest.raises(FileNotFoundError, match="qcew_monthly.parquet"):
+        contracts.HarmonizedData.load(tmp_path)
+
+
+def test_the_new_schemas_have_distinct_fingerprints() -> None:
+    prints = {
+        contracts.schema_fingerprint(s)
+        for s in (
+            contracts.TARGET_CELL_SCHEMA,
+            contracts.CONSTRAINT_ROW_SCHEMA,
+            contracts.CONSTRAINT_COEFFICIENT_SCHEMA,
+            contracts.DETERMINISTIC_BOUNDS_SCHEMA,
+        )
+    }
+    assert len(prints) == 4
