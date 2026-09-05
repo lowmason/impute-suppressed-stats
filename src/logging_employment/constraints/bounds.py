@@ -18,6 +18,8 @@ was nothing to optimize.
 
 from __future__ import annotations
 
+import math
+from collections.abc import Collection
 from dataclasses import dataclass
 
 import highspy
@@ -25,7 +27,10 @@ import numpy as np
 import polars as pl
 
 from ..config import ConstraintsConfig
+from ..contracts import DETERMINISTIC_BOUNDS_SCHEMA
 from ..errors import InfeasibleComponentError, SolverError
+from .graph import assign_components, component_membership
+from .rank import rank_table
 from .system import BuiltSystem
 
 # §16.2 names this type `BoundConfig`. It is the `constraints:` block, under the name the spec's
@@ -210,3 +215,170 @@ def solve_component(
         )
         solved[cell] = (lower, upper, status)
     return solved
+
+
+def classify_bound_status(
+    *,
+    observation_status: str,
+    lower: float | None,
+    upper: float | None,
+    is_integer: bool,
+    tolerance: float,
+) -> tuple[str, bool, bool]:
+    """§7.10's `bound_status`, plus the two exactness flags, from solver output alone.
+
+    One function with one rule table, because a status typed at five call sites is a status that
+    will disagree with itself. Two of §7.10's seven values are never returned here:
+    `model_estimable` and `model_only` are claims about what a model can do, and §9.1 forbids a
+    model at this stage. Stage 8's §15.3 mapping assigns a model-dependence level to a released
+    cell; that is a different question asked later.
+
+    `exactly_identified` means the sharp interval is a point. On a published cell that is trivially
+    true, and it is left true rather than special-cased: whether a point may be *re-published* is a
+    disclosure question, and `disclosure.flags` is what answers it.
+    """
+    if observation_status != "suppressed":
+        return "observed", True, True
+    if lower is None or upper is None:
+        return "unbounded", False, False
+    if is_integer:
+        exact = math.ceil(lower - tolerance) == math.floor(upper + tolerance)
+        return ("exactly_recoverable" if exact else "partially_identified"), exact, exact
+    exact = (upper - lower) <= tolerance
+    return ("exactly_recoverable" if exact else "partially_identified"), exact, False
+
+
+@dataclass(frozen=True)
+class BoundResult:
+    """§16.2's `solve_bounds` return: the §7.10 table, the rank records, and any diagnostic."""
+
+    bounds: pl.DataFrame
+    components: pl.DataFrame
+    diagnostics: tuple[object, ...]
+
+
+def _needs_milp(
+    solved: dict[str, tuple[float | None, float | None, str]],
+    specs: dict[str, ColumnSpec],
+    config: BoundConfig,
+) -> bool:
+    """Whether an integer re-solve of this component can change anything, at a price worth paying.
+
+    Component-level rather than cell-level (§9.6 step 3): one integer model serves every unknown
+    cell in the component, and building it once is cheaper than deciding cell by cell.
+    """
+    if not config.enforce_integrality:
+        return False
+    for cell, (lower, upper, _) in solved.items():
+        if lower is None or upper is None or not specs[cell].is_integer:
+            continue
+        if (upper - lower) < config.use_milp_when_lp_interval_width_below:
+            return True
+    return False
+
+
+def solve_bounds(
+    system: BuiltSystem, config: BoundConfig, *, quarantined: Collection[str] = ()
+) -> BoundResult:
+    """Sharp bounds for every cell in the system (§16.2, §9.6).
+
+    A component that is infeasible halts the run with the §9.7 diagnostic attached, unless it was
+    explicitly named in `quarantined`. Nothing in the D1 window is quarantined; the parameter
+    exists because §9.7 makes quarantine the only alternative to a hard failure, and an
+    undocumented way to continue past an infeasibility is worse than a named one.
+    """
+    built = system if system.rows["component_id"].null_count() == 0 else assign_components(system)
+    membership = component_membership(built)
+    components = rank_table(built, rank_tolerance=config.rank_tolerance)
+    rank_by_component = {
+        row["component_id"]: (row["numerical_rank"], row["nullity"])
+        for row in components.iter_rows(named=True)
+    }
+    cell_component = dict(zip(membership["cell_id"], membership["component_id"], strict=True))
+    observation = dict(zip(built.cells["cell_id"], built.cells["observation_status"], strict=True))
+    observed_value = dict(zip(built.cells["cell_id"], built.cells["observed_value"], strict=True))
+
+    records: list[dict[str, object]] = []
+    reports: list[object] = []
+    for component_id in sorted(set(membership["component_id"].to_list())):
+        specs = column_specs(built, component_id, membership)
+        try:
+            lp = solve_component(built, component_id, membership, config, integer=False)
+        except InfeasibleComponentError as failure:
+            from . import diagnostics as diagnostics_module  # local: breaks an import cycle
+
+            report = diagnostics_module.diagnose(built, component_id, membership, config)
+            reports.append(report)
+            if component_id not in quarantined:
+                raise InfeasibleComponentError(
+                    f"{failure}\n{diagnostics_module.render(report)}"
+                ) from failure
+            lp = {
+                cell: (None, None, "infeasible")
+                for cell in specs
+                if observation.get(cell) == "suppressed"
+            }
+
+        milp: dict[str, tuple[float | None, float | None, str]] = {}
+        if lp and _needs_milp(lp, specs, config) and component_id not in quarantined:
+            milp = solve_component(built, component_id, membership, config, integer=True)
+
+        numerical_rank, nullity = rank_by_component[component_id]
+        for cell in specs:
+            status_word = observation[cell]
+            if status_word == "suppressed" and component_id in quarantined:
+                bound_status, exact, integer_exact = "infeasible", False, False
+                lp_lower = lp_upper = milp_lower = milp_upper = None
+                selected_lower = selected_upper = None
+                solver_status = "infeasible"
+            elif status_word == "suppressed":
+                lp_lower, lp_upper, solver_status = lp[cell]
+                milp_lower, milp_upper = (
+                    milp.get(cell, (None, None, ""))[:2] if milp else (None, None)
+                )
+                selected_lower = milp_lower if milp_lower is not None else lp_lower
+                selected_upper = milp_upper if milp_upper is not None else lp_upper
+                bound_status, exact, integer_exact = classify_bound_status(
+                    observation_status=status_word,
+                    lower=selected_lower,
+                    upper=selected_upper,
+                    is_integer=specs[cell].is_integer,
+                    tolerance=config.feasibility_tolerance,
+                )
+            else:
+                value = None if observed_value[cell] is None else float(observed_value[cell])
+                lp_lower = lp_upper = milp_lower = milp_upper = None
+                selected_lower = selected_upper = value
+                solver_status = "not_solved"
+                bound_status, exact, integer_exact = classify_bound_status(
+                    observation_status=status_word,
+                    lower=value,
+                    upper=value,
+                    is_integer=specs[cell].is_integer,
+                    tolerance=config.feasibility_tolerance,
+                )
+            records.append(
+                {
+                    "cell_id": cell,
+                    "component_id": cell_component[cell],
+                    "rank": numerical_rank,
+                    "nullity": nullity,
+                    "lp_lower": lp_lower,
+                    "lp_upper": lp_upper,
+                    "milp_lower": milp_lower,
+                    "milp_upper": milp_upper,
+                    "selected_lower": selected_lower,
+                    "selected_upper": selected_upper,
+                    "bound_status": bound_status,
+                    "exactly_identified": exact,
+                    "integer_exactly_identified": integer_exact,
+                    "solver_status": solver_status,
+                    "solver_tolerance": config.feasibility_tolerance,
+                    "constraint_set_hash": built.constraint_set_hash,
+                }
+            )
+    return BoundResult(
+        bounds=pl.DataFrame(records, schema=DETERMINISTIC_BOUNDS_SCHEMA).sort("cell_id"),
+        components=components,
+        diagnostics=tuple(reports),
+    )
