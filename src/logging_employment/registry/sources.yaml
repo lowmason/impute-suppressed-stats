@@ -4,8 +4,9 @@
 # under `data/raw/audit/<source>/summary.json` and reproducible by re-reading them -- or marked
 # `[documented]`, meaning it states an agency rule this repo has not measured and a re-run against
 # revised data would not change. Nothing here was typed from memory. The two landing_url values
-# were probed live on 2026-09-05 (both 200); every other measured string names the summary key it
-# came from, so a Stage-0 re-run can be diffed against this file mechanically.
+# were probed live on 2026-09-05 (both 200). Every other measured string names, in parentheses,
+# the summary key it was rendered from, so a claim here can be checked against Stage 0 by hand;
+# no generator is kept, and this file is edited rather than regenerated.
 #
 # `disclosure_regime` carries a `_v<N>` suffix because §7.1 requires the regime to be versioned
 # rather than free-floating prose; `registry verify` checks the suffix, and Task 12's registry
@@ -43,7 +44,7 @@ sources:
     industry_detail: "NAICS 6-digit; 113310 present at agglvl 28 in every year checked (qcew_size.findings.years_checked)"
     ownership: "the by-size file's ownership breakout was not measured for 113310 by Stage 0; only the agglvl/size crossing was [documented-not-measured]"
     statistical_unit: "establishment (reporting unit) [documented]"
-    employment_concept: "jobs covered by state UI and UCFE programs, counted for the pay period including the 12th of March [documented]"
+    employment_concept: "jobs covered by state UI and UCFE programs, counted for the pay period including the 12th of each month [documented]; the file carries month1_emplvl, month2_emplvl and month3_emplvl, so a Q1 pull yields January, February and March, not March alone (measured from the 2017_q1_by_size.csv header)"
     size_dimension: "the finest simultaneous combination observed for 113310 is national geography x 113310 x size codes ['1', '2', '3', '4', '5', '6', '7']; titles measured: 1 Fewer than 5 employees per establishment; 2 5 to 9 employees per establishment; 3 10 to 19 employees per establishment; 4 20 to 49 employees per establishment; 5 50 to 99 employees per establishment; 6 100 to 249 employees per establishment; 7 250 to 499 employees per establishment (qcew_size.findings.what_the_file_does_carry / size_codes_with_titles)"
     disclosure_regime: "qcew_size_disclosure_code_v1"
     revision_policy: "a quarter is finalized with the following year's Q1 release [documented]"
@@ -58,7 +59,7 @@ sources:
     access_status: "verified"
     frequency: "annual"
     reference_period: "the week including March 12 of the reference year [documented]"
-    geography: "state (`for=state:*`); the API also serves combined statistical area, congressional district, county, metropolitan statistical area/micropolitan statistical area, state, us (cbp_metadata.findings.geography_levels_by_year)"
+    geography: "state (`for=state:*`); the API serves combined statistical area, congressional district, county, metropolitan statistical area/micropolitan statistical area, state and us (cbp_metadata.findings.geography_levels_by_year)"
     industry_detail: "the NAICS predicate is NAICS2017 for every year 2017-2023, measured (cbp_metadata.findings.naics_predicate_by_year) -- deriving it from the reference year's NAICS vintage would ask for a variable CBP does not serve"
     ownership: "LFO is sent as the filter '001' but lfo_by_year is null for all 8 years, because LFO/LFO_LABEL was never selected as an output column (cbp_metadata.findings.lfo_by_year); Stage 0 deferred a dedicated LFO query to this stage"
     statistical_unit: "establishment [documented]"
