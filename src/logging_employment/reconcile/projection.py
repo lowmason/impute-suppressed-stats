@@ -24,8 +24,9 @@ decision and lives in `config.reconciliation.zero_seed_floor`.
 WHY `weighted_quadratic` IS NOT IMPLEMENTED HERE. §12.4 permits it but requires the objective and
 weights to be "versioned and validation-tested". Nothing in Stage 3 validates a second objective,
 so the config value is accepted as a version marker and `require_supported_method` raises rather
-than quietly running KL under a different name. That guard lives at the entry points that hold the
-config -- `reconcile_matrix` and `reconcile_draws` -- because `kl_project` itself never sees it.
+than quietly running KL under a different name. The guard belongs wherever the config is actually
+read -- `reconcile_draws` and the CLI commands -- because neither `kl_project` nor
+`reconcile_matrix` takes a config argument.
 """
 
 from __future__ import annotations
