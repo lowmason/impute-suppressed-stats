@@ -177,7 +177,7 @@ ROADMAP_FIELDS: tuple[tuple[str, str, str], ...] = (
     ("the state x month suppression share for 113310 private ownership",
      "qcew_panel", "suppression_share_by_month"),
     ("per-state CES publication level (1133, 113, or supersector)",
-     "ces", "publication_level_by_state"),
+     "ces", "publication_level_by_sm_state_code"),
     ("BDS finest industry detail", "bds", "finest_naics_available"),
     ("SUSB detailed-sizes file layout", "susb", "detailed_sizes_layout"),
     ("FIA /fullreport parameters", "fia", "doc_parameters"),

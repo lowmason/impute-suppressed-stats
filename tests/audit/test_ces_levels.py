@@ -19,6 +19,10 @@ the module's only side effects sit behind `if __name__ == "__main__"`.
 
 from __future__ import annotations
 
+import json
+import pathlib
+
+import _common
 import polars as pl
 import pytest
 
@@ -219,21 +223,21 @@ def test_excluded_broader_codes_empty_when_every_named_code_is_a_candidate():
     assert m.excluded_broader_codes(named, {"10000000", "10113300"}) == []
 
 
-# --- near_miss_states ------------------------------------------------------------------------
+# --- near_miss_sm_state_codes ---------------------------------------------------------------
 
 
-def test_near_miss_states_keeps_only_states_the_main_selection_left_at_none():
+def test_near_miss_sm_state_codes_keeps_only_states_the_main_selection_left_at_none():
     excluded_series = [
         {"state_code": "11", "industry_code": "15000000", "series_id": "X1"},  # DC: none -> kept
         {"state_code": "06", "industry_code": "15000000", "series_id": "X2"},  # CA: 1133 already
     ]
     level_by_state = {"11": "none", "06": "1133"}
-    out = m.near_miss_states(excluded_series, level_by_state)
+    out = m.near_miss_sm_state_codes(excluded_series, level_by_state)
     assert out == [{"state_code": "11", "industry_code": "15000000", "series_id": "X1"}]
 
 
-def test_near_miss_states_empty_when_no_excluded_series_at_all():
-    assert m.near_miss_states([], {"11": "none"}) == []
+def test_near_miss_sm_state_codes_empty_when_no_excluded_series_at_all():
+    assert m.near_miss_sm_state_codes([], {"11": "none"}) == []
 
 
 # --- broader_code_note -------------------------------------------------------------------------
@@ -247,7 +251,7 @@ def test_broader_code_note_says_nothing_excluded_when_the_list_is_empty():
     assert "Mining, Logging and Construction" not in note
 
 
-def test_broader_code_note_names_the_excluded_code_and_the_near_miss_states():
+def test_broader_code_note_names_the_excluded_code_and_the_near_miss_sm_state_codes():
     excluded = [{"industry_code": "15000000",
                 "industry_name": "Mining, Logging and Construction"}]
     near_miss = [{"state_code": "11", "industry_code": "15000000", "series_id": "X1"},
@@ -258,7 +262,7 @@ def test_broader_code_note_names_the_excluded_code_and_the_near_miss_states():
     assert "unanchored substring match" in note
 
 
-def test_broader_code_note_reports_excluded_with_no_near_miss_states():
+def test_broader_code_note_reports_excluded_with_no_near_miss_sm_state_codes():
     """The branch where a broader code is excluded but no state's classification actually
     depends on it -- must not claim a near-miss that did not happen."""
     excluded = [{"industry_code": "15000000",
@@ -444,3 +448,45 @@ def test_granularity_note_explains_zero_differently_when_113310_is_defined():
     assert "does define an SAE industry code at the 113310" in note
     assert "not that the code is absent" in note
     assert "stops short of 113310" not in note
+
+
+# --- shipped findings key names --------------------------------------------------------------
+
+RENAMES = (("publication_level_by_sm_state_code", "publication_level_by_state"),
+           ("near_miss_sm_state_codes", "near_miss_states"))
+
+
+def _ces_summary() -> dict:
+    path = pathlib.Path(m.__file__).resolve().parents[2] / "data/raw/audit/ces/summary.json"
+    if not path.exists():
+        pytest.skip(f"{path} not present; run ces_levels.py first")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_shipped_findings_name_sm_state_codes_not_states():
+    """The two keys whose old names implied a set of state FIPS codes. Both map or list
+    sm.state codes, a set the audit deliberately keeps at its published size rather than
+    trimming to states, so the names have to say sm.state."""
+    findings = _ces_summary()["findings"]
+    for new, old in RENAMES:
+        assert new in findings
+        assert old not in findings
+
+
+def test_publication_level_map_really_does_span_more_than_states_dc():
+    """Why the rename was needed, pinned as data rather than as a naming preference: the map's
+    own keys include codes that are not states_dc FIPS at all. If a future run ever trimmed it
+    to states_dc, the name would be the wrong one in the other direction and this fails."""
+    findings = _ces_summary()["findings"]
+    coded = set(findings["publication_level_by_sm_state_code"])
+    non_state = coded - set(_common.STATES_DC_FIPS)
+    assert non_state, "map is states_dc-only; 'by_sm_state_code' no longer describes it"
+    # The sibling finding that resolves those codes must agree on exactly which they are.
+    assert {row["code"] for row in findings["non_state_codes"]} == non_state
+
+
+def test_near_miss_rows_are_keyed_by_codes_the_publication_map_left_at_none():
+    findings = _ces_summary()["findings"]
+    level = findings["publication_level_by_sm_state_code"]
+    for row in findings["near_miss_sm_state_codes"]:
+        assert level[row["state_code"]] == "none"

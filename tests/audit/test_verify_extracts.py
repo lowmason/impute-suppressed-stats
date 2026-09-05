@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import csv
 import json
+import pathlib
 import re
 import subprocess
 
@@ -583,6 +584,25 @@ def test_check_roadmap_fields_reports_a_source_with_no_summary():
 
 def test_every_roadmap_field_names_an_expected_source():
     assert {source for _, source, _ in m.ROADMAP_FIELDS} <= m.EXPECTED_SOURCES
+
+
+def test_every_roadmap_field_names_a_key_its_source_script_still_writes():
+    """E1 fails on a named field the summaries do not carry, so a findings key renamed in a
+    source script without the matching ROADMAP_FIELDS edit breaks the gate on correct work.
+    This catches that at unit-test speed, in a fresh clone, with no artifacts on disk: each
+    entry's key must still appear as a quoted literal in the script declaring that SOURCE.
+    Text matching is deliberate -- the alternative is running eleven network scripts."""
+    scripts = pathlib.Path(m.__file__).resolve().parent
+    by_source = {}
+    for script in sorted(scripts.glob("*.py")):
+        text = script.read_text(encoding="utf-8")
+        for source in re.findall(r'^SOURCE(?:_[A-Z]+)? = "([a-z_]+)"$', text, re.MULTILINE):
+            by_source[source] = text
+    missing = [
+        (source, key) for _, source, key in m.ROADMAP_FIELDS
+        if source not in by_source or f'"{key}"' not in by_source[source]
+    ]
+    assert missing == []
 
 
 # --- E2 and E3 ------------------------------------------------------------------------------

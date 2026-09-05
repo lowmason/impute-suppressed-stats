@@ -109,14 +109,23 @@ def excluded_broader_codes(
     )
 
 
-def near_miss_states(
+def near_miss_sm_state_codes(
     excluded_series_rows: list[dict], level_by_state: dict[str, str]
 ) -> list[dict]:
-    """States/areas whose only D1-window-overlapping statewide all-employees series among all
-    logging-named codes sits at an excluded, broader code — exactly the states a looser,
-    unanchored title match would have promoted from 'none' to 'supersector'. `level_by_state`
-    is already computed against the precise candidate set, so every state named here already
-    shows 'none' there; this function only explains why, from the excluded codes' own series."""
+    """One row per D1-window-overlapping statewide all-employees series sitting at an excluded,
+    broader code, restricted to the sm.state codes the precise candidate selection left at
+    'none' — exactly the codes a looser, unanchored title match would have promoted off 'none'.
+
+    Named for sm.state codes rather than states, matching `non_state_codes` and the sentence
+    `broader_code_note` composes: the fetched sm.state file's universe is wider than D1's
+    states_dc and includes codes that are not state FIPS at all (which ones is computed into
+    `non_state_codes` in the same summary, never typed here), so a name saying 'states' would
+    claim statehood for part of whatever this collects.
+
+    `level_by_state` is already computed against the precise candidate set, so every code named
+    here already shows 'none' there; this function only explains why, from the excluded codes'
+    own series. Which level a looser match would have promoted them to is not decided here and
+    is not 'supersector' by assumption — `broader_code_note` derives it per excluded code."""
     return sorted(
         (
             {"state_code": row["state_code"], "industry_code": row["industry_code"],
@@ -344,7 +353,7 @@ def main() -> None:
     excluded_series_rows = qualifying_series(
         frames["sm.series"], excluded_codes, all_employees, statewide_area
     ).to_dicts() if excluded_codes else []
-    near_miss = near_miss_states(excluded_series_rows, level_by_state)
+    near_miss = near_miss_sm_state_codes(excluded_series_rows, level_by_state)
 
     # D1 Appendix A's own geography universe (50 states + DC, 51 codes) is a strict subset of
     # sm.state's 55 codes (it also carries "00" All States, "72" Puerto Rico, "78" Virgin
@@ -395,7 +404,7 @@ def main() -> None:
         extracts=extracts,
         findings={
             "logging_industry_codes": candidate_rows,
-            "publication_level_by_state": level_by_state,
+            "publication_level_by_sm_state_code": level_by_state,
             "series_by_state": by_state,
             "states_with_113310": tally["113310"],
             "states_with_1133": tally["1133"],
@@ -406,7 +415,7 @@ def main() -> None:
             "derived_codes": {"all_employees_data_type": all_employees,
                               "statewide_area": statewide_area},
             "excluded_broader_codes": excluded,
-            "near_miss_states": near_miss,
+            "near_miss_sm_state_codes": near_miss,
             "states_dc_tally": states_dc_tally,
             "non_state_codes": [{"code": code, "name": state_names.get(code)}
                                 for code in non_state_codes],

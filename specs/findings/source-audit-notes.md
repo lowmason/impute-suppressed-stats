@@ -86,7 +86,7 @@ endpoint, so it has nothing to add or subtract.
   carrying disclosure code `N`, the 24-row difference being Puerto Rico's area-months, which are
   outside `states_dc`. That is why the establishment identity is testable while the employment
   one is not, and it is the strongest structural constraint this audit found.
-- **CES counts have two denominators, and they differ.** `ces.publication_level_by_state` maps
+- **CES counts have two denominators, and they differ.** `ces.publication_level_by_sm_state_code` maps
   all 55 codes in the fetched `sm.state` file, and the `ces.states_with_*` counts are over those
   55 -- of which four (`00` All States, `72` Puerto Rico, `78` Virgin Islands, `99` All
   Metropolitan Statistical Areas) are not `states_dc` jurisdictions. `ces.states_dc_tally` is the
