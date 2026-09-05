@@ -876,7 +876,7 @@ git commit -m "feat(contracts): declare table schemas, observation statuses, and
   - `config.credentials() -> dict[str, str]` reading `.env` via python-dotenv
   - `cli.app` — the Typer application registered as `logging-estimates`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_config.py`:
 
@@ -955,12 +955,12 @@ def test_resolved_config_names_the_env_var_but_never_a_key_value(
     assert resolved["sources"]["cbp"]["api_key_env"] == "CENSUS_API_KEY"
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `uv run pytest tests/unit/test_config.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'logging_employment.config'`.
 
-- [ ] **Step 3: Write `config.py`**
+- [x] **Step 3: Write `config.py`**
 
 ```python
 """Typed configuration, loaded from YAML, with credentials kept out of the resolved form."""
@@ -1086,19 +1086,19 @@ def credentials(env_path: Path | None = None) -> dict[str, str]:
     return values
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `uv run pytest tests/unit/test_config.py -v`
 Expected: PASS, 4 passed.
 
-- [ ] **Step 5: Write `config.yaml` at the repo root**
+- [x] **Step 5: Write `config.yaml` at the repo root**
 
 Copy Appendix A's block verbatim for the three keys this stage supports — `project`, `storage`, and
 the `qcew`/`qcew_size`/`cbp` entries of `sources`. Leave out the `constraints`, `model`,
 `reconciliation`, `validation`, `promotion` and `disclosure` blocks: `Config` forbids extra keys,
 and those blocks belong to Stages 2–8. Record in your implementer report that you did so.
 
-- [ ] **Step 6: Write `cli.py` with `validate-config` only**
+- [x] **Step 6: Write `cli.py` with `validate-config` only**
 
 ```python
 """The `logging-estimates` command-line interface."""
@@ -1126,12 +1126,12 @@ def validate_config(
     )
 ```
 
-- [ ] **Step 7: Run the command end to end**
+- [x] **Step 7: Run the command end to end**
 
 Run: `uv run logging-estimates validate-config --config config.yaml`
 Expected: `OK: 113310 / private / states_dc / 2017-01..2024-12`
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/logging_employment/config.py src/logging_employment/cli.py config.yaml \
@@ -1165,7 +1165,7 @@ git commit -m "feat(config): add the typed config model and validate-config"
   - `store.snapshot_row(...) -> dict[str, object]` conforming to `SOURCE_SNAPSHOT_SCHEMA`
   - `store.assert_no_secret(payload: str, secrets: Sequence[str]) -> None` raising `ValueError`
 
-- [ ] **Step 1: Write the failing store test**
+- [x] **Step 1: Write the failing store test**
 
 Create `tests/unit/test_store.py`:
 
@@ -1226,12 +1226,12 @@ def test_assert_no_secret_ignores_empty_secrets() -> None:
     assert_no_secret("anything at all", ["", None])  # type: ignore[list-item]
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `uv run pytest tests/unit/test_store.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'logging_employment.store'`.
 
-- [ ] **Step 3: Write `ingest/base.py`**
+- [x] **Step 3: Write `ingest/base.py`**
 
 ```python
 """One HTTP client for every source, carrying the contact address BLS requires."""
@@ -1299,7 +1299,7 @@ class HttpFetcher:
         self._client.close()
 ```
 
-- [ ] **Step 4: Write `store.py`**
+- [x] **Step 4: Write `store.py`**
 
 ```python
 """The immutable, content-addressed raw store and the `source_snapshot` row it produces."""
@@ -1404,12 +1404,12 @@ def snapshot_row(
     }
 ```
 
-- [ ] **Step 5: Run the store test to verify it passes**
+- [x] **Step 5: Run the store test to verify it passes**
 
 Run: `uv run pytest tests/unit/test_store.py -v`
 Expected: PASS, 5 passed.
 
-- [ ] **Step 6: Write and run the fetcher test**
+- [x] **Step 6: Write and run the fetcher test**
 
 Create `tests/unit/test_ingest_base.py`:
 
@@ -1459,7 +1459,7 @@ def test_a_404_body_is_returned_not_raised() -> None:
 Run: `uv run pytest tests/unit/test_ingest_base.py -v`
 Expected: PASS, 3 passed.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/logging_employment/store.py src/logging_employment/ingest/ \
@@ -1492,7 +1492,7 @@ git commit -m "feat(store): add the content-addressed raw store and the shared H
     when the registry is sound
   - CLI subcommand group `registry`, with `registry verify`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_registry.py`:
 
@@ -1570,12 +1570,12 @@ def test_the_seed_registry_is_sound() -> None:
     assert verify(rows) == []
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `uv run pytest tests/unit/test_registry.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'logging_employment.registry'`.
 
-- [ ] **Step 3: Write `registry/models.py`**
+- [x] **Step 3: Write `registry/models.py`**
 
 ```python
 """The §7.1 `source_registry` row."""
@@ -1612,7 +1612,7 @@ class SourceRegistryRow(BaseModel):
     limitations: str
 ```
 
-- [ ] **Step 4: Write `registry/loader.py`**
+- [x] **Step 4: Write `registry/loader.py`**
 
 ```python
 """Loading the registry from YAML and rendering it as a typed frame."""
@@ -1642,7 +1642,7 @@ def registry_frame(rows: Sequence[SourceRegistryRow]) -> pl.DataFrame:
     )
 ```
 
-- [ ] **Step 5: Write `registry/validation.py`**
+- [x] **Step 5: Write `registry/validation.py`**
 
 ```python
 """Registry checks behind `registry verify`."""
@@ -1684,7 +1684,7 @@ def verify(rows: Sequence[SourceRegistryRow]) -> list[str]:
     return problems
 ```
 
-- [ ] **Step 6: Write `registry/sources.yaml`**
+- [x] **Step 6: Write `registry/sources.yaml`**
 
 Three rows — `qcew`, `qcew_size`, `cbp`. Fill every one of the eighteen fields from Stage 0's
 measured findings, using the endpoint patterns in this plan's Stage 0 inputs table. Set
@@ -1693,7 +1693,7 @@ versioned `disclosure_regime` string: `qcew_disclosure_code_v1`, `qcew_size_disc
 `cbp_noise_infusion_v1`. For `qcew_size.size_dimension`, record what Stage 0 measured — national
 geography × 113310 × size codes 1–7, first quarter only — not a general claim about the file.
 
-- [ ] **Step 7: Add the `registry` command group to `cli.py`**
+- [x] **Step 7: Add the `registry` command group to `cli.py`**
 
 ```python
 registry_app = typer.Typer(help="Source registry commands.")
@@ -1718,7 +1718,7 @@ def registry_verify(
     typer.echo("OK: registry verified")
 ```
 
-- [ ] **Step 8: Run the tests and the command**
+- [x] **Step 8: Run the tests and the command**
 
 Run: `uv run pytest tests/unit/test_registry.py -v`
 Expected: PASS, 6 passed.
@@ -1726,7 +1726,7 @@ Expected: PASS, 6 passed.
 Run: `uv run logging-estimates registry verify --config config.yaml`
 Expected: `OK: registry verified`, exit code 0.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add src/logging_employment/registry/ src/logging_employment/cli.py tests/unit/test_registry.py
