@@ -103,9 +103,9 @@ def test_every_label_in_the_official_crosswalk_resolves() -> None:
     # require each to yield either a range or a named non-range. A label that silently nulled
     # its bounds would be a §18.3 silent default, which is what this forbids.
     labels = cbp.discover_empszes(EMPSZES_2017, data_rows=DATA).values()
-    bounded = [label for label in labels if cbp.size_bounds(label) != (None, None)]
+    # A 45th label that parsed to no bounds would raise out of `size_bounds` rather than
+    # reaching this comparison, so this catches an over-broad allowlist in both directions.
     unbounded = [label for label in labels if cbp.size_bounds(label) == (None, None)]
-    assert len(bounded) + len(unbounded) == len(list(labels))
     assert set(unbounded) == set(cbp.NOT_AN_EMPLOYMENT_RANGE)
 
 
@@ -243,7 +243,8 @@ def test_the_echoed_predicate_columns_do_not_shift_the_parsed_values() -> None:
     validate_frame(out, CBP_STATE_SIZE_SCHEMA, "cbp_state_size")
     assert out["industry_code"].unique().to_list() == ["113310"]
     assert out["legal_form_code"].unique().to_list() == ["001"]
-    assert out["size_label"].str.starts_with("Establishments").sum() == out.height - 46
+    non_total = out.filter(pl.col("size_code") != "001")
+    assert non_total["size_label"].str.starts_with("Establishments").all()
 
 
 def test_the_live_and_archived_extracts_agree_on_every_shared_measure() -> None:

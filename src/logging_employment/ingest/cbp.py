@@ -44,6 +44,8 @@ NOT_AN_EMPLOYMENT_RANGE: frozenset[str] = frozenset(
 # re-derives from the shipped copy of that document. Two details the audit summary's "A-M plus S"
 # gloss loses and this table keeps: there is no 'D', and 'r' means "Revised Data" -- a revised
 # cell is published, so folding every nonempty flag into "suppressed" would discard a real value.
+# A response carrying 'D' therefore halts, which is the intended §18.3 behaviour and not an
+# omission to patch: the layout this table is derived from does not define that code.
 EMPFLAG_WITHHELD_CODES: frozenset[str] = frozenset("ABCEFGHIJKLMS")
 EMPFLAG_REVISED_CODE = "r"
 

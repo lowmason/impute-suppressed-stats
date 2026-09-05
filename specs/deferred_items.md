@@ -48,12 +48,19 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       identity is untestable on a complete published state sum. Stage 3 must name
       a substitute anchor or accept a weaker assumption. Recorded in the plan's own
       `> Deviation` note at Task 5 Step 6.
-- [ ] **`cbp_metadata.lfo_by_year` is null for all eight window years** — the one
+- [x] **`cbp_metadata.lfo_by_year` is null for all eight window years** — the one
       roadmap-named field that shipped no value. Human ruling at this gate: carry
       as a §1.2 row rather than re-run. The "why" is recorded in the summary's
       sibling `notes` key and in `specs/findings/source-audit-notes.md`, and the
       exit gate declares it in `LEGITIMATELY_EMPTY_FINDINGS` rather than passing it
       silently. **Stage 1 (parser) should issue a dedicated `LFO,LFO_LABEL` query.**
+      **Closed 2026-09-05 by Stage 1 Task 11 Step 6.** `ingest.cbp.build_query`
+      selects `LFO,LFO_LABEL` as output columns rather than sending `LFO=001` only
+      as a filter. The live 2023 query returned 200 with `LFO_LABEL` present and
+      equal to `"All establishments"` on all 188 rows — the label for the `001`
+      code the window queries filter on. The response is shipped as
+      `tests/fixtures/cbp/data_113310_2023_live.json` and pinned by
+      `test_the_live_response_serves_the_lfo_label_the_query_asks_for`.
 - [ ] **`cbp_regime.unknown_years = [2024]`.** CBP's 2024 disclosure regime is
       undetermined because the vintage is not published yet. Stage 1 fails closed on
       an unknown regime, which is the correct behaviour; revisit when 2024 CBP ships.
@@ -134,7 +141,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
 
 ## 2-stage1-logging-employment-spec — 2026-09-05
 
-### Raised during Tasks 7–9
+### Raised during Tasks 7–11
 
 - [ ] **`probe_slice_boundary` probes every candidate year rather than stopping at
       the first one served.** Ascending sort makes `served[0]` and an early exit
@@ -161,3 +168,33 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       twice to prove byte-identity. If that run is slow, this is the first thing to
       look at — `pl.concat_str(...).hash()` is not a substitute (it is not sha256
       and not stable across Polars versions), so a native replacement needs care.
+
+### Raised during Task 11
+
+- [ ] **`cbp_state_size` has no column for `EMP_N_F`, the only field that carries
+      CBP's per-cell noise magnitude.** §7.5's field list was written against the
+      columns Stage 0's query selected, and Stage 0 never selected `EMP_N_F`
+      (`emp_n_f_in_response: false` for all eight years), so the omission is a spec
+      gap this stage's live run discovered rather than a parser defect.
+      `employment_noise_range` ← `EMP_N` is the correct mapping by Census's own
+      naming ("Noise range for number of employees"), and `EMP_N` is the literal
+      string `'0'` on every row of every window year — so the shipped column
+      preserves a field that carries no information while the one that does is
+      dropped at the parse layer. Measured on the live 2023 response this run
+      (188 rows, `113310` × state × `LFO=001`): `EMP_N_F` is present on every row,
+      distributed `G: 103, H: 51, J: 34` — methodology.html's low / moderate / high
+      noise bands. Not urgent and not a data loss: `ingest.cbp.build_query` already
+      selects `EMP_N_F`, so the immutable raw store captures it at rest and a later
+      stage can re-parse the stored bytes without re-fetching. Closing it means
+      amending §7.5 and `CBP_STATE_SIZE_SCHEMA` (a fingerprint change), which is a
+      spec decision rather than an implementation one. **Stage 6's measurement
+      model is the consumer that needs it** (SRC-CBP-004 enters CBP employment as a
+      noisy measurement; noise magnitude is what that model would weight by).
+
+- [ ] **Nothing re-derives `EMPFLAG_WITHHELD_CODES` against a post-2017 layout.**
+      The table is derived from the 2017 state record layout, which is the last year
+      EMPFLAG was used, so it is correct for the D1 window. A test re-derives it from
+      the shipped copy of that document. If CBP is ever read outside 2017–2023, the
+      derivation has no later layout to check against and an unrecognized flag will
+      halt the run — the intended §18.3 behaviour, but worth knowing before the run
+      halts.

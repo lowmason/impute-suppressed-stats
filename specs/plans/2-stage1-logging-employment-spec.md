@@ -92,11 +92,11 @@ anything you copy out of this plan, too.
 
 ---
 
-## Execution notes — read before resuming (added 2026-09-05, Tasks 7–10 shipped)
+## Execution notes — read before resuming (added 2026-09-05, Tasks 7–11 shipped)
 
 **This plan's code blocks were never run.** They encode intent, not a passing state, and their
 "Expected: PASS, N passed" lines are predictions rather than observations. Transcribing them
-verbatim has produced a failure or a defect in four of the four tasks executed so far:
+verbatim has produced a failure or a defect in five of the five tasks executed so far:
 
 | Task | What the block got wrong | Caught by |
 |---|---|---|
@@ -104,9 +104,14 @@ verbatim has produced a failure or a defect in four of the four tasks executed s
 | 8 | Step 1 copies a 439 MB / 2,232-member archive into `tests/fixtures/` | checking the file's size |
 | 9 | `source_row_hash` omits ownership, aggregation level, size and industry — 18 collisions | measuring uniqueness |
 | 10 | Reads `qtrly_estabs` from a file that ships `qtrly_estabs_count`; bounds table nulls 16.3% of rows; the dimensionality assertion is never called from the build path | opening the file |
+| 11 | `disclosure_status` reads four suppression-coded cells as published zeros — INV-003. The fixture list omits the only year that has one, so all nine tests pass anyway | copying the 2017 file and counting its flagged rows |
 
-**Three of those four passed the task's own tests.** A green run here means the plan's assertions
-held, not that the code is right. What has actually found them, every time:
+**Four of those five passed the task's own tests.** A green run here means the plan's assertions
+held, not that the code is right. Task 11 sharpens the point: its defect was invisible not because
+the tests were weak but because **the plan's fixture list excluded the data that exhibits it**.
+Check what a fixture set cannot show you, not only what it does.
+
+What has actually found them, every time:
 
 1. **Before implementing**, run the two or three commands that turn a step's "Expected:" lines
    into knowns — open the fixture, print its columns, check a claim the block asserts in prose.
@@ -114,7 +119,7 @@ held, not that the code is right. What has actually found them, every time:
    test dies. If nothing dies, the behaviour is untested regardless of the pass count.
 
 Deviations are annotated inline at the step they affect, marked **DEVIATION**. Ticked boxes on
-Tasks 8, 9 and 10 do **not** mean "done as written" — read the annotation. Items raised and
+Tasks 8, 9, 10 and 11 do **not** mean "done as written" — read the annotation. Items raised and
 deliberately not fixed are in `specs/deferred_items.md`.
 
 ---
@@ -2787,7 +2792,7 @@ git commit -m "feat(qcew-size): ingest the national size benchmark with a conten
    recorded `lfo_by_year = null` for all eight years, deferring a dedicated `LFO,LFO_LABEL` query
    **to this stage**. Step 5 discharges that deferral.
 
-- [ ] **Step 1: Copy the fixtures**
+- [x] **Step 1: Copy the fixtures**
 
 ```bash
 mkdir -p tests/fixtures/cbp
@@ -2796,7 +2801,23 @@ cp data/raw/audit/cbp_metadata/2017/empszes.json tests/fixtures/cbp/empszes_2017
 cp data/raw/audit/cbp_metadata/2023/empszes.json tests/fixtures/cbp/empszes_2023.json
 ```
 
-- [ ] **Step 2: Write the failing test**
+> **DEVIATION (2026-09-05): three fixtures beyond the three listed.** 48 KB in total, so none of
+> them is a Task 8 size problem.
+>
+> * `data_113310_2017.json` (20 KB). **The plan copies only 2023, and 2023 has no suppressed
+>   row.** Every EMPFLAG-flagged row in the window lives in 2017, so with the plan's fixture list
+>   the Step 4 defect below passes all nine tests. This is the fixture that makes the task's
+>   central invariant testable.
+> * `state_layout_2017.txt` (9.4 KB) — the Census record layout Stage 0 fetched, which defines
+>   the EMPFLAG codes. It lives under `data/`, which is gitignored, so a test could not read it
+>   from the audit tree on a fresh clone. `EMPFLAG_WITHHELD_CODES` is derived from this file by a
+>   test rather than typed from the audit summary's prose.
+> * `data_113310_2023_live.json` (37 KB) — the response `build_query` actually elicits, captured
+>   during Step 6. Stage 0's archived extract selected neither the NAICS predicate nor `LFO` as
+>   output columns, so it carries none of the duplicate columns Census echoes back and cannot
+>   exercise the shape this parser will meet in production.
+
+- [x] **Step 2: Write the failing test**
 
 Create `tests/unit/test_cbp.py`:
 
@@ -2884,12 +2905,45 @@ def test_size_bounds_are_parsed_from_the_official_labels() -> None:
     assert cbp.size_bounds("All establishments") == (None, None)
 ```
 
-- [ ] **Step 3: Run to verify it fails**
+- [x] **Step 3: Run to verify it fails**
 
 Run: `uv run pytest tests/unit/test_cbp.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'logging_employment.ingest.cbp'`.
 
-- [ ] **Step 4: Write `ingest/cbp.py`**
+- [x] **Step 4: Write `ingest/cbp.py`**
+
+> **DEVIATION (2026-09-05): Step 4 has four defects.** Shipped at **28 passed**, not 9.
+>
+> 1. **`disclosure_status` turns four suppression-coded values into true zeros — INV-003.** The
+>    block reads status off `EMP.is_null()`. No row of either window fixture has a null `EMP`.
+>    What the 2017 extract does carry is four rows flagged `EMP_F = 'a'` publishing `EMP` as the
+>    literal `0` against three live establishments — CBP covers *employer* establishments, so a
+>    published zero there is arithmetically incoherent. The 2017 state record layout defines
+>    EMPFLAG as the "Data Suppression Flag" and states a withheld cell has its "Employment or
+>    payroll field set to zero". Stage 0 read these rows the same way: `cbp_regime`'s
+>    `suppressed_share` for 2017 is 4/188. Status is now derived from the flag, `employment` is
+>    null on a withheld row, and the raw flag survives in `employment_flag`.
+> 2. **The EMPFLAG table must be derived, not typed.** Stage 0's summary glosses the scheme as
+>    "codes A-M, plus 'S'". The fetched layout defines no `D`, and defines `r` = "Revised Data",
+>    which is *not* a withholding — so both "A-M" and any rule folding every nonempty flag into
+>    "suppressed" are wrong. The table is derived from the shipped layout by a test.
+> 3. **`size_bounds` silently nulls 8 of the 44 official labels.** Run over the whole 2017
+>    crosswalk, the block's three regexes return `(None, None)` for eight, four of them genuinely
+>    bounded: `'1 employee'`, `'2 employees'`, `'3 or 4 employees'`, `'5 or 6 employees'`. A
+>    silently unbounded size class is the §18.3 silent default. The four labels that name a
+>    universe rather than a range are now named explicitly in `NOT_AN_EMPLOYMENT_RANGE`; anything
+>    else that does not parse raises `UnknownSizeCodeError`. *Partner decision at this step:
+>    `'no paid employees'` and `'paid employees'` are non-ranges rather than `(0, 0)` and
+>    `(1, None)`, so a downstream size-share sum cannot treat them as classes.*
+> 4. **Keying the frame by column name silently drops two columns.** Census echoes any variable
+>    that is both selected in `get` and used as a predicate, so the live header carries `LFO` at
+>    positions 8 and 13 and `NAICS2017` at 10 and 12. `{name: ... for i, name in enumerate(header)}`
+>    keeps the last of each. The copies agree on every row today, so the block produces correct
+>    output by luck. `_frame_from_rows` keeps the first copy and raises `SchemaMismatchError` if
+>    they ever disagree.
+>
+> Also: nothing in the block fails closed on an unknown `EMP_F`, which §18.3 requires
+> ("a disclosure code is unknown"). `_check_employment_flags` does.
 
 ```python
 """CBP ingestion: state x six-digit x establishment-size counts as March-centered measurements."""
@@ -3035,12 +3089,18 @@ def parse_cbp_state_size(
     )
 ```
 
-- [ ] **Step 5: Run to verify it passes**
+- [x] **Step 5: Run to verify it passes**
 
 Run: `uv run pytest tests/unit/test_cbp.py -v`
 Expected: PASS, 9 passed.
 
-- [ ] **Step 6: Discharge the LFO deferral against the live API**
+> **DEVIATION (2026-09-05): 28 passed, not 9.** The nine the plan lists, plus tests for the four
+> Step 4 defects above and for the live response shape. Each of the five behaviours this task
+> exists to get right was mutation-checked after the suite went green — reverting the suppression
+> rule, folding `'r'` into the withheld set, making `size_bounds` return `(None, None)`, removing
+> the flag guard, and reverting to last-wins column keying each kill at least one test.
+
+- [x] **Step 6: Discharge the LFO deferral against the live API**
 
 The deferred item is only closed when a real response carries `LFO_LABEL`. Run, with the
 repo-root `.env` loaded:
@@ -3062,7 +3122,21 @@ that in your implementer report** — Stage 0 never selected it, so whether it i
 unmeasured. Do not remove `LFO_LABEL`. Record the observed LFO label in your report; it closes the
 deferred item.
 
-- [ ] **Step 7: Commit**
+> **Ran 2026-09-05. Status 200, 189 rows, no column dropped.**
+>
+> * `LFO_LABEL` is served and equals `"All establishments"` on all 188 data rows — the label for
+>   the `001` code these queries filter on. **The `lfo_by_year` deferred item is closed**, ticked
+>   in `specs/deferred_items.md`.
+> * `EMP_N_F` **is** served, contradicting the branch this step anticipated. It carries
+>   `G: 103, H: 51, J: 34` — methodology.html's low / moderate / high noise bands — on every row,
+>   while `EMP_N` is the literal `'0'` on all 188, as Stage 0 measured for all eight years. So the
+>   per-cell noise information is entirely in `EMP_N_F`, and §7.5 has no column for it.
+>   `build_query` selects it, so the raw store captures it at rest; the parse-layer projection gap
+>   is recorded as a deferred item rather than fixed here, because closing it means amending §7.5
+>   and re-fingerprinting `CBP_STATE_SIZE_SCHEMA` — a spec decision, not an implementation one.
+> * The response is shipped as a fixture, which is what surfaced Step 4's defect 4.
+
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/logging_employment/ingest/cbp.py tests/fixtures/cbp/ tests/unit/test_cbp.py
