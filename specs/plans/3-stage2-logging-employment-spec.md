@@ -949,9 +949,18 @@ Create `src/logging_employment/constraints/cells.py`:
 """§7.7 target cells: one row per atomic cell in the constraint universe.
 
 §9.2 fixes the atomic key at state x month x ownership x NAICS x release_vintage for state totals,
-and adds the March-reference size class for the size universe. `cell_id` encodes that key
-literally, with the family as its first field, because §7.7 requires size cells and total cells to
+and adds the March-reference size class for the size universe. `cell_id` does not encode that key
+literally: `_ID_FIELDS` always carries `size_class` and always omits `release_vintage`. It also
+stamps the family onto the front of the id, because §7.7 requires size cells and total cells to
 have distinct IDs and a shared prefix would leave that to luck.
+
+`size_class` in `_ID_FIELDS` is the real §9.2 key field for a size cell, but a total cell (state or
+national) has no size class in its own universe; it carries `size_class` only because §7.7's row
+schema gives every `target_cell` row that column, and fills it with the synthetic
+`TOTAL_SIZE_CLASS` ("ALL") to satisfy that schema. `release_vintage` is omitted from `_ID_FIELDS`
+entirely. Separately, `_assert_one_vintage_per_cell` groups `qcew_monthly` by `area_fips` and
+`reference_month` and raises (INV-007) when a group carries more than one distinct
+`release_vintage` -- one area-month published under more than one vintage.
 
 `qcew_national_size` carries no ownership column -- §7.4's field list has none -- so the ownership
 code stamped on a size cell comes from configuration. What licenses that stamp is
@@ -999,17 +1008,11 @@ def cell_id(
     naics_vintage: str,
     size_class: str,
 ) -> str:
-    """The identifier for one atomic cell: family first, then §9.2's key, pipe-separated."""
-    return "|".join(
-        (
-            kind,
-            state_fips,
-            reference_month,
-            ownership_code,
-            industry_code,
-            naics_vintage,
-            size_class,
-        )
+    """The identifier for one atomic cell: kind and key (state, month, ownership, industry,
+    naics_vintage, size_class), pipe-separated."""
+    return (
+        f"{kind}|{state_fips}|{reference_month}|{ownership_code}|{industry_code}|"
+        f"{naics_vintage}|{size_class}"
     )
 
 
@@ -1019,10 +1022,14 @@ def _cell_id_expr(kind: str) -> pl.Expr:
     Kept beside the string form, and pinned equal to it by a test: two encodings of one identifier
     that drift apart would produce cells no coefficient row could find.
 
-    `concat_str` returns null when any input is null, which is the behaviour to keep: a null key
-    field must surface as a build failure -- `validate_frame` and the duplicate check both see a
-    null `cell_id` -- rather than as a cell whose identifier `replace_strict` later reports as a
-    missing key from three modules away.
+    `concat_str` returns null when any input is null, and that is the behaviour to keep rather than
+    paper over: coercing a missing key field into the literal string "None" would manufacture a
+    plausible-looking `cell_id` for a cell that has no real key. It is not, by itself, a guarantee
+    that the null gets caught. `validate_frame` checks only column names and dtypes, never values,
+    so a null `cell_id` passes it silently, and the duplicate check in `build_target_cells` only
+    raises when two or more rows share one id -- a single null `cell_id` would ship undetected.
+    This expression keeps the identifier honest when a key field is null; it does not, on its own,
+    turn that into a build failure.
     """
     return pl.concat_str(
         [pl.lit(kind), *(pl.col(name) for name in _ID_FIELDS)], separator="|"
