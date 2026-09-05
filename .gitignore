@@ -1,1 +1,16 @@
+# Credentials — D3: .env must never be tracked
 .env
+
+# Audit and pipeline data are large and rebuildable; hashes are recorded in
+# specs/findings/source-audit-extracts.csv instead.
+data/
+runs/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
