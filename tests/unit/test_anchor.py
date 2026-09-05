@@ -5,7 +5,7 @@ from __future__ import annotations
 import polars as pl
 import pytest
 
-from logging_employment.errors import UniverseClosureError
+from logging_employment.errors import ConceptViolationError, UniverseClosureError
 from logging_employment.reconcile.anchor import (
     Partition,
     assert_universe_closes,
@@ -237,3 +237,84 @@ def test_a_month_with_no_missing_cells_yields_no_anchor(make_monthly) -> None:
     anchor = national_residual(monthly, part, reference_month="2024-03")
     assert anchor.missing_cells == ()
     assert anchor.residual == 0.0
+
+
+def test_a_national_month_with_no_state_rows_is_still_gated(make_monthly) -> None:
+    """The audit is driven by the panel's months, not by the partition's keys.
+
+    `observed_partition` emits a key only for months that have state rows, so a month publishing
+    a national row against no state rows at all would be absent from the audit entirely and the
+    gate would pass over it in silence — the shape most likely to mean a truncated ingest. It
+    appears with a zero state sum and a gap equal to the national count, which is a failure.
+    """
+    monthly = make_monthly(
+        {
+            "area_type": "national",
+            "area_fips": "US000",
+            "state_fips": None,
+            "aggregation_level": "18",
+            "reference_month": "2024-03",
+            "employment_value": 100,
+            "qtrly_establishments": 6,
+        },
+        {
+            "state_fips": "01",
+            "area_fips": "01000",
+            "reference_month": "2024-03",
+            "employment_value": 60,
+            "qtrly_establishments": 6,
+        },
+        {
+            "area_type": "national",
+            "area_fips": "US000",
+            "state_fips": None,
+            "aggregation_level": "18",
+            "reference_month": "2024-04",
+            "employment_value": 100,
+            "qtrly_establishments": 999,
+        },
+    )
+    audit = closure_audit(monthly, observed_partition(monthly))
+    assert audit.height == 2
+    assert "2024-04" in audit["reference_month"].to_list()
+    with pytest.raises(UniverseClosureError, match="2024-04"):
+        assert_universe_closes(audit)
+
+
+def test_a_null_employment_in_the_disclosed_set_halts_rather_than_summing_as_zero(
+    make_monthly,
+) -> None:
+    """`fill_null(0)` reads as null handling but is a no-op: Polars' `sum()` already skips nulls.
+
+    A suppressed cell mistakenly placed in `disclosed` would therefore contribute 0 and inflate
+    R_t by its true employment, handing the anchor employees no cell in the missing set can
+    receive. The mask-parameterised signature hands this partition to arbitrary callers, so the
+    D_t/M_t confusion is refused rather than trusted not to happen.
+    """
+    monthly = make_monthly(
+        {
+            "area_type": "national",
+            "area_fips": "US000",
+            "state_fips": None,
+            "aggregation_level": "18",
+            "employment_value": 100,
+            "qtrly_establishments": 12,
+        },
+        {
+            "state_fips": "01",
+            "area_fips": "01000",
+            "employment_value": 60,
+            "qtrly_establishments": 6,
+        },
+        {
+            "state_fips": "02",
+            "area_fips": "02000",
+            "employment_value": None,
+            "qtrly_establishments": 6,
+            "observation_status": "suppressed",
+        },
+    )
+    states = monthly.filter(pl.col("area_type") == "state")
+    confused = Partition(disclosed=states, missing=states.head(0))
+    with pytest.raises(ConceptViolationError, match="02"):
+        national_residual(monthly, confused, reference_month="2024-03")

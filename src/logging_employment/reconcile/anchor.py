@@ -2,10 +2,13 @@
 
 WHY THIS MODULE EXISTS. §12.2 defines the residual `R_t = N_t - sum_{s in D_t} E^obs` "for a
 compatible national total N_t" and never defines *compatible*. §5.5 does, listing ten dimensions
-that MUST be evaluated before a source value is used. Nine match by construction here -- N_t and
-the state rows are the same field of the same QCEW file at the same reference month, industry,
-NAICS vintage, ownership, employment concept, statistical unit, size concept, and release vintage,
-and both are exact published values. The tenth, the geography universe, is exactly what
+that MUST be evaluated before a source value is used. Nine match by construction here, because
+N_t and the state rows are the same field of the same QCEW file: reference period; industry code
+and NAICS vintage (one §5.5 bullet, not two); ownership coverage; employment concept; statistical
+unit; size concept; release vintage and revision status; disclosure and noise regime -- both rows
+come from one BLS disclosure regime, and that the national cell survives suppression while 1,227
+state cells do not is that regime operating as designed, not a difference in it; and exact rather
+than rounded, sampled, or modeled values. The tenth, the geography universe, is exactly what
 `closure_audit` measures.
 
 WHAT THE GATE TESTS, AND WHAT IT DOES NOT. It tests the *universe*, not the *measure*. National
@@ -43,7 +46,7 @@ from dataclasses import dataclass
 import polars as pl
 
 from ..contracts import ANCHOR_AUDIT_SCHEMA
-from ..errors import UniverseClosureError
+from ..errors import ConceptViolationError, UniverseClosureError
 
 DISCLOSED_STATUSES: tuple[str, ...] = ("observed", "true_zero")
 DECLARED_NATIONAL_TOTAL = "declared_national_total"
@@ -90,6 +93,26 @@ def observed_partition(monthly: pl.DataFrame) -> dict[str, Partition]:
     return out
 
 
+def _disclosed_sum(partition: Partition, reference_month: str) -> float:
+    """Total published employment across the disclosed cells, refusing a null.
+
+    `fill_null(0)` reads like null handling and is a no-op -- Polars' `sum()` already skips nulls
+    -- so a suppressed cell mistakenly placed in `disclosed` would contribute 0 and silently
+    inflate R_t by its true employment, handing the anchor employees that no cell in the missing
+    set can receive. This function takes an arbitrary caller-supplied partition (that is the whole
+    point of the mask-parameterised signature), so the D_t/M_t confusion is refused here rather
+    than trusted not to happen.
+    """
+    nulls = partition.disclosed.filter(pl.col("employment_value").is_null())
+    if nulls.height:
+        raise ConceptViolationError(
+            f"{reference_month}: {nulls.height} disclosed cell(s) carry a null employment_value "
+            f"(state_fips {sorted(set(nulls['state_fips'].to_list()))}); a cell with no published "
+            "value belongs in the missing set, and summing it as zero would inflate the residual"
+        )
+    return float(partition.disclosed["employment_value"].sum() or 0.0)
+
+
 def _national_row(monthly: pl.DataFrame, reference_month: str) -> dict[str, object]:
     """The single national row for a month, or a halt naming the month."""
     rows = monthly.filter(
@@ -112,7 +135,7 @@ def national_residual(
     `missing` -- it is a published value, and imputing it would overwrite a fact.
     """
     national = _national_row(monthly, reference_month)
-    disclosed_sum = float(partition.disclosed["employment_value"].fill_null(0).sum())
+    disclosed_sum = float(_disclosed_sum(partition, reference_month))
     residual = float(national["employment_value"]) - disclosed_sum
     return Anchor(
         reference_month=reference_month,
@@ -129,14 +152,21 @@ def closure_audit(monthly: pl.DataFrame, partitions: Mapping[str, Partition]) ->
     explains it rather than only an exception.
     """
     states = monthly.filter(pl.col("area_type") == "state")
+    empty = Partition(disclosed=states.head(0), missing=states.head(0))
+    # Driven by the months present in `monthly`, NOT by the partition keys. `observed_partition`
+    # emits a key only for months that have state rows, so a month publishing a national row with
+    # no state rows at all would be absent from the audit entirely and `assert_universe_closes`
+    # would pass over it in silence -- the one shape most likely to mean a truncated ingest.
+    # Looking the partition up with an empty default makes such a month appear with
+    # `state_establishments_sum = 0` and a gap equal to the national count, which is a failure.
     rows: list[dict[str, object]] = []
-    for month in sorted(partitions):
-        part = partitions[month]
+    for month in sorted(monthly["reference_month"].unique().to_list()):
+        part = partitions.get(month, empty)
         national = _national_row(monthly, month)
         published = states.filter(pl.col("reference_month") == month)
         national_est = int(national["qtrly_establishments"])
         state_est = int(published["qtrly_establishments"].fill_null(0).sum())
-        disclosed_sum = int(part.disclosed["employment_value"].fill_null(0).sum())
+        disclosed_sum = int(_disclosed_sum(part, month))
         residual = int(national["employment_value"]) - disclosed_sum
         missing_n = part.missing.height
         missing_est = int(part.missing["qtrly_establishments"].fill_null(0).sum())
@@ -154,8 +184,12 @@ def closure_audit(monthly: pl.DataFrame, partitions: Mapping[str, Partition]) ->
                 "missing_set_size": missing_n,
                 "anchored": national_est - state_est == 0 and residual >= 0,
                 # A falsification band, not an accuracy score: implied employees per establishment
-                # across the missing set. If it drifts far from the disclosed states' intensity,
-                # the completeness assumption is the first thing to doubt.
+                # across the missing set. It is EXPECTED to sit below the disclosed states'
+                # intensity, because suppression tracks small, less employment-dense states --
+                # measured on D1, implied runs 2.88-4.46 against disclosed 5.44-6.38, a ratio of
+                # 0.48-0.74 in 96 of 96 months. A ratio near or above 1, or one far below that
+                # band, is the signal; "differs from disclosed" on its own is the normal case and
+                # would fire on every month of a window this same run declares admissible.
                 "implied_intensity": (residual / missing_est) if missing_est else None,
             }
         )
