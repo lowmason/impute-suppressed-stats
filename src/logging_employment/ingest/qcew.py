@@ -10,6 +10,7 @@ records what that run found.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import zipfile
 from collections.abc import Iterable
@@ -17,6 +18,9 @@ from typing import Literal
 
 import polars as pl
 
+from ..constants import QCEW_DISCLOSURE_CODES
+from ..contracts import QCEW_MONTHLY_SCHEMA
+from ..errors import UnknownDisclosureCodeError
 from .base import FetchedBytes, HttpFetcher
 
 SLICE_URL = "https://data.bls.gov/cew/data/api/{year}/{qtr}/industry/{industry}.csv"
@@ -112,3 +116,157 @@ def read_bulk_zip(raw: bytes, industry: str) -> pl.DataFrame:
             frame = pl.read_csv(handle.read(), infer_schema_length=0)
     frame = frame.rename({k: v for k, v in BULK_TO_SLICE_COLUMNS.items() if k in frame.columns})
     return frame.drop([c for c in BULK_ONLY_TITLE_COLUMNS if c in frame.columns])
+
+
+PARSER_VERSION = "qcew_monthly/1"
+
+# The three published monthly employment levels, in the order the source lays them out: index i
+# of this tuple is month i of the quarter, which is what `reference_month` is derived from.
+_MONTH_COLUMNS = ("month1_emplvl", "month2_emplvl", "month3_emplvl")
+# Every field a suppression can zero out. Wages join the months here because the true-zero rule
+# asks whether the *whole cell* is zero, not just its employment.
+_VALUE_COLUMNS = (*_MONTH_COLUMNS, "total_qtrly_wages")
+
+# What makes a source row that row, and so what `source_row_hash` is taken over. All seven
+# dimensions are load-bearing: on a single quarter of the slice fixture, dropping ownership,
+# aggregation level and size class collapses 18 pairs of distinct observations onto shared
+# hashes -- including area 26165 in 2017-03, where a suppressed Local Government cell and a
+# Private cell reporting 93 would have shared one identity. `month_column` extends the quarterly
+# key across the monthly expansion.
+_ROW_IDENTITY_COLUMNS = (
+    "area_fips",
+    "own_code",
+    "industry_code",
+    "agglvl_code",
+    "size_code",
+    "year",
+    "qtr",
+    "month_column",
+)
+
+
+def is_true_zero_expr() -> pl.Expr:
+    """True where a published zero is a real zero rather than a withheld value.
+
+    The predicate is the establishment count, not the disclosure character. BLS publishes no
+    titles file for `disclosure_code`, so nothing fetched defines what any code means; what Stage
+    0 measured is that rows carrying zero establishments carry zero everything, while suppressed
+    rows keep a positive establishment count. A cell with no establishments has no employment,
+    which is the source-specific rule INV-003 requires before a zero may be read as substantive.
+    """
+    zero_value_columns = pl.all_horizontal(
+        [pl.col(c).cast(pl.Int64, strict=False).fill_null(-1) == 0 for c in _VALUE_COLUMNS]
+    )
+    return (pl.col("qtrly_estabs").cast(pl.Int64, strict=False) == 0) & zero_value_columns
+
+
+def _check_disclosure_codes(frame: pl.DataFrame) -> None:
+    """Halt on any disclosure code outside the measured allowlist (§18.3)."""
+    seen = set(frame["disclosure_code"].fill_null("").unique().to_list())
+    unknown = sorted(seen - QCEW_DISCLOSURE_CODES)
+    if unknown:
+        raise UnknownDisclosureCodeError(
+            f"disclosure codes {unknown} are outside the measured allowlist "
+            f"{sorted(QCEW_DISCLOSURE_CODES)}"
+        )
+
+
+def _check_dash_rows_carry_no_establishments(frame: pl.DataFrame) -> None:
+    """Halt if a '-' row carries establishments, which would break the true-zero premise."""
+    offending = frame.filter(
+        (pl.col("disclosure_code") == "-")
+        & (pl.col("qtrly_estabs").cast(pl.Int64, strict=False) > 0)
+    )
+    if offending.height:
+        raise ValueError(
+            f"{offending.height} row(s) carry disclosure_code '-' with qtrly_estabs > 0; the "
+            "true-zero rule rests on those two never co-occurring, so this run halts rather than "
+            "guessing which reading is right"
+        )
+
+
+def parse_qcew_monthly(
+    frame: pl.DataFrame,
+    *,
+    snapshot_id: str,
+    release_vintage: str,
+    release_status: str,
+    naics_vintage: str,
+) -> pl.DataFrame:
+    """Turn quarterly QCEW rows into normalized monthly rows (§7.3, SRC-QCEW-002/003/004).
+
+    Disclosure metadata is read first and numeric values are derived second, so a suppressed row's
+    literal zero never becomes an integer employment level.
+    """
+    _check_disclosure_codes(frame)
+    _check_dash_rows_carry_no_establishments(frame)
+
+    suppressed = pl.col("disclosure_code") == "N"
+    true_zero = is_true_zero_expr()
+
+    prepared = frame.with_columns(
+        pl.concat_str([pl.col("year"), pl.lit("Q"), pl.col("qtr")]).alias("reference_quarter"),
+        pl.col("qtrly_estabs").cast(pl.Int64, strict=False).alias("qtrly_establishments"),
+        pl.col("total_qtrly_wages").alias("wages_raw"),
+        pl.when(suppressed)
+        .then(None)
+        .otherwise(pl.col("total_qtrly_wages").cast(pl.Int64, strict=False))
+        .alias("wages_value"),
+        true_zero.alias("is_true_zero"),
+        pl.when(suppressed)
+        .then(pl.lit("suppressed"))
+        .when(true_zero)
+        .then(pl.lit("true_zero"))
+        .otherwise(pl.lit("observed"))
+        .alias("observation_status"),
+    )
+
+    monthly = prepared.unpivot(
+        index=[c for c in prepared.columns if c not in _MONTH_COLUMNS],
+        on=list(_MONTH_COLUMNS),
+        variable_name="month_column",
+        value_name="employment_raw",
+    ).with_columns(
+        pl.col("month_column").str.extract(r"^month(\d)_emplvl$", 1).cast(pl.Int64).alias("mi")
+    )
+
+    return (
+        monthly.with_columns(
+            pl.format(
+                "{}-{}",
+                pl.col("year"),
+                ((pl.col("qtr").cast(pl.Int64) - 1) * 3 + pl.col("mi"))
+                .cast(pl.String)
+                .str.pad_start(2, "0"),
+            ).alias("reference_month"),
+            pl.when(suppressed)
+            .then(None)
+            .otherwise(pl.col("employment_raw").cast(pl.Int64, strict=False))
+            .alias("employment_value"),
+            (pl.col("employment_raw") == "0").alias("is_published_numeric_zero"),
+            pl.lit(snapshot_id).alias("snapshot_id"),
+            pl.lit(release_vintage).alias("release_vintage"),
+            pl.lit(release_status).alias("release_status"),
+            pl.lit(naics_vintage).alias("naics_vintage"),
+            pl.when(pl.col("agglvl_code") == "18")
+            .then(pl.lit("national"))
+            .when(pl.col("agglvl_code") == "58")
+            .then(pl.lit("state"))
+            .otherwise(pl.lit("other"))
+            .alias("area_type"),
+            pl.when(pl.col("area_fips") == "US000")
+            .then(None)
+            .otherwise(pl.col("area_fips").str.slice(0, 2))
+            .alias("state_fips"),
+            pl.col("own_code").alias("ownership_code"),
+            pl.col("agglvl_code").alias("aggregation_level"),
+            pl.concat_str([pl.col(c) for c in _ROW_IDENTITY_COLUMNS], separator="|")
+            .map_elements(
+                lambda s: hashlib.sha256(s.encode("utf-8")).hexdigest(), return_dtype=pl.String
+            )
+            .alias("source_row_hash"),
+        )
+        .sort(["area_fips", "reference_month"])
+        .select(list(QCEW_MONTHLY_SCHEMA))
+        .cast(QCEW_MONTHLY_SCHEMA)  # type: ignore[arg-type]
+    )
