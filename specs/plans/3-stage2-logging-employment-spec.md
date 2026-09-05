@@ -174,7 +174,7 @@ spec's Rollout note, Stage 0's finding, and Stage 1's stage stamp.
   `narrow_interval_absolute_width: float`, `narrow_interval_relative_width: float`; and two new
   required attributes `Config.constraints` and `Config.disclosure`.
 
-- [ ] **Step 1: Verify you are on a base that carries Stage 1**
+- [x] **Step 1: Verify you are on a base that carries Stage 1**
 
 ```bash
 test -f src/logging_employment/contracts.py \
@@ -185,7 +185,7 @@ test -f src/logging_employment/contracts.py \
 Expected: `BASE OK`. If it prints the other line, stop: this plan consumes Stage 1's harmonized
 layer and nothing here works without it.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Append to `tests/unit/test_config.py`. First extend the module's existing `APPENDIX_A` constant by
 adding these two blocks to the end of that string — Appendix A ships both, so the constant was
@@ -243,14 +243,14 @@ def test_the_shipped_config_carries_both_new_blocks() -> None:
     assert cfg.disclosure.narrow_interval_relative_width == 0.25
 ```
 
-- [ ] **Step 3: Run the tests to verify they fail**
+- [x] **Step 3: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_config.py -v`
 Expected: FAIL with `AttributeError: 'Config' object has no attribute 'constraints'` on the new
 tests, and `ValidationError: Extra inputs are not permitted` on the pre-existing ones (the extended
 `APPENDIX_A` now carries blocks `Config` does not model).
 
-- [ ] **Step 4: Add the two dependencies**
+- [x] **Step 4: Add the two dependencies**
 
 ```bash
 uv add highspy scipy
@@ -260,7 +260,7 @@ Expected: `pyproject.toml` gains `highspy` and `scipy` under `[project] dependen
 `uv.lock` updates. Both were checked for CPython 3.14 wheels by plan 2 (highspy 1.15.1, scipy
 1.18.1); do not re-verify.
 
-- [ ] **Step 5: Add the two config models**
+- [x] **Step 5: Add the two config models**
 
 In `src/logging_employment/config.py`, after `SourcesConfig`:
 
@@ -310,7 +310,7 @@ class Config(_Strict):
     disclosure: DisclosureConfig
 ```
 
-- [ ] **Step 6: Add both blocks to `config.yaml`**
+- [x] **Step 6: Add both blocks to `config.yaml`**
 
 Extract the two Appendix A blocks rather than retyping them, then append the two governance keys:
 
@@ -326,12 +326,12 @@ head -c 0 /dev/null && sed -n '/^constraints:/,$p' config.yaml
 Expected: the tail of `config.yaml` now reads exactly the `constraints:` block from Appendix A,
 then the `disclosure:` block with its three Appendix A keys plus the two width keys.
 
-- [ ] **Step 7: Run the full unit suite**
+- [x] **Step 7: Run the full unit suite**
 
 Run: `uv run pytest tests/unit -q`
 Expected: PASS. Nothing outside `test_config.py` reads either new block yet.
 
-- [ ] **Step 8: Stamp the spec**
+- [x] **Step 8: Stamp the spec**
 
 Add this line to the `### Stage stamps` list in `specs/logging-employment-spec.md`'s Rollout note,
 after Stage 1's block, matching the wording the roadmap's "Stage-spec stamp" section prescribes:
@@ -343,7 +343,7 @@ after Stage 1's block, matching the wording the roadmap's "Stage-spec stamp" sec
 It lands here rather than at plan-writing time because Stage 1's stamps live on
 `stage1-foundation-ingestion`, and adding Stage 2's before that merge would conflict.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add pyproject.toml uv.lock config.yaml src/logging_employment/config.py tests/unit/test_config.py specs/logging-employment-spec.md
@@ -376,7 +376,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
   `IncompatibleMarginError`, `InfeasibleComponentError`, `HardConstraintClassError`,
   `SolverError`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/unit/test_contracts.py`:
 
@@ -479,12 +479,12 @@ def test_the_new_schemas_have_distinct_fingerprints() -> None:
     assert len(prints) == 4
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_contracts.py -v`
 Expected: FAIL with `ImportError: cannot import name 'TARGET_CELL_SCHEMA'`.
 
-- [ ] **Step 3: Add the schemas, enums, and `HarmonizedData`**
+- [x] **Step 3: Add the schemas, enums, and `HarmonizedData`**
 
 Append to `src/logging_employment/contracts.py` (and add `from dataclasses import dataclass` and
 `from pathlib import Path` to its imports):
@@ -641,12 +641,12 @@ class SolverError(LoggingEmploymentError):
     """The solver returned a status that is neither an optimum nor a recognised refusal."""
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_contracts.py -v`
 Expected: PASS, all tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/contracts.py src/logging_employment/errors.py tests/unit/test_contracts.py
@@ -682,7 +682,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
   size_concept: str) -> pl.DataFrame` returning a frame matching `TARGET_CELL_SCHEMA`, sorted by
   `cell_id`.
 
-- [ ] **Step 1: Write the shared test frame factories**
+- [x] **Step 1: Write the shared test frame factories**
 
 Create `tests/unit/conftest.py`:
 
@@ -771,7 +771,7 @@ def make_size() -> Callable[..., pl.DataFrame]:
     return _build
 ```
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `tests/unit/test_constraint_cells.py`:
 
@@ -930,12 +930,12 @@ def test_the_built_frame_matches_the_shipped_schema(
     assert built["cell_id"].to_list() == sorted(built["cell_id"].to_list())
 ```
 
-- [ ] **Step 3: Run the tests to verify they fail**
+- [x] **Step 3: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_constraint_cells.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'logging_employment.constraints'`.
 
-- [ ] **Step 4: Write the implementation**
+- [x] **Step 4: Write the implementation**
 
 Create `src/logging_employment/constraints/__init__.py`:
 
@@ -1170,12 +1170,12 @@ def build_target_cells(
     return built
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_constraint_cells.py -v`
 Expected: PASS, all nine tests.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/logging_employment/constraints tests/unit/conftest.py tests/unit/test_constraint_cells.py
@@ -1206,7 +1206,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
   `run_compatibility_gates(data: HarmonizedData, *, industry_code: str) -> dict[str, object]`,
   which is the single entry point Task 7 calls before any row is created.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_constraint_compat.py`:
 
@@ -1356,12 +1356,12 @@ def test_the_entry_point_calls_stage_ones_alignment_check(make_monthly, make_siz
         compat.run_compatibility_gates(data, industry_code="113310")
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_constraint_compat.py -v`
 Expected: FAIL with `ImportError: cannot import name 'compat'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `src/logging_employment/constraints/compat.py`:
 
@@ -1520,12 +1520,12 @@ def run_compatibility_gates(data: HarmonizedData, *, industry_code: str) -> dict
     return assert_size_margin_compatible(data.qcew_monthly, size)
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_constraint_compat.py -v`
 Expected: PASS, all eight tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/constraints/compat.py tests/unit/test_constraint_compat.py
@@ -1741,6 +1741,19 @@ review checklist can.
 `evidence_kind` is what licenses a restriction, and §7.8's field list has no column for it, so the
 factory writes it into `provenance_text` behind a fixed `evidence_kind=` prefix. That keeps the
 warrant queryable in the persisted table rather than only in this module's arguments.
+
+What the vintage guard here does and does not cover, because INV-007 is easy to overclaim. This
+module sees exactly one vintage: `naics_vintage`, which is the only vintage `target_cell` carries.
+`vintage_status` reads that and nothing else, so the factory's refusal is a refusal to make a hard
+row spanning two NAICS vintages. `release_vintage` is not visible here at all. It is guarded
+separately and more narrowly by `cells._assert_one_vintage_per_cell`, which raises when a single
+area-month is published under more than one release vintage -- one cell built from two
+publications. That check says nothing about a row spanning two *different* area-months whose
+release vintages differ, and neither does this one. On the pilot window that silence is correct
+rather than a hole: `qcew_monthly` carries 32 release vintages, one per reference quarter, so
+period-to-period variation in `release_vintage` is the ordinary state of a retrospective panel and
+not an incompatibility. Neither check, alone or together, should be cited as a general INV-007
+guarantee.
 """
 
 from __future__ import annotations
@@ -1831,7 +1844,10 @@ def constraint(
     1. §7.8 -- only `public_accounting_fact` and `definitional_support` may be hard.
     2. §9.3 -- a restriction warranted by an assumed disclosure threshold may never be hard,
        whatever class the caller asks for.
-    3. INV-007 -- a hard restriction may not span incompatible release or NAICS vintages.
+    3. INV-007 -- a hard restriction may not span cells the caller has found vintage-incompatible.
+       The status comes from `vintage_status`, which reads `naics_vintage` only; see the module
+       docstring for what that leaves to `cells._assert_one_vintage_per_cell` and what neither
+       check covers.
     4. Shape -- the right-hand side must match the relation.
     """
     if constraint_class not in CONSTRAINT_CLASSES:
