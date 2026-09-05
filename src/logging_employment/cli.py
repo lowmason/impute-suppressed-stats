@@ -31,3 +31,25 @@ def validate_config(
         f"OK: {cfg.project.industry_code_used} / {cfg.project.ownership} / "
         f"{cfg.project.geography_universe} / {cfg.project.start_month}..{cfg.project.end_month}"
     )
+
+
+registry_app = typer.Typer(help="Source registry commands.")
+app.add_typer(registry_app, name="registry")
+
+
+@registry_app.command("verify")
+def registry_verify(
+    config: Path = typer.Option(..., "--config", exists=True, dir_okay=False),
+) -> None:
+    """Check the seed registry against §7.1 and report every problem found."""
+    from .registry.loader import load_registry
+    from .registry.validation import verify
+
+    load_config(config)
+    seed = Path(__file__).parent / "registry" / "sources.yaml"
+    problems = verify(load_registry(seed))
+    for problem in problems:
+        typer.echo(f"PROBLEM: {problem}")
+    if problems:
+        raise typer.Exit(code=1)
+    typer.echo("OK: registry verified")

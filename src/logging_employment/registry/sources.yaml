@@ -1,0 +1,71 @@
+# The §7.1 source registry, seeded for the three sources Stage 1 ingests.
+#
+# Provenance. Every field below is either MEASURED -- rendered from Stage 0's shipped summaries
+# under `data/raw/audit/<source>/summary.json` and reproducible by re-reading them -- or marked
+# `[documented]`, meaning it states an agency rule this repo has not measured and a re-run against
+# revised data would not change. Nothing here was typed from memory. The two landing_url values
+# were probed live on 2026-09-05 (both 200); every other measured string names the summary key it
+# came from, so a Stage-0 re-run can be diffed against this file mechanically.
+#
+# `disclosure_regime` carries a `_v<N>` suffix because §7.1 requires the regime to be versioned
+# rather than free-floating prose; `registry verify` checks the suffix, and Task 12's registry
+# keys on the string.
+
+sources:
+  - source_id: "qcew"
+    agency: "BLS"
+    dataset: "Quarterly Census of Employment and Wages, quarterly industry data"
+    landing_url: "https://www.bls.gov/cew/"
+    endpoint_pattern: "https://data.bls.gov/cew/data/api/{year}/{qtr}/industry/{industry}.csv"
+    access_status: "verified"
+    frequency: "quarterly"
+    reference_period: "calendar quarter; employment arrives as three monthly columns, so Stage 0's 2017-2024 coverage expands to 96 months (qcew_routes.coverage_span, qcew_panel)"
+    geography: "aggregation levels carrying 113310, measured: 18 National, NAICS 6-digit -- by ownership sector; 48 MSA, NAICS 6-digit -- by ownership sector; 58 State, NAICS 6-digit -- by ownership sector; 78 County, NAICS 6-digit -- by ownership sector (qcew_codes.codes_present.agglvl_code)"
+    industry_detail: "NAICS 6-digit; 113310 carries at least one row in 32 of the 32 year-quarters spanning D1 (qcew_codes.alignment_srcqcew007.notes). The slice route's earliest and latest years served are a per-run measurement, not a property of the route (qcew_routes.findings.earliest_year_served / latest_year_served) -- Task 7 re-measures the boundary and nothing may hard-code it."
+    ownership: "ownership codes carrying 113310, measured: 3 Local Government; 5 Private ('3' 180 rows, '5' 58932 rows) (qcew_codes.codes_present.own_code)"
+    statistical_unit: "establishment (reporting unit) [documented]"
+    employment_concept: "jobs covered by state UI and UCFE programs, counted for the pay period including the 12th of the month [documented]"
+    size_dimension: "the quarterly file carries size code 0 All establishment sizes only (59112 rows) (qcew_codes.codes_present.size_code), so it crosses no size class; the by-size product is the separate qcew_size row"
+    disclosure_regime: "qcew_disclosure_code_v1"
+    revision_policy: "a quarter is finalized with the following year's Q1 release, which is why D1's 2017-01..2024-12 window is entirely final [documented]"
+    model_role: "hard constraint source: published state and national levels the estimates must reproduce"
+    limitations: "disclosure codes observed across the whole D1 window, measured: '' 17302 rows, '-' 935 rows, 'N' 40875 rows (qcew_codes.codes_present.disclosure_code). BLS publishes no titles file for this dimension (qcew_codes.titles_available.disclosure_code is null), so the code set is observed rather than documented and a fourth code must halt the run (§18.3). An 'N'-coded cell carries no employment value."
+
+  - source_id: "qcew_size"
+    agency: "BLS"
+    dataset: "Quarterly Census of Employment and Wages, first-quarter establishment-size file"
+    landing_url: "https://www.bls.gov/cew/"
+    endpoint_pattern: "https://data.bls.gov/cew/data/files/{year}/csv/{year}_q1_by_size.zip"
+    access_status: "verified"
+    frequency: "annual: first quarter of each window year only; all 24 Q2-Q4 probes returned 404 (qcew_size.findings.quarter_probe)"
+    reference_period: "first calendar quarter of the reference year (qcew_size.coverage_span.published_start..published_end)"
+    geography: "national only: 113310 appears at one aggregation level, agglvl 28, area pattern national (qcew_size.findings.agglvl_inventory)"
+    industry_detail: "NAICS 6-digit; 113310 present at agglvl 28 in every year checked (qcew_size.findings.years_checked)"
+    ownership: "the by-size file's ownership breakout was not measured for 113310 by Stage 0; only the agglvl/size crossing was [documented-not-measured]"
+    statistical_unit: "establishment (reporting unit) [documented]"
+    employment_concept: "jobs covered by state UI and UCFE programs, counted for the pay period including the 12th of March [documented]"
+    size_dimension: "the finest simultaneous combination observed for 113310 is national geography x 113310 x size codes ['1', '2', '3', '4', '5', '6', '7']; titles measured: 1 Fewer than 5 employees per establishment; 2 5 to 9 employees per establishment; 3 10 to 19 employees per establishment; 4 20 to 49 employees per establishment; 5 50 to 99 employees per establishment; 6 100 to 249 employees per establishment; 7 250 to 499 employees per establishment (qcew_size.findings.what_the_file_does_carry / size_codes_with_titles)"
+    disclosure_regime: "qcew_size_disclosure_code_v1"
+    revision_policy: "a quarter is finalized with the following year's Q1 release [documented]"
+    model_role: "size-shape source: the only establishment-size crossing this stage ingests"
+    limitations: "simultaneous_state_industry_size is false (qcew_size.findings) -- the file crosses size with industry at national geography only, never with state, so a state x size cell must be modelled and never read off. Uncovered: Q2-Q4 of every window year: probed (24 requests) and none returned a by-size file, so the product is Q1-only for every year checked"
+
+  - source_id: "cbp"
+    agency: "Census Bureau"
+    dataset: "County Business Patterns, state by employment-size class"
+    landing_url: "https://www.census.gov/programs-surveys/cbp.html"
+    endpoint_pattern: "https://api.census.gov/data/{year}/cbp"
+    access_status: "verified"
+    frequency: "annual"
+    reference_period: "the week including March 12 of the reference year [documented]"
+    geography: "state (`for=state:*`); the API also serves combined statistical area, congressional district, county, metropolitan statistical area/micropolitan statistical area, state, us (cbp_metadata.findings.geography_levels_by_year)"
+    industry_detail: "the NAICS predicate is NAICS2017 for every year 2017-2023, measured (cbp_metadata.findings.naics_predicate_by_year) -- deriving it from the reference year's NAICS vintage would ask for a variable CBP does not serve"
+    ownership: "LFO is sent as the filter '001' but lfo_by_year is null for all 8 years, because LFO/LFO_LABEL was never selected as an output column (cbp_metadata.findings.lfo_by_year); Stage 0 deferred a dedicated LFO query to this stage"
+    statistical_unit: "establishment [documented]"
+    employment_concept: "paid employees in the March 12 pay period [documented]"
+    size_dimension: "EMPSZES. The official values crosswalk exists for 2017 only (44 codes, carries_values_crosswalk true); later years return 200 with no crosswalk, so their labels come from the response column. The 113310 state slice exposes 7 codes: 001, 210, 220, 230, 241, 242, 251 (cbp_metadata.findings.empszes_by_year). An observed enumeration omits any size class with zero logging establishments that year -- it is not the official set."
+    disclosure_regime: "cbp_noise_infusion_v1"
+    revision_policy: "Stage 0 ran no revision probe for CBP; one dataset is published per reference year and no re-release was measured [documented-not-measured]"
+    model_role: "auxiliary size-shape source, cross-checked against qcew_size"
+    limitations: "EMP_N_F (labelled 'Flag for Noise range for number of employees' in this run's fetched variable metadata) is CBP's actual per-cell noise-magnitude flag (documented in methodology.html's Noise Infusion section as low/moderate/high, G/H/J) -- and it appears in no year's response, because it was never selected as an output column. Years available: 2017-2023; the 2024 dataset probe returned 404, so the regime for 2024 is unknown and must halt the run rather than inherit its predecessor (cbp_regime.findings.unknown_years)."
+
