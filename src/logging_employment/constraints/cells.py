@@ -9,12 +9,10 @@ have distinct IDs and a shared prefix would leave that to luck.
 `size_class` in `_ID_FIELDS` is the real §9.2 key field for a size cell, but a total cell (state or
 national) has no size class in its own universe; it carries `size_class` only because §7.7's row
 schema gives every `target_cell` row that column, and fills it with the synthetic
-`TOTAL_SIZE_CLASS` ("ALL") to satisfy that schema. `release_vintage` is left out of the id for a
-different reason: vintage uniqueness is enforced out of band. `_assert_one_vintage_per_cell` halts
-the whole build (INV-007) if any area-month in `qcew_monthly` is published under more than one
-release vintage, so a mixed-vintage input never reaches `cell_id` at all -- but that guard is keyed
-on area and month only, and it never runs over `qcew_national_size`, so it is a build-time halt on
-the monthly source, not a property folded into every cell's key.
+`TOTAL_SIZE_CLASS` ("ALL") to satisfy that schema. `release_vintage` is omitted from `_ID_FIELDS`
+entirely. Separately, `_assert_one_vintage_per_cell` groups `qcew_monthly` by `area_fips` and
+`reference_month` and raises (INV-007) when a group carries more than one distinct
+`release_vintage` -- one area-month published under more than one vintage.
 
 `qcew_national_size` carries no ownership column -- §7.4's field list has none -- so the ownership
 code stamped on a size cell comes from configuration. What licenses that stamp is
@@ -62,7 +60,8 @@ def cell_id(
     naics_vintage: str,
     size_class: str,
 ) -> str:
-    """The identifier for one atomic cell: kind and key (state, month, ownership, industry, naics_vintage, size_class), pipe-separated."""
+    """The identifier for one atomic cell: kind and key (state, month, ownership, industry,
+    naics_vintage, size_class), pipe-separated."""
     return (
         f"{kind}|{state_fips}|{reference_month}|{ownership_code}|{industry_code}|"
         f"{naics_vintage}|{size_class}"
