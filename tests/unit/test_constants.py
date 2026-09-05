@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from logging_employment import constants
 
 
@@ -27,7 +29,7 @@ def test_the_allowlist_docstring_does_not_claim_a_titles_file_defines_it() -> No
     # worth pinning. Do not copy this pattern to assert that a sentence exists.
     # BLS publishes no titles file for disclosure_code (Stage 0: titles_available.disclosure_code
     # is null). A comment claiming otherwise would misdescribe the provenance.
-    source = (constants.__file__ and open(constants.__file__).read()) or ""
+    source = Path(constants.__file__).read_text()
     marker = "QCEW_DISCLOSURE_CODES"
     block = source[source.index(marker) : source.index(marker) + 800]
     assert "measured" in block
