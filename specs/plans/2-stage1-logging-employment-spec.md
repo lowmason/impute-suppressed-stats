@@ -1938,7 +1938,7 @@ today's boundary at 2014, no window year routes to bulk, so the branch is unreac
 production. An unexercised branch is exactly the defect Stage 0's own deferred list records
 against `scripts/audit/qcew_routes.py`. The test below forces it with a synthetic boundary.
 
-- [x] **Step 1: Copy the bulk fixture**
+- [x] **Step 1: Copy the bulk fixture** — **NOT DONE AS WRITTEN. See the deviation below.**
 
 ```bash
 cp data/raw/audit/qcew_routes/bulk/2017_qtrly_by_industry.zip tests/fixtures/qcew/bulk_2017.zip
@@ -1946,6 +1946,21 @@ cp data/raw/audit/qcew_routes/bulk/2017_qtrly_by_industry.zip tests/fixtures/qce
 
 Run: `shasum -a 256 tests/fixtures/qcew/bulk_2017.zip` and compare against
 `specs/findings/source-audit-extracts.csv` as in Task 7 Step 1.
+
+> **DEVIATION (2026-09-05, approved by the partner).** The command above was not run and the
+> hash check above does not apply. The audited archive is **439 MB across 2,232 members** — past
+> GitHub's 100 MB per-file push limit, and not something a later commit could un-bloat out of
+> git history. `tests/fixtures/qcew/bulk_2017.zip` is instead that archive **reduced to four of
+> its members** and re-zipped: SHA-256
+> `b7379140427b19ce33dfaeb04b17806069d1e07dff5ee462f2d12e0a9e475db2`, 571,366 bytes. It is
+> **derived, not audited** — it appears in no row of `source-audit-extracts.csv`. Each member's
+> bytes are byte-identical to the audited archive's, and a test pins the target member's digest.
+>
+> Three of the four members are near-miss decoys, not padding: with a single-member fixture,
+> `read_bulk_zip`'s member filter narrows one name to one name, and deleting the filter outright
+> left every test in this task green (verified by mutation). **Do not reduce this fixture to one
+> member.** `tests/fixtures/qcew/README.md` records the provenance, the digests, the reasoning,
+> and a deterministic regeneration command.
 
 - [x] **Step 2: Write the failing tests**
 

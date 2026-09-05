@@ -17,6 +17,7 @@ from logging_employment.ingest.base import HttpFetcher
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "qcew" / "slice_2017q1.csv"
 BULK = Path(__file__).resolve().parents[1] / "fixtures" / "qcew" / "bulk_2017.zip"
+TARGET_MEMBER = "2017.q1-q4.by_industry/2017.q1-q4 113310 NAICS 113310 Logging.csv"
 
 
 def _fetcher(handler) -> HttpFetcher:
@@ -84,15 +85,17 @@ def test_route_selection_uses_the_measured_boundary() -> None:
 def test_the_bulk_fixture_carries_the_audited_member_bytes() -> None:
     """`bulk_2017.zip` is reduced, so pin the member the reduction was supposed to preserve.
 
-    The fixture is not the archive Stage 0 fetched -- that one is 439 MB and untrackable -- but
-    the member inside it must still be byte-identical to the audited archive's. This asserts
-    that, rather than asserting that `tests/fixtures/qcew/README.md` says so.
+    The fixture is not the archive Stage 0 fetched -- that one is 439 MB across 2,232 members and
+    untrackable -- but the target member inside it must still be byte-identical to the audited
+    archive's. This asserts that, rather than asserting that `tests/fixtures/qcew/README.md`
+    says so.
     """
     with zipfile.ZipFile(io.BytesIO(BULK.read_bytes())) as archive:
         members = archive.namelist()
-        assert members == ["2017.q1-q4.by_industry/2017.q1-q4 113310 NAICS 113310 Logging.csv"]
-        digest = hashlib.sha256(archive.read(members[0])).hexdigest()
+        digest = hashlib.sha256(archive.read(TARGET_MEMBER)).hexdigest()
     assert digest == "47bfbef888054477d4fc4fcf4c2a04e70b72610ec4125eeb279c613a14c48caa"
+    # More than one member, or the filter below narrows one name to one name and proves nothing.
+    assert len(members) == 4
 
 
 def test_bulk_columns_are_renamed_to_the_slice_vocabulary() -> None:
@@ -131,11 +134,22 @@ def test_bulk_only_title_columns_are_dropped() -> None:
         assert title_column not in frame.columns
 
 
-def test_selecting_a_member_that_is_not_unique_fails_closed() -> None:
-    """Two members matching one industry code is an unrecognized archive shape (§18.3)."""
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w") as archive:
-        archive.writestr("a/2017.q1-q4 113310 NAICS 113310 Logging.csv", "x")
-        archive.writestr("b/2017.q1-q4 113310 NAICS 113310 Logging.csv", "x")
-    with pytest.raises(ValueError, match=constants.INDUSTRY_CODE):
-        qcew.read_bulk_zip(buffer.getvalue(), constants.INDUSTRY_CODE)
+def test_the_member_filter_picks_the_target_among_near_misses() -> None:
+    """The fixture carries decoys, so the filter narrows many names to one, as in production.
+
+    Against a single-member fixture this function is indistinguishable from one with no filter
+    at all -- deleting the comprehension leaves every other test here green.
+    """
+    frame = qcew.read_bulk_zip(BULK.read_bytes(), constants.INDUSTRY_CODE)
+    assert frame["industry_code"].unique().to_list() == [constants.INDUSTRY_CODE]
+
+
+def test_an_ambiguous_industry_substring_fails_closed() -> None:
+    """Matching is unanchored, so a shorter code can hit several members (§18.3: raise).
+
+    `11331` is `113310`'s parent and publishes under the same "Logging" title; the digits also
+    fall inside `111331 Apple orchards`. That is a property of the real archive, not of a
+    constructed one, so the fixture's own members demonstrate it.
+    """
+    with pytest.raises(ValueError, match="expected one member for industry 11331"):
+        qcew.read_bulk_zip(BULK.read_bytes(), "11331")
