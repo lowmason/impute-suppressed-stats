@@ -86,7 +86,12 @@ def column_specs(
 
 
 def matrix_rows(built: BuiltSystem, component_id: str) -> list[dict[str, object]]:
-    """Every hard row of this component that couples two or more cells.
+    """Every hard row of this component that `column_specs` did not fold into a column bound.
+
+    That is every row coupling two or more cells, plus any single-cell row whose coefficient is
+    not exactly 1.0 -- `_single_cell` rejects those, so they reach the matrix rather than being
+    silently divided through. The two functions partition the hard non-integrality rows
+    between them, which is the property that matters.
 
     Soft rows are excluded here for the same INV-005 reason `column_specs` states. Both filters
     have to agree: a soft row admitted by one and rejected by the other would put half a
@@ -302,11 +307,18 @@ def solve_bounds(
     reports: list[object] = []
     for component_id in sorted(set(membership["component_id"].to_list())):
         specs = column_specs(built, component_id, membership)
+        # Whether *this* component was found infeasible, which is not the same question as whether
+        # it was quarantined. Quarantine is permission to continue past an infeasibility; it is not
+        # an instruction to discard the bounds of a component that solved. Re-testing membership of
+        # `quarantined` in the record branch below conflated the two and blanked every bound in a
+        # feasible quarantined component to `infeasible` with no diagnostic to show for it.
+        infeasible = False
         try:
             lp = solve_component(built, component_id, membership, config, integer=False)
         except InfeasibleComponentError as failure:
             from . import diagnostics as diagnostics_module  # local: breaks an import cycle
 
+            infeasible = True
             report = diagnostics_module.diagnose(built, component_id, membership, config)
             reports.append(report)
             if component_id not in quarantined:
@@ -320,13 +332,27 @@ def solve_bounds(
             }
 
         milp: dict[str, tuple[float | None, float | None, str]] = {}
-        if lp and _needs_milp(lp, specs, config) and component_id not in quarantined:
-            milp = solve_component(built, component_id, membership, config, integer=True)
+        if lp and not infeasible and _needs_milp(lp, specs, config):
+            try:
+                milp = solve_component(built, component_id, membership, config, integer=True)
+            except InfeasibleComponentError as failure:
+                # An LP-feasible component with no integer point. The §9.7 diagnostic is built on
+                # the LP relaxation and would report zero slack here, so attaching it would say
+                # "nothing is wrong" about a run that just halted. Name the real cause instead.
+                if component_id not in quarantined:
+                    raise InfeasibleComponentError(
+                        f"component {component_id} is feasible as a linear program but has no "
+                        "integer-valued point, so §9.6's integrality requirement cannot be met. "
+                        "This is not a conflict between published values -- the §9.7 row "
+                        "diagnostic would report no slack -- so look at the integrality rows and "
+                        "the class supports that box these cells, not at the coupling rows"
+                    ) from failure
+                milp = {}
 
         numerical_rank, nullity = rank_by_component[component_id]
         for cell in specs:
             status_word = observation[cell]
-            if status_word == "suppressed" and component_id in quarantined:
+            if status_word == "suppressed" and infeasible:
                 bound_status, exact, integer_exact = "infeasible", False, False
                 lp_lower = lp_upper = milp_lower = milp_upper = None
                 selected_lower = selected_upper = None

@@ -122,3 +122,15 @@ def test_an_unbounded_cell_carries_no_width_and_no_flag() -> None:
     built = flags.build_flags(bounds, cells, _cfg())
     assert built["feasible_width"][0] is None
     assert built["narrow_feasible_interval_flag"].to_list() == [False]
+
+
+def test_a_bound_naming_an_unknown_cell_halts_rather_than_yielding_a_null_flag() -> None:
+    # Review finding: the join was `how="left"`, so an unmatched cell_id left observation_status
+    # null and `null & anything` is null -- both flags came out null rather than False. Neither
+    # raised nor cleared, and silently skipped by the sum() the CLI reports. §9.8 is a MUST path.
+    bounds_frame, cells = _frames(("known-cell", "suppressed", 400.0, 530.0))
+    orphaned = pl.concat(
+        [bounds_frame, bounds_frame.with_columns(pl.lit("ghost-cell").alias("cell_id"))]
+    )
+    with pytest.raises(ValueError, match="absent from the cell table"):
+        flags.build_flags(orphaned, cells, _cfg())

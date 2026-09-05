@@ -267,9 +267,14 @@ Nothing was descoped. The three items below are the ones the stage deliberately 
       `TARGET_CELL_SCHEMA` carries. Neither sees a row whose cells span two area-months published
       under different release vintages. On the D1 window this silence is correct rather than a
       hole — `qcew_monthly` carries 32 release vintages, one per reference quarter, so
-      period-to-period variation is the ordinary state of a retrospective panel, and no Stage 2
-      builder emits a row spanning more than one month. It becomes reachable the moment a builder
-      couples two periods (a Stage 6 model constraint, or any across-period margin). Closing it
+      period-to-period variation is the ordinary state of a retrospective panel. The stronger
+      statement, established at the review gate by enumerating every builder: it is unreachable
+      **without a new builder**, not merely unreached by today's data. `observed_value_rows`,
+      `nonnegativity_rows`, `integrality_rows`, `size_support_rows` and `rounding_interval_row`
+      are single-cell by construction; `size_margin_rows` is the only multi-cell builder and it
+      groups by `reference_month` and looks up its national total under that same key, so every
+      coefficient in the row shares one month by construction. It becomes reachable the moment a
+      builder couples two periods (a Stage 6 model constraint, or any across-period margin). Closing it
       means carrying `release_vintage` onto `target_cell` — a §7.7 amendment — and feeding it to
       `vintage_status` alongside `naics_vintage`.
 
@@ -284,3 +289,45 @@ Nothing was descoped. The three items below are the ones the stage deliberately 
       so the behaviour is recorded rather than assumed. Closing it means deciding whether an
       empty integer interval is an infeasibility (raising) or a distinct `bound_status`, which is
       a §7.10 question.
+
+### Review-gate items (whole-branch review, 2026-09-05)
+
+The review returned no Critical findings. All six Important findings were fixed on the branch
+before merge and pinned by tests. The items below are the Minor findings judged not worth fixing
+now; each is unreachable at Stage 2's scale or coefficients, and each names what makes it reachable.
+
+- [ ] **The §9.7 diagnostic degrades silently on a box-shaped infeasibility.**
+      `constraints/diagnostics.py` adds slack to coupling rows only, so a component made
+      infeasible by its column bounds alone (a malformed class band with `n*lower > n*upper`)
+      reports `minimum slack: 0`, `irreducible infeasible subsystem: unavailable` and `candidate
+      conflicts: none detected` -- a report that reads "nothing is wrong" as the final message of
+      a halted run. Unreachable through the shipped builders, which derive both endpoints from
+      the same published establishment count. Closing it means giving the minimum-slack model
+      slack variables on the column bounds too, and adding a diagnostics test for the box shape.
+
+- [ ] **`rank._shape_key` formats the matrix at `precision=12`.** Two equality matrices differing
+      past the twelfth decimal share a CON-005 cache key, so the second component reports the
+      first's rank. Every hard coefficient this stage emits is +/-1, so it cannot bite today. It
+      becomes reachable if a later stage introduces fractional hard coefficients (a share, a
+      deflator). Fix is `matrix.tobytes()` plus shape rather than `np.array2string`. Related:
+      `rank.numerical_rank_of` passes `rank_tolerance` to `np.linalg.matrix_rank` as an
+      *absolute* singular-value threshold, which is equally fine at +/-1 and equally brittle if
+      magnitudes grow.
+
+- [ ] **`solve_bounds` rescans the frames once per component and once per row.**
+      `constraints/bounds.py` runs a full `built.rows.filter(...)` per component and a full
+      `built.coefficients.filter(...)` per row, and `column_specs` is computed twice per component
+      (once in `solve_bounds`, again inside `solve_component`) -- roughly 28,000 full scans for
+      the 15.7s D1 run. Fine at 4,775 cells; name it before Stage 3 adds cells and soft rows.
+      Pre-grouping the coefficients into a dict keyed by `constraint_id` once would collapse it.
+
+- [ ] **`exactly_identified` and `integer_exactly_identified` never disagree.**
+      `classify_bound_status` assigns both the same value on the integer branch, so two columns of
+      `deterministic_bounds` carry one column's information. §7.10 gives field names without
+      definitions, and the agreement is *correct* when the MILP ran (`selected_*` are then the
+      integer optima) -- but if the two are meant to differ, §7.10 has to say how first.
+
+- [ ] **`cli._constraints_dir` derives §6.2's path instead of reading a config key.**
+      `Path(cfg.storage.staged_uri).parent / "constraints"` silently relocates the constraint
+      tables if `staged_uri` is ever pointed outside `data/`. A `StorageConfig.constraints_uri`
+      would make the location configured rather than inferred.

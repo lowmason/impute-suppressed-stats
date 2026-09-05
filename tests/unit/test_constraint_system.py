@@ -16,7 +16,7 @@ from logging_employment.contracts import (
     TARGET_CELL_SCHEMA,
     HarmonizedData,
 )
-from logging_employment.errors import ConceptViolationError
+from logging_employment.errors import ConceptViolationError, IncompatibleMarginError
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -169,3 +169,30 @@ def test_the_run_id_is_a_function_of_the_config_and_the_inputs_only() -> None:
 def test_the_run_directory_sits_under_the_configured_output_root() -> None:
     cfg = _cfg()
     assert runs.run_dir(cfg, "abc123abc123") == Path(cfg.storage.output_uri) / "abc123abc123"
+
+
+def test_load_system_names_the_missing_table_rather_than_raising_from_polars(tmp_path) -> None:
+    # Review finding: neither `load_system` branch had a test. The CLI test that appeared to cover
+    # the hash mismatch never reaches it -- mutating a staged value moves the run id, so the
+    # manifest is missing and the command fails earlier, at argument validation.
+    with pytest.raises(FileNotFoundError, match="target_cell.parquet"):
+        system.load_system(tmp_path)
+
+
+def test_load_system_refuses_tables_that_do_not_match_the_recorded_hash(
+    tmp_path, make_monthly, make_size
+) -> None:
+    built = system.build_constraint_system(_data(make_monthly, make_size), _cfg())
+    for name, frame in (
+        ("target_cell", built.cells),
+        ("constraint_row", built.rows),
+        ("constraint_coefficient", built.coefficients),
+    ):
+        frame.write_parquet(tmp_path / f"{name}.parquet")
+
+    reloaded = system.load_system(tmp_path, expected_hash=built.constraint_set_hash)
+    assert reloaded.constraint_set_hash == built.constraint_set_hash
+    assert reloaded.cells.equals(built.cells)
+
+    with pytest.raises(IncompatibleMarginError, match="constraint_set_hash mismatch"):
+        system.load_system(tmp_path, expected_hash="0" * 64)

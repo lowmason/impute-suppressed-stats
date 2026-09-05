@@ -7,7 +7,7 @@ from pathlib import Path
 import polars as pl
 
 from logging_employment.config import load_config
-from logging_employment.constraints import bounds, system
+from logging_employment.constraints import bounds, graph, system
 from logging_employment.contracts import DETERMINISTIC_BOUNDS_SCHEMA, HarmonizedData
 
 REPO = Path(__file__).resolve().parents[2]
@@ -200,3 +200,61 @@ def test_an_integer_interval_containing_no_integer_is_not_called_exactly_recover
     )
     assert status == "partially_identified"
     assert exact is False and integer_exact is False
+
+
+def test_quarantine_does_not_discard_the_bounds_of_a_component_that_solved(
+    make_monthly, make_size
+) -> None:
+    # Review finding: `quarantined` was consulted a second time in the record branch, so naming a
+    # *feasible* component blanked every one of its bounds to `infeasible` with no diagnostic to
+    # show for it. Quarantine is permission to continue past an infeasibility, not an instruction
+    # to discard a component that solved.
+    monthly = make_monthly(
+        {
+            "area_fips": "US000",
+            "area_type": "national",
+            "state_fips": None,
+            "aggregation_level": "18",
+            "employment_value": 1000,
+            "employment_raw": "1000",
+            "qtrly_establishments": 54,
+        }
+    )
+    size = make_size(
+        {
+            "size_class": "1",
+            "establishments": 50,
+            "employment": 100,
+            "size_lower": 0,
+            "size_upper": 4,
+        },
+        {
+            "size_class": "6",
+            "establishments": 4,
+            "employment": None,
+            "size_lower": 100,
+            "size_upper": 249,
+            "disclosure_code": "N",
+            "observation_status": "suppressed",
+        },
+    )
+    data = HarmonizedData(
+        qcew_monthly=monthly,
+        qcew_national_size=size,
+        cbp_state_size=pl.DataFrame(),
+        bridge=pl.DataFrame(),
+    )
+    cfg = load_config(REPO / "config.yaml")
+    # Assign components first: `build_constraint_system` leaves `component_id` null, so quarantining
+    # off the unassigned frame would name nothing.
+    built = graph.assign_components(system.build_constraint_system(data, cfg))
+    every_component = set(built.rows["component_id"].to_list())
+    assert every_component and None not in every_component
+
+    baseline = bounds.solve_bounds(built, cfg.constraints)
+    quarantined = bounds.solve_bounds(built, cfg.constraints, quarantined=every_component)
+    assert quarantined.bounds.equals(baseline.bounds)
+    assert quarantined.diagnostics == ()
+    unknown = quarantined.bounds.filter(pl.col("bound_status") != "observed")
+    assert unknown.height > 0
+    assert "infeasible" not in unknown["bound_status"].to_list()

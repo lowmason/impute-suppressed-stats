@@ -192,3 +192,37 @@ def test_a_null_national_vintage_is_a_conflict_rather_than_a_silent_pass(
     monthly = monthly.with_columns(pl.lit(None, dtype=pl.String).alias("naics_vintage"))
     with pytest.raises(IncompatibleMarginError, match="NAICS vintages that differ"):
         compat.assert_size_margin_compatible(monthly, size)
+
+
+def test_an_unmeasurable_observed_row_is_a_violation_rather_than_a_silent_skip(make_size) -> None:
+    # Review finding: a null in any comparand makes the band comparison null and `filter` drops a
+    # null predicate, so the row left the gate unchecked *and* was still counted in the return
+    # value -- the one number that exists to show the gate was not vacuous.
+    rows = make_size(
+        {
+            "size_class": "5",
+            "establishments": 40,
+            "employment": 2507,
+            "size_lower": 50,
+            "size_upper": 99,
+        },
+        {
+            "size_class": "4",
+            "establishments": 5,
+            "employment": 150,
+            "size_lower": None,
+            "size_upper": 49,
+        },
+    )
+    with pytest.raises(ConceptViolationError, match="size support"):
+        compat.assert_size_support_holds(rows)
+
+
+def test_a_size_row_with_no_reference_month_cannot_slip_the_march_gate(
+    make_monthly, make_size
+) -> None:
+    # `~ends_with` is null on a null month, and a null predicate is dropped by `filter`.
+    monthly, size = _real_2024(make_monthly, make_size)
+    nulled = size.with_columns(pl.lit(None, dtype=pl.String).alias("reference_month"))
+    with pytest.raises(ConceptViolationError, match="March"):
+        compat.assert_size_margin_compatible(monthly, nulled)

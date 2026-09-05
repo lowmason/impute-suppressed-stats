@@ -34,12 +34,24 @@ def build_flags(
     bounds: pl.DataFrame, cells: pl.DataFrame, config: DisclosureConfig
 ) -> pl.DataFrame:
     """One row per cell, with both Stage 2 flags and the widths that decided them."""
+    # `ne_missing`-style care, in join form. A `cell_id` present in `bounds` but absent from
+    # `cells` leaves `observation_status` null, and `null & anything` is null -- so both flags would
+    # come out null rather than False: neither raised nor cleared, and silently skipped by the
+    # `sum()` the CLI reports. §9.8 is a MUST path, so an unmatched cell is a caller error worth
+    # halting on rather than a cell that quietly goes unreviewed.
+    matched = bounds.join(
+        cells.select(["cell_id", "observation_status"]), on="cell_id", how="inner"
+    )
+    if matched.height != bounds.height:
+        raise ValueError(
+            f"{bounds.height - matched.height} bound row(s) name a cell_id absent from the cell "
+            "table; every bound must be attributable to a cell before it can be flagged (§9.8)"
+        )
     suppressed = pl.col("observation_status") == "suppressed"
     width = pl.col("selected_upper") - pl.col("selected_lower")
     midpoint = (pl.col("selected_upper") + pl.col("selected_lower")) / 2
     return (
-        bounds.join(cells.select(["cell_id", "observation_status"]), on="cell_id", how="left")
-        .with_columns(
+        matched.with_columns(
             width.alias("feasible_width"),
             pl.when(midpoint > 0).then(width / midpoint).otherwise(None).alias("relative_width"),
         )

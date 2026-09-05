@@ -41,8 +41,18 @@ def assert_size_support_holds(size_rows: pl.DataFrame) -> int:
     to check rather than passing vacuously.
     """
     observed = size_rows.filter(pl.col("observation_status") == "observed")
+    # A null in any of the three operands makes the comparison null, and `filter` drops a null
+    # predicate -- so an unchecked row would leave the gate silently and still be counted in the
+    # return value, which exists precisely to show the gate was not vacuous. An observed row that
+    # cannot be checked is itself a violation: the support is only "documented" if it was measured.
+    uncheckable = (
+        pl.col("employment").is_null()
+        | pl.col("establishments").is_null()
+        | pl.col("size_lower").is_null()
+    )
     violations = observed.filter(
-        (pl.col("employment") < pl.col("establishments") * pl.col("size_lower"))
+        uncheckable
+        | (pl.col("employment") < pl.col("establishments") * pl.col("size_lower"))
         | (
             pl.col("size_upper").is_not_null()
             & (pl.col("employment") > pl.col("establishments") * pl.col("size_upper"))
@@ -71,7 +81,12 @@ def assert_size_margin_compatible(
     ownership); every size row is March-referenced (reference period, INV-011); and the size rows'
     NAICS vintage matches the national row's for that month (industry vintage).
     """
-    off_march = size_rows.filter(~pl.col("reference_month").str.ends_with(MARCH_SUFFIX))
+    # `is_null() |` first: `~ends_with` is null on a null month and `filter` drops a null
+    # predicate, so a row with no reference month would pass an INV-011 gate whose only job
+    # is to catch exactly that kind of malformed vintage.
+    off_march = size_rows.filter(
+        pl.col("reference_month").is_null() | ~pl.col("reference_month").str.ends_with(MARCH_SUFFIX)
+    )
     if off_march.height:
         raise ConceptViolationError(
             f"{off_march.height} size row(s) are not March-referenced, e.g. "

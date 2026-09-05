@@ -392,13 +392,17 @@ def size_support_rows(cells_frame: pl.DataFrame, size_rows: pl.DataFrame) -> lis
     if len(industries) > 1:
         raise ConceptViolationError(
             f"the size frame carries {len(industries)} industries "
-            f"({sorted(industries)[:3]}...); this builder matches a size row to a cell on "
+            f"({sorted(map(str, industries))[:3]}...); this builder matches a size row to a cell on "
             "(reference_month, size_class) and never on industry, so a second industry would "
             "bound this industry's cell by its own establishment count. Filter to "
             "`project.industry_code_used` before calling"
         )
 
-    off_march = size_rows.filter(~pl.col("reference_month").str.ends_with("-03"))
+    # Null-closed, as in `compat.assert_size_support_holds`: `~ends_with` is null on a null
+    # month and a null predicate is dropped, so the row would slip an INV-011 gate.
+    off_march = size_rows.filter(
+        pl.col("reference_month").is_null() | ~pl.col("reference_month").str.ends_with("-03")
+    )
     if off_march.height:
         raise ConceptViolationError(
             f"{off_march.height} size row(s) are not March-referenced, e.g. "

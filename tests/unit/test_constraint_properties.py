@@ -222,3 +222,18 @@ def test_components_solve_independently() -> None:
     )
     assert together["b"] == alone["b"] == (70.0, 70.0, "exactly_recoverable")
     assert together["d"] == (50.0, 50.0, "exactly_recoverable")
+
+
+def test_an_lp_feasible_component_with_no_integer_point_names_integrality_not_a_row_conflict() -> (
+    None
+):
+    # Review finding: the MILP re-solve sat outside the `try`, so an integer-infeasible component
+    # raised the LP-worded message -- "no feasible point ... run diagnostics for the conflicting
+    # rows" -- and an operator sent looking for a conflict between published values would find
+    # none. `2a - P = 0` with `P` pinned at 3 is LP-feasible at `a = 1.5` and has no integer point.
+    with pytest.raises(InfeasibleComponentError) as caught:
+        _solve({"P": 3.0, "a": None}, [_margin("m", {"a": 2.0, "P": -1.0})])
+    message = str(caught.value)
+    assert "no integer-valued point" in message
+    assert "integrality rows" in message
+    assert "conflicting rows" not in message

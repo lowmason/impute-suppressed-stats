@@ -2261,8 +2261,16 @@ Other §21 rows keep their Appendix A defaults until a stage's plan or finding c
 > - **The identifying content is 14 cells.** The suppressed national size classes come back
 >   `partially_identified` at widths of 130–894 employees. No cell anywhere is
 >   `exactly_recoverable`, and `exact_reconstruction_flag` fires nowhere on real data.
-> - **`narrow_feasible_interval_flag` fires exactly once**, on 2023 class 6 (width 184, relative
->   width 0.232 against the 0.25 threshold).
+> - **`narrow_feasible_interval_flag` fired once on the 2026-09-05 run**, on 2023 class 6 (width
+>   184, relative width 0.232 against the 0.25 threshold). Read that as a measurement with a date,
+>   not an invariant: 2018 class 5 sits at **0.2589** and 2024 class 6 at **0.2796**, so a single
+>   BLS revision moves either under the threshold and the count becomes two or three.
+> - **The state panel is not rectangular.** 4,716 state cells, not 50 x 96 = 4,800: 84 state-months
+>   publish no row at all, and Stage 1 records absence as a missing row rather than an `absent`
+>   cell, so those months get no cell and no bound. Separately, "states+DC" is a universe name
+>   inherited from Stage 0, not a description of the data -- `qcew_monthly` carries 50 distinct
+>   `state_fips` and DC (`11`) publishes no row anywhere in the window. Any Stage 3 code that
+>   indexes a complete state x month grid will not find one.
 >
 > **Later stages re-validated against what Stage 2 actually shipped:**
 > - **Stage 3 (reconciliation) — a null upper bound is the normal case, not an edge case.** Any

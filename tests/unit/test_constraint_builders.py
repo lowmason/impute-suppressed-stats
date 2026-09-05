@@ -177,3 +177,13 @@ def test_an_unfiltered_size_frame_is_refused_rather_than_silently_matched(
     two_industries = pl.concat([size, size.with_columns(pl.lit("111110").alias("industry_code"))])
     with pytest.raises(ConceptViolationError, match="industry"):
         rows.size_support_rows(cell_frame, two_industries)
+
+
+def test_the_builder_march_gate_is_also_closed_against_a_null_month(
+    make_monthly, make_size
+) -> None:
+    # The same null-open shape as `compat`'s gate, in the builder that Stage 6 inherits.
+    cell_frame, size = _built(make_monthly, make_size, _TWO_CLASSES)
+    nulled = size.with_columns(pl.lit(None, dtype=pl.String).alias("reference_month"))
+    with pytest.raises(ConceptViolationError, match="March"):
+        rows.size_support_rows(cell_frame, nulled)
