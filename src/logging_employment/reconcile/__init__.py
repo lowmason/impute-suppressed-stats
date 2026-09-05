@@ -7,6 +7,15 @@ this subpackage is skippable by configuration, and no key exists to disable it.
 
 from __future__ import annotations
 
+from .allocate import Weights, allocate, check_domain
 from .anchor import Anchor, Partition, national_residual, observed_partition
 
-__all__ = ["Anchor", "Partition", "national_residual", "observed_partition"]
+__all__ = [
+    "Anchor",
+    "Partition",
+    "Weights",
+    "allocate",
+    "check_domain",
+    "national_residual",
+    "observed_partition",
+]
