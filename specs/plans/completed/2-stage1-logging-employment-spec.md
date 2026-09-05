@@ -129,12 +129,16 @@ deliberately not fixed are in `specs/deferred_items.md`.
 
 ---
 
-## Scope judgment: one plan, fourteen tasks
+## Scope judgment: one plan, sixteen tasks
 
 Stage 1 is large, but it is one vertical slice with a single exit criterion — a frozen pull
 rebuilding byte-identical harmonized Parquet offline. Splitting it would produce halves that
 cannot satisfy that criterion independently (an acquisition half with nothing to harmonize; a
 harmonize half with no immutable store to read). It stays one plan.
+
+> **Note (2026-09-05):** this section said *fourteen* tasks. Tasks 15 and 16 were added after
+> the Stage 0 gate — Task 15 exists because `SRC-QCEW-006` came back `decline` — and the heading
+> was never updated. The exit-criteria checklist below was, and covers all sixteen.
 
 ---
 
@@ -4708,34 +4712,37 @@ git commit -m "feat(fetch): acquire every source into the immutable store and wr
 Run this before declaring the plan complete. Each line is one of the roadmap's Stage 1 `Exit:`
 clauses, with the check that discharges it.
 
-- [ ] **Frozen pull rebuilds byte-identical harmonized Parquet offline.** Task 14 Step 5 (fixtures) and Task 16 Step 5 (the real window).
-- [ ] **An `N`-coded zero parses to null.** `test_a_suppression_coded_zero_parses_to_null`.
-- [ ] **A metadata-supported true zero is preserved.**
+- [x] **Frozen pull rebuilds byte-identical harmonized Parquet offline.** Task 14 Step 5 (fixtures) and Task 16 Step 5 (the real window). Verified 2026-09-05 over the real window: two consecutive `build-harmonized` runs `diff` clean, and the same four hashes come back with `socket.socket` / `create_connection` / `getaddrinfo` patched to raise (a real `httpx.get` confirmed to fail first, because the shell used here does reach `data.bls.gov`).
+- [x] **An `N`-coded zero parses to null.** `test_a_suppression_coded_zero_parses_to_null`.
+- [x] **A metadata-supported true zero is preserved.**
       `test_a_true_zero_is_preserved_because_the_establishment_count_supports_it`.
-- [ ] **Three monthly columns expand to three rows.** `test_three_monthly_columns_expand_to_three_rows`.
-- [ ] **An unknown CBP disclosure regime halts the run.** `test_2024_halts_the_run`.
-- [ ] **Source NAICS vintage survives ingestion.** `test_source_naics_vintage_survives_ingestion`.
-- [ ] **Enterprise-size input is rejected as an establishment-size measurement.**
+- [x] **Three monthly columns expand to three rows.** `test_three_monthly_columns_expand_to_three_rows`.
+- [x] **An unknown CBP disclosure regime halts the run.** `test_2024_halts_the_run`.
+- [x] **Source NAICS vintage survives ingestion.** `test_source_naics_vintage_survives_ingestion`.
+- [x] **Enterprise-size input is rejected as an establishment-size measurement.**
       `test_enterprise_size_is_rejected_as_an_establishment_size_measurement`.
-- [ ] **Manifest hashes are deterministic.** `test_rebuild_is_byte_identical`.
-- [ ] **CBP size codes come from fetched metadata rather than literals.**
+- [x] **Manifest hashes are deterministic.** `test_rebuild_is_byte_identical`.
+- [x] **CBP size codes come from fetched metadata rather than literals.**
       `test_2017_size_codes_come_from_the_official_values_crosswalk` and
       `test_later_years_take_their_labels_from_the_response_column`.
-- [ ] **`area_fips` round-trips as a string with leading zeros intact.**
+- [x] **`area_fips` round-trips as a string with leading zeros intact.**
       `test_area_fips_round_trips_with_leading_zeros_intact`.
-- [ ] **No credential value appears in any manifest.** Task 16 Step 5's grep, plus
+- [x] **No credential value appears in any manifest.** Verified by exact byte containment for all four `.env` key values across `data/raw`, `data/staged` and `runs`: zero files. Step 5's `grep … | head` form is not a valid check — a pipeline's exit status is `head`'s, and `head` succeeds on empty input. Plus
       `test_resolved_config_names_the_env_var_but_never_a_key_value` and
       `test_assert_no_secret_raises_on_a_leaked_value`.
-- [ ] **The universe filter keeps private states+DC and national rows only (REQ-002).**
+- [x] **The universe filter keeps private states+DC and national rows only (REQ-002).**
       `test_the_universe_filter_keeps_private_state_and_national_rows_only`.
-- [ ] **Every real row carries `suppression_type = unknown` (INV-009).**
+- [x] **Every real row carries `suppression_type = unknown` (INV-009).**
       `test_every_real_row_carries_suppression_type_unknown`.
-- [ ] **SRC-QCEW-006/007 exist as in-code tests, not just Stage 0 verdicts.**
+- [x] **SRC-QCEW-006/007 exist as in-code tests, not just Stage 0 verdicts.**
       `test_the_universe_report_counts_suppressed_state_cells_per_month` and
       `test_alignment_fails_when_ownership_differs_between_levels`.
-- [ ] **`source_manifest.parquet` is written and deterministic (REQ-028).**
+- [x] **`source_manifest.parquet` is written and deterministic (REQ-028).**
       `test_manifest_matches_the_snapshot_schema`, `test_manifest_writing_is_deterministic`.
-- [ ] **`git ls-files` shows no `.env`.** Run `git ls-files | grep -c '^\.env$'` — expect `0`.
+- [x] **`git ls-files` shows no `.env`.** Run `git ls-files | grep -c '^\.env$'` — expect `0`. Returns `0`; `.env` is gitignored.
+
+**All sixteen tasks complete, 2026-09-05.** 832 unit and integration tests pass, Stage 0's 666
+audit tests pass unchanged, and all 18 tests this checklist names by name exist and pass.
 
 ## Plan Completion Protocol
 

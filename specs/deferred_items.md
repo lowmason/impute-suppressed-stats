@@ -61,9 +61,17 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       code the window queries filter on. The response is shipped as
       `tests/fixtures/cbp/data_113310_2023_live.json` and pinned by
       `test_the_live_response_serves_the_lfo_label_the_query_asks_for`.
-- [ ] **`cbp_regime.unknown_years = [2024]`.** CBP's 2024 disclosure regime is
+- [x] **`cbp_regime.unknown_years = [2024]`.** CBP's 2024 disclosure regime is
       undetermined because the vintage is not published yet. Stage 1 fails closed on
       an unknown regime, which is the correct behaviour; revisit when 2024 CBP ships.
+      **Closed 2026-09-05 by Stage 1 Tasks 12 and 16.** `harmonize.disclosure`
+      records 2017–2023 and omits 2024, so `regime_for_year(2024)` raises
+      `UnknownDisclosureRegimeError`; `build_harmonized` additionally refuses to
+      persist the `"unknown"` label even when config permits a report to carry it.
+      Confirmed against the live API: the 2024 CBP dataset returns a non-200, the
+      fetch skipped the year, and the window pull produced 7 CBP snapshot rows
+      rather than 8 — so the fail-closed path is the one the real run took, not
+      only the one a test takes. Re-open when a 2024 vintage ships.
 
 ### Reviewer Minors triaged as defer
 
