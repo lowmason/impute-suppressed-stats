@@ -133,6 +133,13 @@ _VALUE_COLUMNS = (*_MONTH_COLUMNS, "total_qtrly_wages")
 # hashes -- including area 26165 in 2017-03, where a suppressed Local Government cell and a
 # Private cell reporting 93 would have shared one identity. `month_column` extends the quarterly
 # key across the monthly expansion.
+#
+# Deliberately absent: `release_vintage` and `snapshot_id`. This hashes the source row *as
+# published*, so QCEW re-publishing a quarter under a later vintage yields the same hash for the
+# same cell -- which is what makes a revision joinable rather than invisible. The identity of a
+# row in the harmonized table is therefore the *pair* (`source_row_hash`, `release_vintage`),
+# both of which the table carries. Anything deduplicating `qcew_monthly` must key on the pair;
+# keying on the hash alone would silently drop revisions, which is INV-007's failure mode.
 _ROW_IDENTITY_COLUMNS = (
     "area_fips",
     "own_code",
@@ -197,6 +204,10 @@ def parse_qcew_monthly(
 
     Disclosure metadata is read first and numeric values are derived second, so a suppressed row's
     literal zero never becomes an integer employment level.
+
+    `source_row_hash` is unique within one call, and stable across calls that differ only in
+    `release_vintage` -- see `_ROW_IDENTITY_COLUMNS` for why, and for what that means when frames
+    from several vintages are concatenated.
     """
     _check_disclosure_codes(frame)
     _check_dash_rows_carry_no_establishments(frame)

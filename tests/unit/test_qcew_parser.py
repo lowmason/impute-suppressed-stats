@@ -166,21 +166,36 @@ def test_every_observation_status_is_in_the_declared_vocabulary() -> None:
     assert set(_parsed()["observation_status"].unique()) <= set(OBSERVATION_STATUSES)
 
 
-def test_source_row_hash_identifies_a_row_uniquely() -> None:
-    """One hash per output row, or the column is not an identity.
+# The QCEW natural key, in the output's column vocabulary. `reference_month` carries year,
+# quarter and month position, so it stands in for all three.
+NATURAL_KEY = [
+    "area_fips",
+    "ownership_code",
+    "industry_code",
+    "aggregation_level",
+    "size_code",
+    "reference_month",
+]
 
-    The slice fixture carries several ownership sectors and aggregation levels for the same area
-    and month, so a hash omitting any of them collides on real data rather than only in principle.
+
+def test_source_row_hash_is_one_to_one_with_the_natural_key() -> None:
+    """The general property: one hash per source row, for every row in the fixture.
+
+    Asserted over the whole frame rather than at a known collision, so it holds against any
+    fixture rather than pinning one observed pair.
     """
     out = _parsed()
+    assert out.n_unique(subset=NATURAL_KEY) == out.height, "the natural key is not a key"
     assert out["source_row_hash"].n_unique() == out.height
 
 
-def test_source_row_hash_separates_ownership_sectors_in_the_same_area_and_month() -> None:
-    """The collision the fixture actually produced when the key omitted ownership.
+def test_the_collision_the_plans_narrower_key_produced() -> None:
+    """Regression pin for the specific pair that exposed the defect.
 
-    Area 26165 in 2017-03 publishes both a Local Government cell and a Private one. They are
-    different observations of different universes; conflating them is what INV-007 forbids.
+    The plan hashed `area_fips|year|qtr|month_column`. Area 26165 in 2017-03 publishes both a
+    Local Government cell and a Private one, so that key gave two universes one identity --
+    INV-007's failure mode. This is a fact about `slice_2017q1.csv`, which is tracked and cannot
+    drift; the general property is asserted above.
     """
     pair = _parsed().filter(
         (pl.col("area_fips") == "26165")
@@ -189,3 +204,30 @@ def test_source_row_hash_separates_ownership_sectors_in_the_same_area_and_month(
     )
     assert set(pair["ownership_code"]) == {"3", "5"}
     assert pair["source_row_hash"].n_unique() == pair.height
+
+
+def test_the_hash_is_stable_across_release_vintages() -> None:
+    """A revision re-publishes the same source row, so the hash must not move.
+
+    This is a decision, not an accident: vintage is deliberately excluded so that the same cell
+    at two vintages is joinable. The identity of a harmonized row is the pair
+    (`source_row_hash`, `release_vintage`), and anything deduplicating must key on both.
+    """
+    frame = qcew.read_slice_csv(FIXTURE.read_bytes())
+    first = qcew.parse_qcew_monthly(
+        frame,
+        snapshot_id="pull-a",
+        release_vintage="2017Q1",
+        release_status="preliminary",
+        naics_vintage="NAICS 2017",
+    )
+    revised = qcew.parse_qcew_monthly(
+        frame,
+        snapshot_id="pull-b",
+        release_vintage="2018Q2",
+        release_status="final",
+        naics_vintage="NAICS 2017",
+    )
+    assert first["source_row_hash"].to_list() == revised["source_row_hash"].to_list()
+    stacked = pl.concat([first, revised])
+    assert stacked.n_unique(subset=["source_row_hash", "release_vintage"]) == stacked.height
