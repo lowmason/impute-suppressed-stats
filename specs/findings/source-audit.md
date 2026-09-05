@@ -1,6 +1,6 @@
 # Stage 0 source audit -- findings
 
-**Assembled** by `scripts/audit/assemble_finding.py` from the 12 source summaries under `data/raw/audit/`. **Newest `generated_utc` among them:** 2026-09-05T00:13:39+00:00.
+**Assembled** by `scripts/audit/assemble_finding.py` from the 12 source summaries under `data/raw/audit/`. **Newest `generated_utc` among them:** 2026-09-05T00:20:03+00:00.
 **Spec:** `specs/logging-employment-spec.md` · **Roadmap:** `specs/logging-employment-spec-roadmap.md`, Stage 0 · **Plan:** `specs/plans/1-stage0-logging-employment-spec.md`
 **Window (D1):** 2017-01 → 2024-12 · **Industry:** 113310 (Logging) · **Ownership:** private · **Geography:** states + D.C.
 
@@ -3137,7 +3137,7 @@ _Extracts: 7; summary `generated_utc` 2026-09-04T23:27:10+00:00._
 }
 ```
 
-_Extracts: 5; summary `generated_utc` 2026-09-05T00:13:35+00:00._
+_Extracts: 5; summary `generated_utc` 2026-09-05T00:20:03+00:00._
 
 ### `qcew_identity`
 

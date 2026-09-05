@@ -13,8 +13,10 @@ the module's only side effects sit behind `if __name__ == "__main__"`.
 
 from __future__ import annotations
 
+import json
 import pathlib
 
+import polars as pl
 import pytest
 
 import _common
@@ -348,3 +350,32 @@ def test_period_basis_quotes_the_reference_verbatim_where_the_reference_is_reada
     assert QUOTED_REFERENCE_SENTENCE in basis
     assert "references/qcew.md" in basis
     assert "'Employment concept'" in basis
+
+
+def test_shipped_period_basis_describes_the_header_actually_on_disk():
+    """The artifact-level pin the six tests above do not give. They all call `_period_basis`
+    directly, so reverting main()'s one-line wiring back to a typed literal would leave every
+    one of them green. This reads the written summary instead, and ties its sentence to the
+    slice header on disk rather than to a fixture: reading one recorded slice CSV is enough,
+    because `load_slices()` concatenates them vertically and that is exactly the property the
+    shipped sentence claims -- one header shared by all of them."""
+    root = pathlib.Path(qcew_codes.__file__).resolve().parents[2]
+    summary = root / "data/raw/audit/qcew_codes/summary.json"
+    if not summary.exists():
+        pytest.skip(f"{summary} not present; run qcew_codes.py first")
+    basis = json.loads(summary.read_text(encoding="utf-8"))[
+        "findings"]["alignment_srcqcew007"]["period_basis"]
+
+    # The replaced typed string, and the half it wrongly ran together with the measured one.
+    assert "quarterly file, three monthly employment columns" not in basis
+    assert "12th" not in _measured_half(basis)
+
+    slices = sorted((root / "data/raw/audit/qcew_routes/slices").glob("*.csv"))
+    if not slices:
+        pytest.skip("no recorded slice CSVs; run qcew_routes.py first")
+    columns = pl.read_csv(slices[0], infer_schema_length=0).columns
+    expected = sorted(col for col in columns
+                      if qcew_codes.MONTHLY_EMPLOYMENT_COLUMN.fullmatch(col))
+    assert f"columns present: {len(expected)} ({', '.join(expected)})" in basis
+    keying = [col for col in ("year", "qtr") if col in columns]
+    assert f"of 'year' and 'qtr': {', '.join(keying)}." in basis
