@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 
 import _common
 import polars as pl
@@ -386,29 +387,43 @@ def test_period_basis_quotes_the_reference_verbatim_where_the_reference_is_reada
     assert "'Employment concept'" in basis
 
 
+def _qcew_codes_findings_from_the_shipped_document() -> dict:
+    """The tracked document, not data/raw/audit/qcew_codes/summary.json: data/ is gitignored in
+    its entirety, so nothing under it exists in a fresh clone and a truth pin written against the
+    summary skips silently there. Readable because `assemble_finding.fence` renders each source's
+    `findings` object whole and unmodified rather than summarising it. The same helper
+    `tests/audit/test_ces_levels.py` carries, over this document's `qcew_codes` block."""
+    document = (_common.FINDINGS_DIR / "source-audit.md").read_text(encoding="utf-8")
+    (block,) = [
+        b
+        for b in re.split(r"^### `", document, flags=re.MULTILINE)[1:]
+        if b.startswith("qcew_codes`")
+    ]
+    return json.loads(block.split("**findings**:\n\n```json\n", 1)[1].split("\n```", 1)[0])
+
+
 def test_shipped_period_basis_describes_the_header_actually_on_disk():
     """The artifact-level pin the six tests above do not give. They all call `_period_basis`
     directly, so reverting main()'s one-line wiring back to a typed literal would leave every
-    one of them green. This reads the written summary instead, and ties its sentence to the
-    slice header on disk rather than to a fixture: reading one recorded slice CSV is enough,
-    because `load_slices()` concatenates them vertically and that is exactly the property the
-    shipped sentence claims -- one header shared by all of them."""
+    one of them green. This reads the shipped sentence out of the tracked document instead, and
+    ties it to a slice header: reading one slice CSV is enough, because `load_slices()`
+    concatenates them vertically and that is exactly the property the shipped sentence claims --
+    one header shared by all of them.
+
+    Both sides are tracked, so this runs in a fresh clone rather than skipping there. The header
+    comes from `tests/fixtures/qcew/slice_2017q1.csv`, which is a byte-for-byte copy of the
+    audited extract `data/raw/audit/qcew_routes/slices/2017q1.csv` -- its SHA-256 is the one
+    `specs/findings/source-audit-extracts.csv` records for that path, which is what makes reading
+    the fixture equivalent to reading the recorded slice rather than weaker than it."""
     root = pathlib.Path(qcew_codes.__file__).resolve().parents[2]
-    summary = root / "data/raw/audit/qcew_codes/summary.json"
-    if not summary.exists():
-        pytest.skip(f"{summary} not present; run qcew_codes.py first")
-    basis = json.loads(summary.read_text(encoding="utf-8"))["findings"]["alignment_srcqcew007"][
-        "period_basis"
-    ]
+    basis = _qcew_codes_findings_from_the_shipped_document()["alignment_srcqcew007"]["period_basis"]
 
     # The replaced typed string, and the half it wrongly ran together with the measured one.
     assert "quarterly file, three monthly employment columns" not in basis
     assert "12th" not in _measured_half(basis)
 
-    slices = sorted((root / "data/raw/audit/qcew_routes/slices").glob("*.csv"))
-    if not slices:
-        pytest.skip("no recorded slice CSVs; run qcew_routes.py first")
-    columns = pl.read_csv(slices[0], infer_schema_length=0).columns
+    slice_csv = root / "tests/fixtures/qcew/slice_2017q1.csv"
+    columns = pl.read_csv(slice_csv, infer_schema_length=0).columns
     expected = sorted(col for col in columns if qcew_codes.MONTHLY_EMPLOYMENT_COLUMN.fullmatch(col))
     assert f"columns present: {len(expected)} ({', '.join(expected)})" in basis
     keying = [col for col in ("year", "qtr") if col in columns]

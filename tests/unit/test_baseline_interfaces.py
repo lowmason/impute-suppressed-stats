@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from logging_employment.baselines.interfaces import Decline, compose
+from logging_employment.baselines.interfaces import FALLBACK, OWN, Decline, compose
 from logging_employment.errors import WeightDomainError
 from logging_employment.reconcile.anchor import Anchor
 
@@ -26,11 +26,17 @@ def test_full_own_coverage_needs_no_fallback() -> None:
 
 
 def test_partial_own_coverage_composes_and_records_the_basis_per_cell() -> None:
-    """Six D1 states have no observed history and two have no CBP row; every month hits one."""
-    w = compose({"01": 1.0, "02": 2.0}, {"01": 9.0, "02": 9.0, "04": 7.0}, _anchor(), allowed=True)
+    """Two gap cells, and the WHOLE mapping: labelling only the first gap must not pass."""
+    anchor = Anchor("2024-03", 100.0, ("01", "02", "04", "05"), "declared_national_total")
+    w = compose(
+        {"01": 1.0, "02": 2.0},
+        {"01": 9.0, "02": 9.0, "04": 7.0, "05": 8.0},
+        anchor,
+        allowed=True,
+    )
     assert w.values["04"] == 7.0
-    assert w.basis["01"] == "own_estimator"
-    assert w.basis["04"] == "establishment_fallback"
+    assert w.values["05"] == 8.0
+    assert w.basis == {"01": OWN, "02": OWN, "04": FALLBACK, "05": FALLBACK}
 
 
 def test_composition_refused_by_config_yields_a_decline_not_a_silent_subset() -> None:

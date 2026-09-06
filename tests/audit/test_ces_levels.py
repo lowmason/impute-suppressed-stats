@@ -20,7 +20,6 @@ the module's only side effects sit behind `if __name__ == "__main__"`.
 from __future__ import annotations
 
 import json
-import pathlib
 import re
 
 import _common
@@ -537,18 +536,26 @@ RENAMES = (
 )
 
 
-def _ces_summary() -> dict:
-    path = pathlib.Path(m.__file__).resolve().parents[2] / "data/raw/audit/ces/summary.json"
-    if not path.exists():
-        pytest.skip(f"{path} not present; run ces_levels.py first")
-    return json.loads(path.read_text(encoding="utf-8"))
+def _ces_findings_from_the_shipped_document() -> dict:
+    """The tracked document, not data/raw/audit/ces/summary.json: data/ is gitignored in its
+    entirety, so nothing under it exists in a fresh clone and a truth pin written against the
+    summary skips silently there. Readable because `assemble_finding.fence` renders each
+    source's `findings` object whole and unmodified rather than summarising it. That the fence
+    still equals the summary it was rendered from is kept true by re-running the assembler
+    after an audit, not by a gate, so this reads the tracked copy as the shipped artifact it is
+    in its own right."""
+    document = (_common.FINDINGS_DIR / "source-audit.md").read_text(encoding="utf-8")
+    (ces,) = [
+        b for b in re.split(r"^### `", document, flags=re.MULTILINE)[1:] if b.startswith("ces`")
+    ]
+    return json.loads(ces.split("**findings**:\n\n```json\n", 1)[1].split("\n```", 1)[0])
 
 
 def test_shipped_findings_name_sm_state_codes_not_states():
     """The two keys whose old names implied a set of state FIPS codes. Both map or list
     sm.state codes, a set the audit deliberately keeps at its published size rather than
     trimming to states, so the names have to say sm.state."""
-    findings = _ces_summary()["findings"]
+    findings = _ces_findings_from_the_shipped_document()
     for new, old in RENAMES:
         assert new in findings
         assert old not in findings
@@ -558,30 +565,52 @@ def test_publication_level_map_really_does_span_more_than_states_dc():
     """Why the rename was needed, pinned as data rather than as a naming preference: the map's
     own keys include codes that are not states_dc FIPS at all. If a future run ever trimmed it
     to states_dc, the name would be the wrong one in the other direction and this fails."""
-    findings = _ces_summary()["findings"]
+    findings = _ces_findings_from_the_shipped_document()
     coded = set(findings["publication_level_by_sm_state_code"])
     non_state = coded - set(_common.STATES_DC_FIPS)
     assert non_state, "map is states_dc-only; 'by_sm_state_code' no longer describes it"
+    # "spans MORE THAN states_dc" has two halves, and the assertion above only holds the second.
+    # Without this line a map gutted of every states_dc code still satisfies it.
+    assert set(_common.STATES_DC_FIPS) <= coded, "map no longer covers the states_dc universe"
     # The sibling finding that resolves those codes must agree on exactly which they are.
     assert {row["code"] for row in findings["non_state_codes"]} == non_state
 
 
 def test_near_miss_rows_are_keyed_by_codes_the_publication_map_left_at_none():
-    findings = _ces_summary()["findings"]
+    """Every row the near-miss list carries must be a code the publication map left at "none" --
+    that is what makes it a near miss. Of the two assertions ahead of the loop only the first is
+    a vacuity guard, turning a document on which the loop is trivially true back into a failure;
+    the second catches a value set `level_of` could not have produced, on a document where the
+    loop runs and passes on merit. The loop is also vacuous on an EMPTY near-miss list, and that
+    is deliberately not asserted against: an empty list is a legitimate producer result
+    (`near_miss_sm_state_codes([], ...) == []` is pinned above), so `assert near_miss` would be
+    today's measurement written as an invariant. A list emptied without the document being
+    regenerated around it is caught instead by
+    `test_the_shipped_note_is_recomputable_from_the_findings_it_sits_beside`, which recomposes
+    the shipped sentence from this same list and so knows which branch the producer took."""
+    findings = _ces_findings_from_the_shipped_document()
     level = findings["publication_level_by_sm_state_code"]
-    for row in findings["near_miss_sm_state_codes"]:
+    near_miss = findings["near_miss_sm_state_codes"]
+    # A map flattened to all-"none" destroys the audit's core output and makes the loop below
+    # trivially true for every row.
+    assert set(level.values()) != {"none"}, "every code is 'none'; the map no longer discriminates"
+    # And the map's values must be levels this run could actually have assigned -- recomputed
+    # from the codes this run recorded, with `level_of` called live rather than read out of the
+    # shipped `level` field, so a `level_of` regression that never reached the document is
+    # caught too. A producer invariant, not a coincidence of today's data: `level_by_state`
+    # minimises `level_of` over series filtered to the same candidate set that becomes
+    # `logging_industry_codes`, and defaults to "none". `<=` and not `==` because a run in which
+    # no jurisdiction publishes at some level must not fail. No literal anywhere -- a BLS
+    # revision that adds a finer code moves the vocabulary and this moves with it, naming the
+    # new level in the failure message.
+    assignable = {"none"} | {
+        m.level_of(row["industry_code"]) for row in findings["logging_industry_codes"]
+    }
+    assert (
+        set(level.values()) <= assignable
+    ), f"map carries levels level_of cannot produce: {set(level.values()) - assignable}"
+    for row in near_miss:
         assert level[row["state_code"]] == "none"
-
-
-def _ces_findings_from_the_shipped_document() -> dict:
-    """The tracked document, not data/raw/audit/ces/summary.json: data/ is gitignored in its
-    entirety, so a truth pin written against the summary is a silent skip in a clean clone --
-    which is exactly what the `_ces_summary` helper above does."""
-    document = (_common.FINDINGS_DIR / "source-audit.md").read_text(encoding="utf-8")
-    (ces,) = [
-        b for b in re.split(r"^### `", document, flags=re.MULTILINE)[1:] if b.startswith("ces`")
-    ]
-    return json.loads(ces.split("**findings**:\n\n```json\n", 1)[1].split("\n```", 1)[0])
 
 
 def test_the_shipped_note_is_recomputable_from_the_findings_it_sits_beside():
@@ -594,3 +623,18 @@ def test_the_shipped_note_is_recomputable_from_the_findings_it_sits_beside():
         findings["excluded_broader_codes"], findings["near_miss_sm_state_codes"]
     )
     assert recomputed in findings["notes"]
+    # `notes` is one string, so the assertion above is substring containment: any PREFIX of the
+    # shipped sentence satisfies it, and a constant implementation returns the shipped sentence
+    # whatever it is handed. So a note recomposed from an excluded list this run demonstrably did
+    # NOT have must not be in `notes` either -- which is what plain containment cannot catch.
+    # The differing list is the shipped one EXTENDED, never `[]`: broader_code_note returns a
+    # wholly different sentence when `excluded` is empty (its first branch), so `[]` compares the
+    # wrong branch -- and on a legitimate run that excludes nothing, which forces near_miss to []
+    # as well, it compares that branch against itself and fails on good data. The added code is
+    # non-numeric, so it can never be an SAE industry code and can never already be rendered in
+    # the shipped sentence -- no assumption about which codes this particular run excluded.
+    fabricated = findings["excluded_broader_codes"] + [
+        {"industry_code": "no-such-code", "industry_name": "not an SAE industry"}
+    ]
+    fabricated_note = m.broader_code_note(fabricated, findings["near_miss_sm_state_codes"])
+    assert fabricated_note not in findings["notes"]

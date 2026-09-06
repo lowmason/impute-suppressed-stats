@@ -6,7 +6,7 @@ that MUST be evaluated before a source value is used. Nine match by construction
 N_t and the state rows are the same field of the same QCEW file: reference period; industry code
 and NAICS vintage (one §5.5 bullet, not two); ownership coverage; employment concept; statistical
 unit; size concept; release vintage and revision status; disclosure and noise regime -- both rows
-come from one BLS disclosure regime, and that the national cell survives suppression while 1,227
+come from one BLS disclosure regime, and that the national cell survives suppression while many
 state cells do not is that regime operating as designed, not a difference in it; and exact rather
 than rounded, sampled, or modeled values. The tenth, the geography universe, is exactly what
 `closure_audit` measures.
