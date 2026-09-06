@@ -742,3 +742,23 @@ def test_the_keyless_crosswalk_comment_does_not_claim_every_year_failed():
     source = Path(m.__file__).read_text(encoding="utf-8")
     assert "(this run, for every year)" not in source
     assert "Which years a run's keyed pull actually failed for is read off" in source
+
+
+def test_variable_names_reports_an_unreadable_body_rather_than_raising_keyerror():
+    """`payload["variables"]` was indexed directly, so a body that parsed but carried no
+    `variables` key raised KeyError mid-loop. None distinguishes "could not read" from a year
+    that genuinely lists no variables."""
+    assert m.variable_names({"variables": {"EMPSZES": {}, "LFO": {}}}) == ["EMPSZES", "LFO"]
+    assert m.variable_names({"variables": {}}) == []
+    assert m.variable_names({"dataset": "cbp"}) is None
+    assert m.variable_names(None) is None
+
+
+def test_geography_levels_keeps_an_unreadable_document_apart_from_one_lacking_state():
+    """The silent-wrong path: `.get("fips", [])` on a malformed body yields [], which reaches
+    `zero_pull_cause` as state_available=False and is persisted as "geography_unavailable" -- a
+    fetch failure recorded as a measured fact about CBP. None keeps the two apart."""
+    assert m.geography_levels({"fips": [{"name": "state"}, {"name": "us"}]}) == ["state", "us"]
+    assert m.geography_levels({"fips": []}) == []
+    assert m.geography_levels({"error": "nope"}) is None
+    assert m.geography_levels(None) is None

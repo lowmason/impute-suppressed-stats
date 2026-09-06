@@ -314,6 +314,40 @@ def fetch_json_or_none(
     return resp.status_code, payload
 
 
+def variable_names(payload: dict | None) -> list[str] | None:
+    """The variable names in a `variables.json` body, or `None` when there are none to read.
+
+    `payload["variables"]` was indexed directly, so a body that parsed but carried no
+    `variables` key raised `KeyError` mid-loop -- a crash on an unexpected shape, in the same
+    class as the unguarded requests around it. `None` is returned instead, and the caller
+    records the year as unreadable rather than as a year with zero variables: those are
+    different facts, and only one of them is about CBP.
+    """
+    if payload is None:
+        return None
+    variables = payload.get("variables")
+    if not isinstance(variables, dict):
+        return None
+    return list(variables.keys())
+
+
+def geography_levels(payload: dict | None) -> list[str] | None:
+    """The geography level names in a `geography.json` body, or `None` when it is unreadable.
+
+    The distinction matters more here than anywhere else in this module. `.get("fips", [])` on a
+    malformed body yields `[]`, which reaches `zero_pull_cause` as `state_available=False` and is
+    persisted as `"geography_unavailable"` -- a fetch failure recorded as a measured fact about
+    what CBP publishes. `None` keeps "we could not read the document" separate from "the document
+    says there is no state level".
+    """
+    if payload is None:
+        return None
+    fips = payload.get("fips")
+    if not isinstance(fips, list):
+        return None
+    return sorted({g["name"] for g in fips if isinstance(g, dict) and "name" in g})
+
+
 def probe_empszes_metadata_crosswalk(
     client: httpx.Client, year: int, empszes_doc: dict, empszes_status: int, extracts: list
 ) -> tuple[list[dict], dict[str, str] | None]:
@@ -433,23 +467,37 @@ def main() -> None:
             continue
         years.append(year)
 
-        meta = c.request(client, f"{BASE.format(year=year)}.json")
-        extracts.append(
-            c.record_extract(
-                SOURCE, f"{BASE.format(year=year)}.json", f"{year}/dataset.json", meta.content
-            )
+        # Both routes go through `fetch_json_or_none` so a 404 or a 200-with-error-body becomes a
+        # recorded gap instead of a crash after this run's earlier extracts are already on disk.
+        # THE FETCH ORDER IS PRESERVED DELIBERATELY: it fixes the order of each year's entries in
+        # summary.json's `extracts` array, from which source-audit-extracts.csv is derived, so
+        # reordering would emit a diff that looks like a data change and is not.
+        _, meta_payload = fetch_json_or_none(
+            client,
+            SOURCE,
+            f"{BASE.format(year=year)}.json",
+            f"{year}/dataset.json",
+            extracts,
         )
+        if meta_payload is None:
+            notes.append(f"{year}: dataset document unavailable or unreadable")
 
-        vresp = c.request(client, f"{BASE.format(year=year)}/variables.json")
-        extracts.append(
-            c.record_extract(
-                SOURCE,
-                f"{BASE.format(year=year)}/variables.json",
-                f"{year}/variables.json",
-                vresp.content,
-            )
+        _, vpayload = fetch_json_or_none(
+            client,
+            SOURCE,
+            f"{BASE.format(year=year)}/variables.json",
+            f"{year}/variables.json",
+            extracts,
         )
-        names = list(vresp.json()["variables"].keys())
+        names = variable_names(vpayload)
+        if names is None:
+            # Not "this year has no variables" -- that is a fact about CBP, and this is not.
+            working[str(year)] = {"status": "variables_document_unavailable"}
+            rows[str(year)] = None
+            flags[str(year)] = None
+            empszes[str(year)] = None
+            notes.append(f"{year}: variables document unavailable or unreadable; year skipped")
+            continue
         matches = naics_predicate_matches(names)
         predicates[str(year)] = matches[0] if len(matches) == 1 else matches
 
@@ -520,16 +568,26 @@ def main() -> None:
         else:
             notes.append(f"{year}: LFO is not a variable for this vintage")
 
-        gresp = c.request(client, f"{BASE.format(year=year)}/geography.json")
-        extracts.append(
-            c.record_extract(
-                SOURCE,
-                f"{BASE.format(year=year)}/geography.json",
-                f"{year}/geography.json",
-                gresp.content,
-            )
+        _, gpayload = fetch_json_or_none(
+            client,
+            SOURCE,
+            f"{BASE.format(year=year)}/geography.json",
+            f"{year}/geography.json",
+            extracts,
         )
-        levels = sorted({g["name"] for g in gresp.json().get("fips", []) if "name" in g})
+        levels = geography_levels(gpayload)
+        if levels is None:
+            # A document we could not read is not a document saying there is no state level.
+            # Letting [] through here reached `zero_pull_cause` as `state_available=False` and
+            # persisted "geography_unavailable" as a measured fact about CBP.
+            working[str(year)] = {"status": "geography_document_unavailable"}
+            rows[str(year)] = None
+            flags[str(year)] = None
+            geo_levels[str(year)] = None
+            notes.append(
+                f"{year}: geography document unavailable or unreadable; keyed pull skipped"
+            )
+            continue
         geo_levels[str(year)] = levels
 
         if len(matches) != 1:
