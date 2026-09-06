@@ -42,7 +42,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       are different predicates — a configuration default versus a reachability
       measurement — so Stage 0 juxtaposes them in `specs/findings/source-audit.md`
       and deliberately does not reconcile them. **Stage 7's call.**
-- [ ] **Stage 3 needs a substitute allocation anchor.** `SRC-QCEW-006` came back
+- [x] **Stage 3 needs a substitute allocation anchor.** `SRC-QCEW-006` came back
       `decline` for UNVERIFIABILITY, not geography: every one of the 96 testable
       months carries at least one suppressed states+DC cell, so the employment
       identity is untestable on a complete published state sum. Stage 3 must name
@@ -53,6 +53,13 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       null `selected_upper`; nonnegativity is the only public fact that touches one. The item
       is no longer an inference from Stage 0's verdict, and Stage 3's anchor must also cope
       with a null upper endpoint rather than two finite ones.
+      **→ retired 2026-09-05: Stage 3 named the anchor — `reconcile/anchor.py` stamps
+      `anchor_basis = 'declared_national_total'`, and `scaling.py` reads a null upper as
+      infinite.** Admission is `closure_audit`'s gap-0 test on `qtrly_establishments` — the
+      universe, not the employment identity, so `SRC-QCEW-006`'s `decline` still stands and
+      `anchor.py`'s docstring says so. The stamped value is pinned by
+      `tests/unit/test_anchor.py`, not by `ANCHOR_BASES`, which an open item below records as
+      constraining nothing.
 - [x] **`cbp_metadata.lfo_by_year` is null for all eight window years** — the one
       roadmap-named field that shipped no value. Human ruling at this gate: carry
       as a §1.2 row rather than re-run. The "why" is recorded in the summary's
@@ -128,9 +135,16 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       document-presence check matches a quoted key name anywhere in the document**
       rather than in the owning source's fence. Measured safe today (zero
       double-quoted `ROADMAP_FIELDS` keys appear in the hand-written notes).
-- [ ] **`specs/findings/source-audit.md`'s seam signpost has a second, weaker
+- [x] **`specs/findings/source-audit.md`'s seam signpost has a second, weaker
       exception:** the whitespace-collapsed `> **Recorded access reason:**`
       blockquote. The extract-count exception is now named; this one is not.
+      **→ done 2026-09-05 (/deferred quick fix).** Named in `assemble_finding.py`'s
+      `seam_signpost` and the document regenerated — the artifact is generated, so editing the
+      `.md` alone would have been reverted by the next run. The item's "whitespace-collapsed"
+      premise was corrected before writing: the collapse is a no-op on both recorded reasons
+      (`fia`, `tpo` carry no newline, tab or double space), so the sentence states the
+      transform without asserting it changes anything. Two tests — one pins the sentence, one
+      pins that it is true of the artifact.
 - [ ] **Two vocabularies now ship side by side in the `ces` findings.**
       `publication_level_by_sm_state_code` and `near_miss_sm_state_codes` were
       renamed at this gate, but the six `states_with_*` counts keep their
@@ -153,8 +167,13 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       `bds_detail.py` will churn that extract's hash in the manifest. Similarly,
       FIA's `evalidator.jsp` flaps 403↔500 between runs and `/fullreport` drifts a
       few bytes, so `forest_sources.py` re-runs are not byte-stable either.
-- [ ] **Repo-wide pre-existing `ruff I001` import-order noise**, untouched by this
+- [x] **Repo-wide pre-existing `ruff I001` import-order noise**, untouched by this
       stage.
+      **→ done 2026-09-05 (/deferred quick fix).** `ruff check --select I --fix` over
+      `scripts/audit` and `tests/audit`: all 22 I001 gone, 46 → 24 total violations with every
+      other category byte-identical. `--select I` was required — a bare `--fix` also deletes
+      three deliberate `# noqa: E402` markers guarding `sys.path` late imports. The remaining
+      24 (ISC004, TRY004, UP037, RUF100, RET501, UP047) are pre-existing and outside this item.
 
 ## 2-stage1-logging-employment-spec — 2026-09-05
 
@@ -167,11 +186,17 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       the boundary. Left as the plan specifies it; revisit if the live run is slow
       or if BLS rate-limits. The full sweep does buy one thing an early exit would
       not: a complete per-year record of what the route served that run.
-- [ ] **`tests/audit/` also fails `black`, not just `ruff I001`.** The existing
+- [x] **`tests/audit/` also fails `black`, not just `ruff I001`.** The existing
       repo-wide I001 item above undercounts the debt: 14 files under `tests/audit/`
       would be reformatted. `src/logging_employment/` and `tests/unit/` are clean
       under both, so a `black`/`ruff` gate can be enforced on the package today and
       on `tests/audit/` only after a dedicated sweep.
+      **→ done 2026-09-05 (/deferred quick fix), with a trap the item did not name.** All 28
+      black-dirty files (14 + 14) are formatted. Black takes its target from the project's
+      `requires-python = ">=3.14"`, and at that target it rewrites `except (A, B):` into PEP 758
+      form in `qcew_routes.py` and `forest_sources.py` — PEP 723 scripts whose own headers
+      promise `>=3.12`, where the result does not parse. No test catches it: the suite runs on
+      3.14. `[tool.black] target-version = ["py312"]` is now pinned in `pyproject.toml`.
 - [ ] **The bulk-route branch is exercised only under a synthetic boundary.**
       Stage 0 measured `bulk_years_required = []`, so with the boundary where it
       sits today no window year routes to bulk and no live run will ever take that
@@ -327,10 +352,18 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       definitions, and the agreement is *correct* when the MILP ran (`selected_*` are then the
       integer optima) -- but if the two are meant to differ, §7.10 has to say how first.
 
-- [ ] **`cli._constraints_dir` derives §6.2's path instead of reading a config key.**
+- [x] **`cli._constraints_dir` derives §6.2's path instead of reading a config key.**
       `Path(cfg.storage.staged_uri).parent / "constraints"` silently relocates the constraint
       tables if `staged_uri` is ever pointed outside `data/`. A `StorageConfig.constraints_uri`
       would make the location configured rather than inferred.
+      **→ done 2026-09-05 (/deferred quick fix).** `StorageConfig.constraints_uri` is an
+      originated key defaulting to `data/constraints`, the exact path the derivation resolved
+      to, so configs written before it stay valid under `extra="forbid"`. Appendix A needed no
+      amendment — no conformance gate reads the `storage:` block — but `config.yaml`'s
+      byte-for-byte header claim did: it now names the originated key, and the narrowed claim
+      was re-derived against the spec rather than retyped. Both integration fixtures redirect
+      `constraints_uri` into `tmp_path`; without that the suite writes the real
+      `data/constraints/` and still passes.
 
 ## 4-stage3-logging-employment-spec — 2026-09-05
 
@@ -389,10 +422,15 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       `test_section_10_3_ships_exactly_five_variants` only checks that five distinct estimator ids
       exist — nothing detects two variants computing the same number. (Whole-branch review, Minor.)
 
-- [ ] **`NoHarvestFactorError` is defined and never raised.**
+- [x] **`NoHarvestFactorError` is defined and never raised.**
       `errors.py` declares it for §10.5, but `HarvestProportional` returns a `Decline` instead,
       which is the correct behaviour. Either remove the class or document it as reserved for the
       Stage 7 path that will raise it.
+      **→ done 2026-09-05 (/deferred quick fix): documented as reserved, not removed.** The
+      roadmap settles it — Stage 7 produces "a live harvest-proportional baseline replacing
+      Stage 3's declining stub". The docstring deliberately claims no §18.3 warrant: those
+      eight bullets carry no missing-harvest-factor condition, so it names Stage 7 as owning
+      the halt-vs-decline decision instead.
 
 - [ ] **Task 18's property tests and four of the five cross-cutting audit units never ran.**
       The plan audit was stopped early after its subagents wrote into the working tree (see
