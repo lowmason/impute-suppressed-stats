@@ -609,6 +609,33 @@ def check_findings_filled(summaries: dict[str, dict]) -> list[Failure]:
     return failures
 
 
+def findings_fence(doc_text: str, source: str) -> str:
+    """The JSON fence under `source`'s `**findings**:` label in the finding document, or `""`.
+
+    Reads three literals `assemble_finding.render_document` emits: the ``### `<source>` ``
+    heading, the `**findings**:` label, and the ```json fence. THAT COUPLING IS THE COST of
+    scoping the presence check -- rename any of them in the assembler and this gate fails on
+    correct work. The alternative was worse: a document-wide substring test let one source's
+    fence, or the verbatim-inlined hand-written notes, satisfy another source's requirement.
+    """
+    head = f"### `{source}`"
+    start = doc_text.find(head)
+    if start == -1:
+        return ""
+    section = doc_text[start:]
+    nxt = section.find("\n### ", 1)
+    if nxt != -1:
+        section = section[:nxt]
+    label = section.find("**findings**:")
+    if label == -1:
+        return ""
+    opened = section.find("```json", label)
+    if opened == -1:
+        return ""
+    closed = section.find("```", opened + len("```json"))
+    return section[opened : closed if closed != -1 else len(section)]
+
+
 def check_roadmap_fields(summaries: dict[str, dict], doc_text: str) -> list[Failure]:
     """E1, over what the roadmap asked for: every field its Stage 0 `Produces:` line names is
     present and filled in the summary that owns it, and reaches the finding document."""
@@ -624,12 +651,17 @@ def check_roadmap_fields(summaries: dict[str, dict], doc_text: str) -> list[Fail
             continue
         if is_empty(findings[key]) and (source, key) not in LEGITIMATELY_EMPTY_FINDINGS:
             failures.append(Failure("E1", f"{phrase}: {source}.findings[{key!r}] is empty"))
-        if f'"{key}"' not in doc_text:
+        # Scoped to the owning source's findings fence, not the whole document. A document-wide
+        # match let another source's fence -- or the verbatim-inlined hand-written notes --
+        # satisfy this source's requirement. Zero ROADMAP_FIELDS keys appear double-quoted in the
+        # notes today, but twelve appear there backticked, so the old safety was a quoting
+        # convention rather than a structural guarantee.
+        if f'"{key}"' not in findings_fence(doc_text, source):
             failures.append(
                 Failure(
                     "E1",
                     f"{phrase}: {source}.findings[{key!r}] does not "
-                    "appear in the finding document",
+                    "appear in that source's findings block in the finding document",
                 )
             )
     return failures

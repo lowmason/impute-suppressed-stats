@@ -618,11 +618,26 @@ def test_check_roadmap_fields_reports_a_field_absent_from_the_document():
         )
         for source in {s for _, s, _ in m.ROADMAP_FIELDS}
     }
-    complete_doc = " ".join(f'"{key}"' for _, _, key in m.ROADMAP_FIELDS)
-    assert m.check_roadmap_fields(summaries, complete_doc) == []
-    failures = m.check_roadmap_fields(summaries, complete_doc.replace('"branch"', ""))
+
+    # The document must be in the assembler's shape: the presence check is scoped to the owning
+    # source's findings fence, so a bare list of quoted keys no longer satisfies it -- and that
+    # is the point of the scoping.
+    def doc_for(fields) -> str:
+        by_source: dict[str, list[str]] = {}
+        for _, source, key in fields:
+            by_source.setdefault(source, []).append(key)
+        return "## Per-source findings\n\n" + "".join(
+            f"### `{source}`\n\n**findings**:\n\n```json\n"
+            + "\n".join(f'  "{key}": "x",' for key in keys)
+            + "\n```\n\n"
+            for source, keys in by_source.items()
+        )
+
+    assert m.check_roadmap_fields(summaries, doc_for(m.ROADMAP_FIELDS)) == []
+    without_branch = [f for f in m.ROADMAP_FIELDS if f[2] != "branch"]
+    failures = m.check_roadmap_fields(summaries, doc_for(without_branch))
     assert [f.criterion for f in failures] == ["E1"]
-    assert "does not appear in the finding document" in failures[0].detail
+    assert "does not appear in that source's findings block" in failures[0].detail
 
 
 def test_check_roadmap_fields_reports_a_source_with_no_summary():
@@ -945,3 +960,36 @@ def test_an_unclosed_section_31_fence_returns_later_sections_rather_than_raising
     lines = m.classification_block(spec)
     assert any("3.2" in line for line in lines)
     assert "Prose in the next section." in lines
+
+
+def _doc_with_key_only_in(source: str, key: str) -> str:
+    """A finding document in the assembler's shape, where only `source`'s fence carries `key`."""
+
+    def block(name: str, findings: str) -> str:
+        return f"### `{name}`\n\n**findings**:\n\n```json\n{findings}\n```\n\n"
+
+    others = [n for n in ("qcew_identity", "cbp_regime") if n != source]
+    return (
+        "## Per-source findings\n\n"
+        + "".join(block(n, '{\n  "other": 1\n}') for n in others)
+        + block(source, f'{{\n  "{key}": "residual_cells"\n}}')
+    )
+
+
+def test_a_roadmap_key_in_another_sources_fence_does_not_satisfy_the_document_check(monkeypatch):
+    """The presence test matched a quoted key anywhere in the document -- including the inlined
+    hand-written notes and every other source's fence -- so one source's key could satisfy
+    another's requirement. Only the owning source's findings fence counts."""
+    monkeypatch.setattr(m, "ROADMAP_FIELDS", (("the branch", "qcew_identity", "branch"),))
+    doc = _doc_with_key_only_in(source="cbp_regime", key="branch")
+    summaries = {"qcew_identity": {"findings": {"branch": "residual_cells"}}}
+    failures = m.check_roadmap_fields(summaries, doc)
+    assert [f.criterion for f in failures] == ["E1"]
+
+
+def test_a_roadmap_key_in_its_own_sources_fence_still_passes(monkeypatch):
+    """The scoping must not break E1 on correct work."""
+    monkeypatch.setattr(m, "ROADMAP_FIELDS", (("the branch", "qcew_identity", "branch"),))
+    doc = _doc_with_key_only_in(source="qcew_identity", key="branch")
+    summaries = {"qcew_identity": {"findings": {"branch": "residual_cells"}}}
+    assert m.check_roadmap_fields(summaries, doc) == []
