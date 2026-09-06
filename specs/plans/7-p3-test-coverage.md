@@ -1,5 +1,7 @@
 # P3 Test-Coverage Batch — Implementation Plan
 
+**Status: COMPLETE (2026-09-06)** — executed via executing-plans; five new items deferred in specs/deferred_items.md
+
 > **For agentic workers:** REQUIRED SUB-SKILL: **executing-plans** — inline execution was chosen at
 > the handoff on 2026-09-05, so run the tasks yourself in plan order rather than dispatching
 > subagents. Its stop-and-ask rules and completion chain apply. Steps use checkbox (`- [ ]`) syntax
@@ -237,7 +239,7 @@ than smuggled in here. **Do not add a third test.**
 Virgin Islands — in `non_state_codes`, not in `_common.STATES_DC_FIPS`. So "States 10, 11, 15, 78"
 would be a **false sentence in a tracked deliverable**: it promotes a territory to statehood.
 
-- [ ] **Step 1: Confirm the gap by mutation, before writing anything**
+- [x] **Step 1: Confirm the gap by mutation, before writing anything**
 
 ```bash
 rm -rf /tmp/p3t1 && mkdir -p /tmp/p3t1
@@ -260,7 +262,7 @@ skip when it points at `/tmp`.) Untouched, the same file is **40 passed**.
 Name only this file, never the `tests/audit` directory — see the `assemble_finding.py` shadowing
 trap in the artifact rules above.
 
-- [ ] **Step 2: Write the two failing tests**
+- [x] **Step 2: Write the two failing tests**
 
 Add `import re` to the imports at the top of `tests/audit/test_ces_levels.py`. The file already
 imports `json`, `pathlib`, `_common`, `ces_levels as m`, `polars as pl` and `pytest`. **Do not
@@ -320,12 +322,12 @@ both tests to the same words, so a reword fails them for the same reason and the
 nothing the sentence pin did not already prove. Recompute the sentence from the findings instead,
 as above.
 
-- [ ] **Step 3: Run them against the shipped tree**
+- [x] **Step 3: Run them against the shipped tree**
 
 Run: `uv run pytest tests/audit/test_ces_levels.py -q`
 Expected: **42 passed** (40 + 2).
 
-- [ ] **Step 4: Mutation gate — confirm the new tests actually fail on the reword**
+- [x] **Step 4: Mutation gate — confirm the new tests actually fail on the reword**
 
 ```bash
 PYTHONPATH=/tmp/p3t1 uv run pytest tests/audit/test_ces_levels.py -q 2>&1 | tail -5
@@ -341,7 +343,7 @@ from `_common.__file__` (`_common.py:38-40`), so copying `_common.py` into the m
 points the pin at a findings directory that does not exist. Copy only `ces_levels.py` and let
 `_common` resolve to the real one via `tests/conftest.py`'s path append.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 rm -rf /tmp/p3t1
@@ -384,7 +386,7 @@ raises `ValueError` **before** `write_summary` can record the very outcome the e
 report. The script would die instead of documenting that no window year returned a dataset
 document.
 
-- [ ] **Step 1: Confirm the gap by mutation**
+- [x] **Step 1: Confirm the gap by mutation**
 
 ```bash
 rm -rf /tmp/p3t2 && mkdir -p /tmp/p3t2
@@ -403,7 +405,7 @@ PYTHONPATH=/tmp/p3t2 uv run pytest tests/audit/test_cbp_regime.py -q
 
 Expected: **37 passed** — every shipped test passes with all three guards removed.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Add `import json` and `import httpx` to `tests/audit/test_cbp_regime.py`. Add this module-level
 helper and test:
@@ -485,7 +487,7 @@ one. `_meta([], {})` satisfies neither. And `_common.write_summary` validates
 `coverage_span.window_start`/`window_end` against `c.WINDOW_START`/`c.WINDOW_END`
 (`_common.py:384-387`), which is why the helper copies them rather than inventing values.
 
-- [ ] **Step 3: Run it against the shipped tree**
+- [x] **Step 3: Run it against the shipped tree**
 
 Run: `uv run pytest tests/audit/test_cbp_regime.py -q`
 Expected: **38 passed**.
@@ -494,7 +496,7 @@ Also confirm nothing escaped the `tmp_path` sandbox:
 `git status --porcelain` (empty) and `ls data/raw/audit/cbp_regime` (unchanged: `docs`,
 `variables`, `summary.json`).
 
-- [ ] **Step 4: Mutation gate**
+- [x] **Step 4: Mutation gate**
 
 ```bash
 PYTHONPATH=/tmp/p3t2 uv run pytest tests/audit/test_cbp_regime.py -q 2>&1 | tail -12
@@ -504,7 +506,7 @@ Expected: **1 failed** with `ValueError: max() iterable argument is empty` raise
 `/tmp/p3t2/cbp_regime.py:617`. Confirm the traceback names `/tmp/p3t2/`, not `scripts/audit/` — if
 it names the real path the mutant was shadowed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 rm -rf /tmp/p3t2
@@ -560,7 +562,7 @@ request count — preserve that.
 4 reads the boundary from the tracked findings document at runtime, which is also why it is the
 right form on the merits.
 
-- [ ] **Step 1: Write the cross-route equality test**
+- [x] **Step 1: Write the cross-route equality test**
 
 Append to `tests/unit/test_qcew_routes.py`:
 
@@ -604,7 +606,7 @@ to 600 and the slice side from 5,430 to 150; a pre-filter count pins a number th
 Note also that the 600 filtered bulk rows span 50 areas and `US000` is one of them — `11000` (DC)
 and `38000` (ND) are absent on **both** routes. Do not assert 51 or 52.
 
-- [ ] **Step 2: Close `bulk_url`'s zero coverage**
+- [x] **Step 2: Close `bulk_url`'s zero coverage**
 
 `bulk_url` is the one function in the trio with no test at all — only its `def` line executes, at
 import. Mirror `test_slice_url_interpolates_year_quarter_and_industry` (`:29-32`):
@@ -619,12 +621,15 @@ def test_bulk_url_interpolates_the_reference_year() -> None:
     )
 ```
 
-- [ ] **Step 3: Run steps 1-2**
+- [x] **Step 3: Run steps 1-2**
 
 Run: `uv run pytest tests/unit/test_qcew_routes.py -q`
 Expected: **13 passed** (11 + 2).
 
-- [ ] **Step 4: Make the item's own condition self-monitoring**
+> Deviation: actual **14 passed**. The file held 12 tests at `78d933f`, not 11; the plan
+> miscounted the baseline. Both new tests pass.
+
+- [x] **Step 4: Make the item's own condition self-monitoring**
 
 The item ends in a condition — "if the boundary ever moves past a window year, treat that path as
 unproven". Prose conditions are not re-read. Derive it instead, from the tracked findings document,
@@ -667,7 +672,7 @@ Verified against the shipped document while this plan was written: the parse yie
 `earliest_year_served = 2014`, `bulk_years_required = []`, window `2017-01`–`2024-12`, and every
 year in 2017–2024 routes to `"slice"`.
 
-- [ ] **Step 5: Run the chain against the real audited archive, skip-if-absent**
+- [x] **Step 5: Run the chain against the real audited archive, skip-if-absent**
 
 This is the one deliverable that answers the item's own words — "the branch having run end-to-end
 against a real bulk download" — and it needs no network. The archive is on disk and its digest is
@@ -737,12 +742,15 @@ target member's bytes are identical in both (already pinned by digest at
 the decorator needs no config change. It is not excluded from the default run — it is a label, and
 this test is about a second of zip-directory reads.
 
-- [ ] **Step 6: Run the whole file, then confirm the skip path**
+- [x] **Step 6: Run the whole file, then confirm the skip path**
 
 ```bash
 uv run pytest tests/unit/test_qcew_routes.py -q
 ```
 Expected: **15 passed** (11 + 4).
+
+> Deviation: actual **16 passed**, same off-by-one baseline miscount. All four new tests pass,
+> including the real-archive one — the 460 MB archive is present on this machine.
 
 Confirm the skip-if-absent branch works without moving the archive — point the resolver at a
 missing path in a throwaway subprocess:
@@ -757,7 +765,7 @@ print('digest row parses:', len(t._recorded_digest()) == 64)
 "
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add tests/unit/test_qcew_routes.py
@@ -822,7 +830,7 @@ a design change, filed as a new deferred item in Task 5, not a test-coverage fix
    belongs at the `weights` level on a fixture where the missing cell carries an own history — which
    is what Step 2 builds.
 
-- [ ] **Step 1: Confirm the collapse is bitwise, and that nothing detects it**
+- [x] **Step 1: Confirm the collapse is bitwise, and that nothing detects it**
 
 ```bash
 uv run python -c "
@@ -840,7 +848,7 @@ repo compares two variants' numbers. `test_section_10_3_ships_exactly_five_varia
 (`tests/unit/test_baselines_historical.py:28-31`) asserts only `len(ALL_FIVE) == 5` and five
 distinct `estimator_id`s.
 
-- [ ] **Step 2: Write the discrimination test**
+- [x] **Step 2: Write the discrimination test**
 
 Append to `tests/unit/test_baselines_historical.py`:
 
@@ -959,7 +967,7 @@ Run against the shipped tree while this plan was written, the five values came b
 `{last: 34.0, smpy: 20.0, median: 11.0, ewma: 19.280980144966627, break: 30.5}` — five distinct
 numbers, all on basis `OWN`.
 
-- [ ] **Step 3: Pin the `<4` collapse as intentional current behaviour**
+- [x] **Step 3: Pin the `<4` collapse as intentional current behaviour**
 
 **Say "current", never "intentional".** Task 6 files a deferred item arguing the `<4` fallback is a
 design choice nobody chose; a test in this batch that ratifies it as intended would contradict that
@@ -991,7 +999,7 @@ def test_below_four_shares_the_break_adjusted_variant_is_the_rolling_median(
     assert LastObservedShare().weights(context, anchor).values["01"] == pytest.approx(90.0)
 ```
 
-- [ ] **Step 4: Run steps 2-3**
+- [x] **Step 4: Run steps 2-3**
 
 Run: `uv run pytest tests/unit/test_baselines_historical.py -q`
 Expected: all pass, count = the file's current total + 2.
@@ -999,7 +1007,7 @@ Expected: all pass, count = the file's current total + 2.
 If `test_the_five_variants...` fails on the `basis == OWN` assertion, the anchor's `missing_cells`
 or the suppressed row is wrong — fix the fixture, never weaken the assertion (trap 3).
 
-- [ ] **Step 5: Reword the docstring the new test contradicts**
+- [x] **Step 5: Reword the docstring the new test contradicts**
 
 `src/logging_employment/baselines/historical.py:216` currently ends:
 
@@ -1021,10 +1029,15 @@ class BreakAdjustedShare(_ShareBaseline):
     """
 ```
 
-- [ ] **Step 6: Pin the reworded sentence, and let Steps 2-3 be the pin that it is true**
+- [x] **Step 6: Pin the reworded sentence, and let Steps 2-3 be the pin that it is true**
 
 This is Plan 6's two-test shape. Steps 2 and 3 already hold the *behaviour* — the sentence's two
 clauses are exactly what they assert — so only the sentence pin is missing:
+
+> Deviation: the assertion as planned FAILED on the shipped tree. `below four it is exactly that`
+> spans a line break in the reworded docstring, so the raw substring is not present. Shipped
+> whitespace-normalized instead — `" ".join(BreakAdjustedShare.__doc__.split())` — which is also
+> the better pin: re-wrapping the docstring should not redden a test about its claim.
 
 ```python
 def test_the_break_adjusted_docstring_scopes_its_own_claim() -> None:
@@ -1036,7 +1049,7 @@ def test_the_break_adjusted_docstring_scopes_its_own_claim() -> None:
     assert "At four or more shares this is not a plain median" in doc
 ```
 
-- [ ] **Step 7: Mutation gate**
+- [x] **Step 7: Mutation gate**
 
 ```bash
 rm -rf /tmp/p3t4 && mkdir -p /tmp/p3t4
@@ -1072,7 +1085,7 @@ The identity assertion in the middle command is not optional. A stale `logging_e
 under `/tmp` from an earlier session will otherwise shadow the real package and report a
 false pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 rm -rf /tmp/p3t4
@@ -1161,7 +1174,7 @@ mutants. **Do not rewrite property 2 or 3's fixtures.**
 `18f7160` (plan 5), documented at `specs/plans/completed/5-reconciliation-correctness.md:73`, in a
 retired plan.
 
-- [ ] **Step 1: Reproduce the largest hole**
+- [x] **Step 1: Reproduce the largest hole**
 
 ```bash
 rm -rf /tmp/p3t5 && mkdir -p /tmp/p3t5
@@ -1196,7 +1209,7 @@ the **same** `InfeasibleResidualError` type, and both tests that could catch it 
 type. That `for...else` carries `# pragma: no cover - the upper_sum check above makes this
 unreachable in practice`; under the mutant it becomes the live path and nothing notices.
 
-- [ ] **Step 2: Pin the guard at BOTH seams**
+- [x] **Step 2: Pin the guard at BOTH seams**
 
 The seam is two files, not one. `tests/unit/test_scaling.py:80` is the test whose *name* claims
 this behaviour (`test_a_residual_above_the_summed_upper_bounds_fails`) and it has the identical
@@ -1245,7 +1258,7 @@ out of the two calls so both anchors get the **same** weights (the shipped versi
 inside the loop), and the `for anchor in (anchor_low, anchor_high)` loop is unrolled so each arm
 can carry its own `match=`.
 
-- [ ] **Step 3: Give property 4 mutation strength, without touching property 4**
+- [x] **Step 3: Give property 4 mutation strength, without touching property 4**
 
 Property 4 passes under an **identity** `kl_project` (`for _ in range(0)`, returning the seed
 untouched), because `after == before` satisfies `after <= before + 1e-6`.
@@ -1290,7 +1303,7 @@ legitimately have `before == after`, so it would be flaky by construction. **Do 
 trial-count threshold such as "≥ 90 trials decreased": that is a derived number typed into an
 assertion, this repo's own trap.
 
-- [ ] **Step 4: Make property 5 not strictly weaker than the function it calls**
+- [x] **Step 4: Make property 5 not strictly weaker than the function it calls**
 
 Property 5 is named "row and column reconciliation is exact" but asserts `rel=1e-4`, while
 `reconcile_matrix` itself raises `IncompatibleMarginError` unless `np.allclose(..., rtol=1e-6)`
@@ -1311,7 +1324,7 @@ Change only the two `rel=` values. Leave the `reconcile_matrix(...)` call, the m
 rescale at `:186`, and the loop bound `TRIALS // 4` exactly as they are. Verified: the tightened
 form passes on the shipped tree.
 
-- [ ] **Step 5: Cover the tolerance half of `spec:1743`**
+- [x] **Step 5: Cover the tolerance half of `spec:1743`**
 
 Property 7 covers only half its bullet — "ordering **or solver tolerances** do not create material
 instability". It varies cell order and never the tolerance. Repo-wide, **no** test varies a
@@ -1349,7 +1362,7 @@ Compare against the **looser** tolerance, never tighter than the looser solve ca
 drawn strictly inside `[Σ L, Σ U]`, so property 3's refusals never fire here; the bounds mirror
 property 2's generator (`:99-102`) for the same reason.
 
-- [ ] **Step 6: Close the integerize lower-bound gap the audit turned up**
+- [x] **Step 6: Close the integerize lower-bound gap the audit turned up**
 
 `tests/unit/test_integerize.py:39` is named `test_integer_lower_and_upper_bounds_are_respected` and
 **passes no `lower=` argument at all** — its body is
@@ -1384,7 +1397,7 @@ Why this belongs here rather than in a new deferred item: it is a pure test addi
 same shape as Step 2 — a test whose name claims a behaviour its body never exercises. Scoping this
 task to "the Task 18 file" would leave both.
 
-- [ ] **Step 7: Run all three files**
+- [x] **Step 7: Run all three files**
 
 ```bash
 uv run pytest tests/unit/test_reconcile_properties.py tests/unit/test_scaling.py tests/unit/test_integerize.py -q
@@ -1393,7 +1406,7 @@ Expected: all pass. `test_reconcile_properties.py` goes 12 → 15 (the property-
 tolerance test's two parametrizations); `test_integerize.py` goes 12 → 13; `test_scaling.py` is
 unchanged in count.
 
-- [ ] **Step 8: Mutation gate — against the same mutants that survived before**
+- [x] **Step 8: Mutation gate — against the same mutants that survived before**
 
 ```bash
 PYTHONPATH=/tmp/p3t5 uv run pytest tests/unit/test_reconcile_properties.py tests/unit/test_scaling.py -q 2>&1 | tail -6
@@ -1436,7 +1449,7 @@ has edited it against this task's instruction.
 If the `re.sub` does not match `projection.py`'s actual loop header, read the file and patch the
 iteration count by hand; the mutant only has to make `kl_project` return its seed untouched.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 rm -rf /tmp/p3t5 /tmp/p3t5b
@@ -1456,7 +1469,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ### Task 6: gates and completion
 
-- [ ] **Step 1: Run every gate**
+- [x] **Step 1: Run every gate**
 
 ```bash
 uv run pytest -q
@@ -1477,7 +1490,7 @@ the FULL check, not `--select I`; the extracts gate ends `EXIT CRITERIA: PASS`.
 If the count is short, find the missing test rather than adjusting this number — the per-task Run
 steps give each file's expected total, so the shortfall localises to one task.
 
-- [ ] **Step 2: Confirm no unintended working-tree changes**
+- [x] **Step 2: Confirm no unintended working-tree changes**
 
 Run: `git status --porcelain`. Expected: empty after the five commits.
 
@@ -1492,7 +1505,7 @@ ls -l data/raw/audit/qcew_routes/bulk/2017_qtrly_by_industry.zip
 rm -rf /tmp/p3t1 /tmp/p3t2 /tmp/p3t4 /tmp/p3t5 /tmp/p3t5b
 ```
 
-- [ ] **Step 3: Confirm the PEP 723 scripts still parse at their declared floor**
+- [x] **Step 3: Confirm the PEP 723 scripts still parse at their declared floor**
 
 This plan adds no code to `scripts/audit/`, so this should be a no-op — run it anyway, because
 Tasks 1 and 2 copy those files to `/tmp` and a stray edit to the original would be invisible
@@ -1513,7 +1526,7 @@ git diff --stat 78d933f -- scripts/
 
 Expected: `0 broken`, and the `git diff` over `scripts/` is **empty**.
 
-- [ ] **Step 4: Run the Plan Completion Protocol**
+- [x] **Step 4: Run the Plan Completion Protocol**
 
 Resolve-before-defer gate, then mark up this file with a status header, then tick the **five**
 source items in `specs/deferred_items.md` with `- [x] … → done in plan 7`, then `git mv` this file

@@ -127,10 +127,22 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       exists only there and `disclosure_code_values` reads it. A `PanelBuild` NamedTuple returns
       all three and `build()` is the single composition site; `build_panel` survives as
       `build(own).panel`, so all eight existing test call sites are untouched.
-- [ ] **`scripts/audit/qcew_routes.py`: the multi-year bulk-disagreement branch is
+- [x] **`scripts/audit/qcew_routes.py`: the multi-year bulk-disagreement branch is
       unexercised** — `bulk_years_required` is `[]`, so no real data reaches it.
       Correct by inspection; a synthetic dict through the reduction would make it
       demonstrated rather than reasoned.
+      **→ already closed by `c075e33` (2026-09-04 18:52), 93 minutes BEFORE `1defbf0` (20:25)
+      recorded this item; confirmed during plan 7's recon, which carried no task for it.**
+      `column_parity` was extracted from `main()` in that same commit specifically so the branch
+      could be tested, and it shipped with the synthetic dict this item asks for:
+      `test_identical_is_false_when_the_bulk_years_disagree_with_each_other`
+      (`tests/audit/test_qcew_routes.py:45`) passes two bulk years whose headers differ while the
+      reference year matches the slice exactly, so bulk non-uniformity is the only conjunct
+      driving `identical` False; `:61` pins the recorded content. A `sys.settrace` line trace over
+      the six tests reaches every executable line of `column_parity` (`qcew_routes.py:61-86`),
+      including `:79`, this branch's else arm. The item's *premise* stands — `bulk_years_required`
+      is still `[]` — and is pinned separately at `verify_extracts.py:125-128`, whose
+      `LEGITIMATELY_EMPTY_FINDINGS` lists `("qcew_routes", "bulk_years_required")` first.
 - [x] **`html_title` exists in three byte-identical copies**
       (`cbp_metadata.py`, `bds_detail.py`, `susb_layout.py`), justified as "audit
       scripts are standalone PEP 723 files with no import between them" — true of
@@ -201,10 +213,21 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       plan-mandated names while carrying the identical over-collection (they are
       computed over all 55 codes). `series_by_state` has the same implication and no
       ruling. **Stage 7 consumers must read `states_dc_tally`, not the six counts.**
-- [ ] **Two gate-work fixes ship without tests:** the `ces_levels` "sm.state codes"
+- [x] **Two gate-work fixes ship without tests:** the `ces_levels` "sm.state codes"
       rewording (`tests/audit/test_ces_levels.py`'s `broader_code_note` tests never
       pinned that clause) and `cbp_regime`'s `max()` empty-list guard (no pure seam).
       Both are visible in the shipped artifacts, so regression would not be silent.
+      **→ done in plan 7** (Tasks 1 and 2). The only one of the five P3 items accurate as worded.
+      Both gaps were mutation-proven before the fix: reverting `ces_levels.py:180` to
+      `"States {states} publish"` left the file at 37 passed / 3 skipped / 0 failed, and stripping
+      all three `if years_available else ""` guards left all 37 `cbp_regime` tests passing.
+      **The item's last sentence is wrong for B2.** With today's `years_available = [2017..2023]`
+      the guard's empty branch leaves no trace in any artifact, so removing it is entirely silent;
+      it goes loud only on the one run where it would have mattered, and on that run the script
+      dies instead of writing the summary that records that outcome. "no pure seam" is literally
+      true and a helper was deliberately NOT extracted — `main()` is drivable offline with
+      `AUDIT_ROOT` and `build_client` monkeypatched, which buys the coverage without touching a
+      script that renders into `specs/findings/source-audit.md:1167-1168`.
 - [ ] **`published_start` / `published_end` have no defined semantics.** They mean
       three different things across sibling summaries — measured publication bounds
       in `qcew_routes`, the window restated in `qcew_codes` (whose titles files are
@@ -254,6 +277,27 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       `read_bulk_zip` by a reduced fixture. Neither is a substitute for the branch
       having run end-to-end against a real bulk download; if the boundary ever moves
       past a window year, treat that path as unproven in production.
+      **→ done in plan 7** (Task 3), but the item is wrong in BOTH directions and the tick is
+      narrowed accordingly.
+      *Its premise is false:* there is no production bulk path to be under-exercised.
+      `read_bulk_zip` has zero callers in `src/`, and `fetch_source`'s bulk arm
+      (`fetching.py:117-118`) is structurally dead for **every** input, not merely at today's
+      boundary — `probe_slice_boundary` draws from `range(min(window_years) - 5,
+      min(window_years) + 1)` and returns its earliest served element, so
+      `boundary <= min(window_years) <= y` always and `route_for_year` returns `"slice"` for every
+      window year. Filed below as its own source-side item.
+      *Its literal obligation was satisfiable after all:* the audited archive is on disk at
+      `data/raw/audit/qcew_routes/bulk/2017_qtrly_by_industry.zip` (460,476,363 bytes) with its
+      sha256 tracked at `specs/findings/source-audit-extracts.csv:123`, so "a real bulk download"
+      needed no network. Task 3 runs against it skip-if-absent and gets what the four-member
+      fixture cannot give: against the real 2,232 members, `113310` matches exactly 1 and `11331`
+      exactly 3.
+      *What the four new tests do NOT prove:* that any production caller composes these functions,
+      because `read_bulk_zip` has no caller in `src/` and `build_harmonized` reads only `*.csv`
+      through `read_slice_csv`. The item's trailing condition is now self-monitoring rather than
+      prose — `test_every_window_year_still_routes_to_the_slice_endpoint` derives the boundary and
+      the window from the tracked findings document at runtime and reddens if a re-audit moves
+      it.
 - [ ] **`source_row_hash` is computed with `map_elements`,** i.e. one Python call
       per output row. Fine at the 5,430 rows one quarter produces; the full D1
       window is 32 quarters across three sources, and Task 14 rebuilds all of it
@@ -490,6 +534,19 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       The pre-execution audit measured 111 of 360 cells taking that branch, and
       `test_section_10_3_ships_exactly_five_variants` only checks that five distinct estimator ids
       exist — nothing detects two variants computing the same number. (Whole-branch review, Minor.)
+      **→ done in plan 7** (Task 4), with two of its own claims corrected.
+      *The headline is right and bitwise:* `historical.py:223-224` is character-identical to
+      `RollingMedianShare._reduce`, and at n=2/n=3 both return the same `float.hex()`.
+      *"111 of 360 cells taking that branch" conflates two numbers from its own source.*
+      `specs/findings/stage3-plan-audit.md:451` says **108** of 360 take the branch and **111**
+      produce an identical value. Neither reproduces against shipped code, and `data/` is
+      gitignored so the audit's snapshot is unrecoverable — no count was restated or pinned.
+      *"(Whole-branch review, Minor.)" is the wrong provenance:* the only source in the repo is
+      `stage3-plan-audit.md:449-455`, tagged **[NIT]** in the pre-execution plan audit.
+      *The branch was never unreached* — `tests/unit/test_baselines_historical.py:78` already
+      drove it at three shares while asserting only `> 0.0` and `== OWN`. The gap was assertions.
+      Scope held to test-only plus one docstring reword that the new tests would otherwise have
+      contradicted; the threshold itself is deferred below.
 
 - [x] **`NoHarvestFactorError` is defined and never raised.**
       `errors.py` declares it for §10.5, but `HarvestProportional` returns a `Decline` instead,
@@ -507,6 +564,32 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       hand and came back clean — mask-signature, call-site arity, anti-drift in test blocks, and
       §17.3 vacuity — but Task 18 was never machine-audited. Its twelve properties pass against
       the shipped implementation, which is evidence but not the same thing.
+      **→ done in plan 7** (Task 5). Both halves of the item were discharged as machine audits.
+      *Task 18's unit* ran as 24 source mutations over the twelve shipped tests, judged against
+      `spec:1714-1716` and `spec:1737-1743`, with a full-suite run for each mutant surviving the
+      unit file. Three holes, all closed: §12.3's `Σ U < R_t` refusal could be deleted with all
+      1123 tests still green (the bracket-exhaustion `for...else` raises the same exception type
+      and both candidate tests asserted only the type); property 4 passed under an identity
+      `kl_project`; property 5 asserted `rel=1e-4` while `reconcile_matrix` itself refuses above
+      `rtol=1e-6`. A fourth, found by the adversarial pass, was closed alongside:
+      `test_integer_lower_and_upper_bounds_are_respected` passes no `lower=` at all, leaving the
+      seat floor at `integerize.py:67` unpinned. The tolerance half of §17.3's last bullet, which
+      no test in the repo varied, is now covered.
+      *The cross-cutting units* — `mask-signature` was settled by the whole-branch review and
+      `65c4480`; `§17.3 vacuity` is the above. The remaining two, which had only ever been
+      hand-checked, were machine-run during plan 7's recon: **call-site arity CLEAN** (943 call
+      sites bound with `inspect.Signature.bind()` against 262 definitions across the whole
+      package — deliberately not scoped to `reconcile/`, since that narrowing is what made the
+      mask-signature hand-verdict wrong — plus return arity, all 84 dataclass construction sites,
+      the registry against the `Estimator` Protocol, the Typer surface, and the plan's own
+      fences; a positive control caught 5/5 planted mismatches). **anti-drift in test blocks
+      returned 6 findings**, none in plan 7's path and all filed below; the plan's own 46 python
+      and 23 bash fences are clean.
+      *Scope not covered, because a negative result without its scope overclaims:* the
+      correctness of the reconcile implementations beyond what these mutants probe;
+      `reconcile_draws`, the CLI and the manifest; other plans' code blocks; `tests/audit/`'s ~136
+      numeric assert sites (swept, not individually classified); and `src/` docstrings beyond a
+      targeted regex.
 
 ## 6-stage0-audit-hardening — 2026-09-05
 
@@ -520,3 +603,77 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       → `verify_extracts`) plus a one-cell change to `source-audit-extracts.csv` from
       `panel.parquet`'s restamped `retrieved_utc` — a different kind of change from the
       comparison fix it would have ridden on.
+
+## 7-p3-test-coverage — 2026-09-06
+
+Raised during plan 7's recon and its adversarial verification pass. None is test-coverage work,
+which is why none was folded into the batch. See specs/plans/completed/7-p3-test-coverage.md.
+
+- [ ] **The QCEW bulk route has no build-side consumer, and its fetch arm is unreachable.**
+      `fetch_source` can acquire and store a bulk zip (`src/logging_employment/fetching.py:117-121`),
+      but `build_harmonized` reads only `*.csv` through `read_slice_csv` (`build.py:174-183`) and
+      `read_bulk_zip` has no caller in `src/` at all. The arm is unreachable for **any** probe
+      outcome, not merely at today's measured boundary: `probe_slice_boundary` draws candidates from
+      `range(min(window_years) - 5, min(window_years) + 1)` (`fetching.py:106`) and returns the
+      earliest served one, so `boundary <= min(window_years) <= y` for every window year and
+      `route_for_year` returns `"slice"` unconditionally. Were it reachable, three defects would be
+      live, all measured: without a run manifest a bulk-routed year is silently dropped from
+      `qcew_monthly.parquet`; with one, `snapshot_paths` ignores its `pattern` argument
+      (`build.py:116-134`), returns the zip path, and `read_slice_csv` raises
+      `ComputeError: invalid utf-8 sequence`; and the quarter loop fetches the year-level zip four
+      times, producing four manifest rows against one content-addressed `raw_path` that
+      `sorted(listed)` returns four times (INV-007 stacking). This is a delete-or-fix decision on
+      dead code, not a condition to wait on. Touches `build.py` and `fetching.py`.
+
+- [ ] **`BreakAdjustedShare`'s `<4` fallback is a design choice nobody chose.** The audit's own two
+      options (`specs/findings/stage3-plan-audit.md:451`): scope the docstring — done in plan 7
+      Task 4 — or return `None` below a minimum segment length so the cell takes the declared §10.2
+      fallback. Whoever takes it needs a new fixture: `tests/fixtures/baselines/` has only three
+      cells with a history, all length 6 and all one state-08 series, so the frozen golden contains
+      no `<4` cell and cannot validate the change, while a D1 run would move roughly a third of the
+      own-weight cells from `OWN` to `FALLBACK`. Plan 7's
+      `test_below_four_shares_the_break_adjusted_variant_is_the_rolling_median` is deliberately
+      silent on intent and is the test that must change.
+
+- [ ] **`historical.py:227`'s `segment = shares[cut:] or shares` — the `or shares` arm is
+      unreachable.** For n ≥ 4, `steps` has n−1 entries so `cut ∈ [1, n-1]` and the slice always has
+      at least one element; below 4 the early return fires first. Verified exhaustively for
+      n = 4..40. Delete the arm or record why it stands. Do not budget a test for it.
+
+- [ ] **`projection.py:98`'s zero-seed floor is redundant with the clip at `:118`.** Deleting
+      `x = np.maximum(np.asarray(seed, dtype=float), floor)` leaves all 1123 tests passing — and
+      that is the correct answer, **not** a hole. `:118` is
+      `x = np.clip(x, np.maximum(lower, floor), upper)` and runs on the full vector after every
+      margin row, so §12.4's floor is re-imposed each iteration by a second line. Verified directly:
+      on all-zero, one-zero and two-zero seeds the shipped and floor-deleted versions return
+      identical output and identical violations. No test can kill this mutant and none should try.
+      Remedy: delete one of the two lines, or document why both stand. Recorded because plan 7's
+      recon proposed filing it as "a real MUST-level hole", which the adversarial pass disproved —
+      the aged-claim pattern this file exists to prevent.
+
+- [ ] **Four anti-drift breaches in `tests/integration/test_d1_acceptance.py`.** Found by plan 7's
+      machine run of the `anti-drift in test blocks` cross-cutting unit. The Stage 3 plan's Global
+      Constraint says every count in it is a measurement dated 2026-09-05 — compute at run time,
+      assert on structure, never on the literal. These assert literals against the gitignored
+      `data/staged/` tree: `suppressed.height == 1227` and `joined.height == 1227` (`:67`, `:69`);
+      a data-derived tally encoded in a test's own NAME plus the identity of the single narrow cell
+      (`:84`, `:91-93`); `>= 4716`, `== 8` and `> 4000` on consecutive lines (`:100-102`); and
+      `assert produced == EXPECTED_BOUNDS` (`:81`) against 14 hand-typed pairs. The last is the
+      arguable one and should be argued rather than assumed — `EXPECTED_BOUNDS` is described in the
+      file as derived analytically from the published margin before this engine existed, which is
+      an independent oracle and the strongest form of golden, but a golden freezes its **input** and
+      this one reads live gitignored data, so its cardinality-14 assertion still moves with a
+      revision. Two NITs alongside: `tests/unit/test_anchor.py:174` ships the plan-level NIT
+      recorded at `stage3-plan-audit.md:191-195` verbatim, and
+      `src/logging_employment/reconcile/anchor.py:9` types "1,227" into a docstring where it is
+      load-bearing on nothing. Not test-coverage work — these are over-tight assertions, and each
+      needs a ruling on what its structural form is. Related:
+      `tests/integration/test_d1_baselines.py` is plan-authored (`038c3af`) and carries one breach
+      of the same family, so the fix is not confined to inherited Stage 2 code.
+
+- [ ] **`tests/audit/test_ces_levels.py`'s three artifact tests skip in a clean clone.** `:534`,
+      `:544` and `:556` read `data/raw/audit/ces/summary.json` through `_ces_summary()`, and `data/`
+      is gitignored in its entirety, so none runs on a fresh checkout or in CI. Plan 7 Task 1
+      deliberately reads the tracked `specs/findings/source-audit.md` instead, which is why its
+      truth pin never skips; converting the three existing tests to the same source is the residual.
+      Check the sibling audit test files for the same pattern before fixing only this one.
