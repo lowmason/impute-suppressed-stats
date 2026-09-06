@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 
 import _common
 import ces_levels as m
@@ -337,6 +338,18 @@ def test_broader_code_note_derives_the_near_miss_level_not_supersector_literal()
     assert "'supersector'" not in note
 
 
+def test_broader_code_note_calls_them_sm_state_codes_not_states():
+    """The clause the docstring at ces_levels.py:148 exists to defend, held by nothing until now:
+    reverting it to "States {states}" leaves all 40 tests in this file passing. The sm.state
+    universe is wider than D1's states_dc -- 78 is the Virgin Islands -- so "States 78 publish ..."
+    promotes a territory to statehood in a tracked deliverable."""
+    excluded = [{"industry_code": "15000000", "industry_name": "Mining, Logging and Construction"}]
+    near_miss = [{"state_code": "78", "industry_code": "15000000", "series_id": "X1"}]
+    note = m.broader_code_note(excluded, near_miss)
+    assert "sm.state codes 78 publish" in note
+    assert "States 78 publish" not in note
+
+
 # --- _month_grain ------------------------------------------------------------------------------
 
 
@@ -558,3 +571,26 @@ def test_near_miss_rows_are_keyed_by_codes_the_publication_map_left_at_none():
     level = findings["publication_level_by_sm_state_code"]
     for row in findings["near_miss_sm_state_codes"]:
         assert level[row["state_code"]] == "none"
+
+
+def _ces_findings_from_the_shipped_document() -> dict:
+    """The tracked document, not data/raw/audit/ces/summary.json: data/ is gitignored in its
+    entirety, so a truth pin written against the summary is a silent skip in a clean clone --
+    which is exactly what the `_ces_summary` helper above does."""
+    document = (_common.FINDINGS_DIR / "source-audit.md").read_text(encoding="utf-8")
+    (ces,) = [
+        b for b in re.split(r"^### `", document, flags=re.MULTILINE)[1:] if b.startswith("ces`")
+    ]
+    return json.loads(ces.split("**findings**:\n\n```json\n", 1)[1].split("\n```", 1)[0])
+
+
+def test_the_shipped_note_is_recomputable_from_the_findings_it_sits_beside():
+    """The sentence pin above holds the clause's letter; this holds that the clause is TRUE of the
+    artifact -- the shipped sentence is exactly what broader_code_note returns for the
+    excluded_broader_codes and near_miss_sm_state_codes rendered beside it, not a hand-typed
+    restatement. A prose pin alone keeps passing on a sentence that has gone false."""
+    findings = _ces_findings_from_the_shipped_document()
+    recomputed = m.broader_code_note(
+        findings["excluded_broader_codes"], findings["near_miss_sm_state_codes"]
+    )
+    assert recomputed in findings["notes"]
