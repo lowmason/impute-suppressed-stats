@@ -11,8 +11,12 @@ from logging_employment.baselines.runner import (
     preferred_estimator,
     run_baselines,
 )
-from logging_employment.contracts import BASELINE_RESULT_SCHEMA, HarmonizedData
-from logging_employment.errors import UniverseClosureError
+from logging_employment.contracts import (
+    BASELINE_RESULT_SCHEMA,
+    HarmonizedData,
+    assert_declared_provenance,
+)
+from logging_employment.errors import ConceptViolationError, UniverseClosureError
 
 
 def test_the_fallback_order_is_the_specs_four_rungs_in_its_order() -> None:
@@ -166,3 +170,42 @@ def test_an_unweightable_cell_declines_the_month_rather_than_killing_the_run(
     # The other month is untouched: one bad cell must not take the window with it.
     feb = results.filter(pl.col("reference_month") == "2023-02")
     assert "anchored_and_reconciled" in feb["reconciliation_status"].unique().to_list()
+
+
+def test_a_typo_in_a_provenance_column_is_refused_rather_than_persisted() -> None:
+    """The three enums were declared and enforced nothing.
+
+    `BASELINE_RESULT_SCHEMA` checks dtypes only, so `pl.String` accepted any string: a typo in
+    `weight_basis` -- which `run_baselines` copies from an estimator's own `outcome.basis` --
+    reached `baseline_results.parquet` and passed every test in the suite.
+    """
+    row = {name: None for name in BASELINE_RESULT_SCHEMA}
+    row.update(
+        {
+            "estimator_id": "x",
+            "cell_id": "c",
+            "state_fips": "01",
+            "reference_month": "2017-01",
+            "weight_basis": "own_estimator",
+            "anchor_basis": "declared_national_total",
+            "reconciliation_status": "anchored_and_reconciled",
+        }
+    )
+    assert assert_declared_provenance(pl.DataFrame([row], schema=BASELINE_RESULT_SCHEMA)) is None
+
+    for column, typo in (
+        ("weight_basis", "own_estimatorr"),
+        ("anchor_basis", "declared_national_totl"),
+        ("reconciliation_status", "anchored_and_reconcild"),
+    ):
+        bad = dict(row)
+        bad[column] = typo
+        with pytest.raises(ConceptViolationError, match=column):
+            assert_declared_provenance(pl.DataFrame([bad], schema=BASELINE_RESULT_SCHEMA))
+
+
+def test_a_null_provenance_value_is_permitted_because_a_declining_row_has_none() -> None:
+    """A declined row carries no estimate and no weight to describe, so null is not a typo."""
+    row = {name: None for name in BASELINE_RESULT_SCHEMA}
+    row["reconciliation_status"] = "declined"
+    assert assert_declared_provenance(pl.DataFrame([row], schema=BASELINE_RESULT_SCHEMA)) is None

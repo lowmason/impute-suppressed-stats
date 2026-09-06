@@ -14,7 +14,7 @@ from pathlib import Path
 
 import polars as pl
 
-from .errors import SchemaMismatchError
+from .errors import ConceptViolationError, SchemaMismatchError
 
 # `observation_status` is named in §7.3, §7.4, §7.7 and §15.2 and enumerated in none of them, so
 # these four values are this package's decision rather than the spec's text. `absent` is the one
@@ -217,6 +217,33 @@ WEIGHT_BASES: tuple[str, ...] = ("own_estimator", "establishment_fallback", "non
 # `verified_identity` exists for the retirement condition in the anchor's docstring, when a future
 # QCEW vintage publishes a month with no suppressed cell and SRC-QCEW-006 becomes testable.
 ANCHOR_BASES: tuple[str, ...] = ("declared_national_total", "verified_identity", "none")
+
+
+def assert_declared_provenance(frame: pl.DataFrame) -> None:
+    """Refuse a provenance value outside its declared tuple.
+
+    The three tuples above are the closed sets a baseline row's provenance may draw from, but
+    `BASELINE_RESULT_SCHEMA` checks dtypes only -- `pl.String` accepts any string. `weight_basis`
+    is the live exposure: `run_baselines` copies it from an estimator's own `outcome.basis`, so a
+    third-party estimator's typo reached `baseline_results.parquet` and passed every test. Nulls
+    are permitted: a declining row carries no estimate and no weight to describe.
+    """
+    for column, allowed in (
+        ("reconciliation_status", RECONCILIATION_STATUSES),
+        ("weight_basis", WEIGHT_BASES),
+        ("anchor_basis", ANCHOR_BASES),
+    ):
+        if column not in frame.columns:
+            continue
+        seen = set(frame[column].drop_nulls().to_list())
+        undeclared = sorted(seen - set(allowed))
+        if undeclared:
+            raise ConceptViolationError(
+                f"{column} carries undeclared value(s) {undeclared}; the declared set is "
+                f"{list(allowed)}. A value outside it reaches baseline_results.parquet and every "
+                f"downstream consumer reads it as provenance."
+            )
+
 
 # What licenses a constraint, as a closed set rather than free prose. §7.8 has no column for it, so
 # the row factory writes it into `provenance_text` behind an `evidence_kind=` prefix. It exists so

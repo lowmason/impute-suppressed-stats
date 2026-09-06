@@ -22,7 +22,7 @@ import polars as pl
 
 from ..config import Config
 from ..constraints.cells import KIND_STATE_TOTAL, TOTAL_SIZE_CLASS, cell_id
-from ..contracts import BASELINE_RESULT_SCHEMA, HarmonizedData
+from ..contracts import BASELINE_RESULT_SCHEMA, HarmonizedData, assert_declared_provenance
 from ..errors import InfeasibleResidualError, WeightDomainError
 from ..reconcile.allocate import allocate
 from ..reconcile.anchor import (
@@ -193,7 +193,9 @@ def run_baselines(
                         "constraint_set_hash": constraint_set_hash,
                     }
                 )
-    return pl.DataFrame(rows, schema=BASELINE_RESULT_SCHEMA), audit
+    results = pl.DataFrame(rows, schema=BASELINE_RESULT_SCHEMA)
+    assert_declared_provenance(results)
+    return results, audit
 
 
 def _decline_rows(
