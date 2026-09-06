@@ -32,8 +32,11 @@ confirmed-absent window year -- must be `unknown`.
 
 from __future__ import annotations
 
+import json
+
 import _common as c
 import cbp_regime as m
+import httpx
 import pytest
 
 # --- flag_value_key ---------------------------------------------------------------------------
@@ -485,3 +488,57 @@ def test_emp_n_f_caveat_with_no_label_says_the_fetch_failed_not_that_the_label_i
     assert "could not fetch" in text
     assert "labelled None" not in text
     assert "labelled 'None'" not in text
+
+
+# --- main(), driven offline -------------------------------------------------------------------
+
+
+def _meta(years: list[int], probe: dict[str, int]) -> dict:
+    """A minimal cbp_metadata summary shaped as cbp_regime.main() reads it: findings for the two
+    keys it branches on, and the coverage_span fields it copies through at cbp_regime.py:637-638."""
+    return {
+        "source": "cbp_metadata",
+        "generated_utc": "2026-01-01T00:00:00Z",
+        "coverage_span": {
+            "window_start": c.WINDOW_START,
+            "window_end": c.WINDOW_END,
+            "covered": "",
+            "uncovered": "2017-2024",
+        },
+        "access": {"status": "verified"},
+        "extracts": [],
+        "findings": {"years_available": years, "dataset_probe_status_by_year": probe},
+    }
+
+
+def test_main_writes_empty_published_bounds_when_no_window_year_is_available(tmp_path, monkeypatch):
+    """The guard at cbp_regime.py:617 and :633. Unguarded, `max([])` raises ValueError before
+    write_summary can record the very outcome the empty case exists to report -- the script would
+    die instead of documenting that no window year returned a dataset document. Removing either
+    guard makes this fail; :617 raises first, and a mutant stripping only :632/:633 fails here too
+    with `min() iterable argument is empty`.
+
+    main() is driven in-process rather than run: the script is destructive-first (it rmtrees its
+    own docs/ and variables/ before its first fetch) and needs the network. AUDIT_ROOT is
+    monkeypatched first, because _common.write_summary has no path override and would otherwise
+    overwrite the real, gitignored summary."""
+    monkeypatch.setattr(c, "AUDIT_ROOT", tmp_path)
+    monkeypatch.setenv("CENSUS_API_KEY", "placeholder-key-never-sent-anywhere")
+    monkeypatch.setenv("BLS_CONTACT_EMAIL", "audit-suite@example.invalid")
+    (tmp_path / "cbp_metadata").mkdir(parents=True)
+    (tmp_path / "cbp_metadata" / "summary.json").write_text(
+        json.dumps(_meta([], {})), encoding="utf-8"
+    )
+    monkeypatch.setattr(
+        c,
+        "build_client",
+        lambda: httpx.Client(
+            transport=httpx.MockTransport(lambda request: httpx.Response(200, content=b"<html/>"))
+        ),
+    )
+
+    m.main()
+
+    written = json.loads((tmp_path / "cbp_regime" / "summary.json").read_text(encoding="utf-8"))
+    assert written["coverage_span"]["published_start"] == ""
+    assert written["coverage_span"]["published_end"] == ""
