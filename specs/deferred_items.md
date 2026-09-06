@@ -726,3 +726,20 @@ which is why none was folded into the batch. See specs/plans/completed/7-p3-test
       deliberately reads the tracked `specs/findings/source-audit.md` instead, which is why its
       truth pin never skips; converting the three existing tests to the same source is the residual.
       Check the sibling audit test files for the same pattern before fixing only this one.
+
+## 8-test-assertion-integrity — 2026-09-06
+
+- [ ] **`tests/audit/test_qcew_codes.py:378` reads a personal skill file outside the repo.**
+      `test_period_basis_quotes_the_reference_verbatim_where_the_reference_is_readable` opens
+      `~/.claude/skills/bls-data-context/references/qcew.md` and skips when it is absent, so it
+      passes on this machine and would skip on every other one — CI included. Inventoried during
+      plan 8 Task 7 and deliberately not fixed there: unlike its sibling at `:399`, this is not a
+      gitignored-`data/` problem, and it has no tracked equivalent to convert to. The shipped
+      `period_basis` sentence quotes that file, so the choice is a real one — vendor the quoted
+      sentence into the repo (with its provenance, the way `tests/fixtures/qcew/README.md` records
+      an extract's SHA-256), or drop the test and accept that the quotation is checked nowhere.
+      Vendoring is the better default but it duplicates text whose upstream nothing re-checks, so
+      it needs a ruling rather than a patch. Scope of the sweep that found it: every skip in
+      `tests/audit/` was enumerated in a fresh `git clone`, not grepped; after plan 8 that
+      directory has none left, and this is the site that would return if the skill file were
+      removed from this machine.
