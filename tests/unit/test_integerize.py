@@ -96,3 +96,34 @@ def test_every_feasible_bounded_input_places_all_its_units() -> None:
         for c in cells:
             if caps[c] is not None:
                 assert out[c] <= caps[c]
+
+
+def test_a_contradictory_bound_pair_is_refused() -> None:
+    """`floors` took the lower bound, then the cap loop overwrote it with the upper bound.
+
+    Nothing compared the two, so `lower=5, upper=3` returned 3 -- below a bound the caller
+    declared. D1 has `lower=0, upper=None` throughout, so this is latent here and live in
+    Stage 6, which supplies real class bands.
+    """
+    with pytest.raises(ValueError, match="lower bound"):
+        integerize({"a": 4.0}, 3, lower={"a": 5}, upper={"a": 3})
+
+
+def test_a_cap_for_a_cell_with_no_value_does_not_inject_a_phantom_entry() -> None:
+    """The cap loop iterated `upper`, not `values`, so it could create a cell out of nothing.
+
+    A negative cap made `floors.get(cell, 0) > cap` true for a cell that was never passed in.
+    That entry lowered `base`, which raised `remaining`, so the surviving real cell also came
+    back wrong: `{'a': 2, 'ghost': -1}` for a total of 1.
+    """
+    assert integerize({"a": 1.0}, 1, upper={"a": None, "ghost": -1}) == {"a": 1}
+
+
+def test_the_remainder_order_is_taken_above_the_effective_floor() -> None:
+    """Largest-remainder is only largest-remainder if the remainder is measured from the floor used.
+
+    `a`'s floor is raised to its lower bound of 2, which already consumes its 0.9 fraction, so it
+    has no claim on the spare unit -- but the raw fractional part still sorted it first and it
+    took the unit anyway, leaving `b` at 0 despite a 0.8 remainder.
+    """
+    assert integerize({"a": 0.9, "b": 0.8}, 3, lower={"a": 2}) == {"a": 2, "b": 1}

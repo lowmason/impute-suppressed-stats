@@ -13,6 +13,13 @@ hardcoded ordering IS `ReconciliationConfig.integerization_tiebreak = 'largest_r
 function takes no config argument, because the field's `Literal` admits exactly one value and a
 parameter would imply a choice that does not exist.
 
+BOUNDS ARE READ PER CELL THAT HAS A VALUE. Iterating the `upper` dict instead let a cap for a cell
+with no value create an entry, which lowered `base` and corrupted the real cells' allocation; and
+a `lower` above an `upper` was silently resolved in the cap's favour, returning a value below the
+bound the caller declared. Both are refused or ignored now rather than absorbed. The remainder
+that orders the round-robin is measured from the floor actually used, because a floor raised by
+`lower` has already consumed the cell's fractional claim.
+
 THE PLACEMENT BUDGET IS COMPUTED ONCE. It bounds how many index steps the round-robin may take,
 and it must be fixed before the loop starts. Evaluating `len(order) * (remaining + 1)` inside the
 loop condition recomputes it against a `remaining` that falls with every placement, so the ceiling
@@ -39,10 +46,27 @@ def integerize(
     lower = lower or {}
     upper = upper or {}
 
-    floors = {cell: max(math.floor(value), lower.get(cell, 0)) for cell, value in values.items()}
-    for cell, cap in upper.items():
-        if cap is not None and floors.get(cell, 0) > cap:
-            floors[cell] = int(cap)
+    # Bounds are read per CELL THAT HAS A VALUE, never by iterating `upper`. Iterating the bound
+    # dict let a cap for an absent cell create an entry -- with a negative cap, `floors.get(cell,
+    # 0) > cap` is true for a cell that was never passed in -- and that phantom entry lowered
+    # `base`, so the real cells came back wrong too. A bounds dict covering a superset of the
+    # cells being integerized is a legitimate call shape; the extra keys are simply not this
+    # call's business.
+    for cell in values:
+        floor_bound = lower.get(cell, 0)
+        cap = upper.get(cell)
+        if cap is not None and floor_bound > cap:
+            raise ValueError(
+                f"cell {cell!r} has lower bound {floor_bound} above its upper bound {cap}; "
+                "§12.6 cannot round into a contradictory pair, and clamping to the cap would "
+                "silently return a value below the lower bound the caller declared"
+            )
+
+    floors = {}
+    for cell, value in values.items():
+        seat = max(math.floor(value), lower.get(cell, 0))
+        cap = upper.get(cell)
+        floors[cell] = int(cap) if cap is not None and seat > cap else seat
 
     base = sum(floors.values())
     if base > total:
@@ -52,11 +76,14 @@ def integerize(
         )
 
     remaining = total - base
-    # Ties break by cell_id ascending. Sorting on (-fraction, cell) makes the whole order total,
-    # so the same input yields the same output on every run and every platform.
+    # The remainder is measured from the floor ACTUALLY USED, not from `math.floor(value)`. Once
+    # a floor has been raised by `lower` or lowered by `upper`, the raw fractional part is no
+    # longer the cell's claim on the spare units: a cell whose floor was raised past its own
+    # value has a negative remainder and correctly sorts last. Ties break by cell_id ascending,
+    # so the whole order is total and the same input yields the same output on every platform.
     order = sorted(
         values,
-        key=lambda cell: (-(values[cell] - math.floor(values[cell])), cell),
+        key=lambda cell: (-(values[cell] - floors[cell]), cell),
     )
 
     out = dict(floors)
