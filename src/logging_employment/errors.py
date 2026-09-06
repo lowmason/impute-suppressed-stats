@@ -79,4 +79,11 @@ class WeightDomainError(LoggingEmploymentError):
 
 
 class NoHarvestFactorError(LoggingEmploymentError):
-    """The harvest-proportional baseline has no harvest-origin volume and no latent factor."""
+    """The harvest-proportional baseline has no harvest-origin volume and no latent factor.
+
+    Reserved for Stage 7 and deliberately unraised today. §10.5 states no precondition, so
+    Stage 3's `HarvestProportional` returns a `Decline` rather than raising -- a per-month
+    refusal the runner records, not a whole-run halt -- and that is the correct Stage 3
+    behaviour. Stage 7 replaces that declining stub with a live baseline and owns the decision
+    of when an absent factor is a halt instead; this class is held for that path.
+    """
