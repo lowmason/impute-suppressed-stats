@@ -23,7 +23,7 @@ from __future__ import annotations
 import io
 from collections.abc import Sequence
 from itertools import pairwise
-from typing import Any
+from typing import Any, NamedTuple
 
 import _common as c
 import polars as pl
@@ -183,8 +183,29 @@ def build_long(own_code: str) -> tuple[pl.DataFrame, list[str]]:
     return long, recorded
 
 
+class PanelBuild(NamedTuple):
+    """The three frames one build produces, so nothing recomposes them independently.
+
+    `long` is pre-`_conform` and is the only frame carrying `emplvl_raw`, which
+    `disclosure_code_values` reads; `panel` is the conformed frame everything else reads;
+    `predicates` is the retention record. Returning only `(panel, predicates)` would not have
+    closed the seam, because `main` reads all three.
+    """
+
+    long: pl.DataFrame
+    panel: pl.DataFrame
+    predicates: list[str]
+
+
+def build(own_code: str) -> PanelBuild:
+    """The single `build_long` -> `_conform` composition site."""
+    long, predicates = build_long(own_code)
+    return PanelBuild(long=long, panel=_conform(long), predicates=predicates)
+
+
 def build_panel(own_code: str) -> pl.DataFrame:
-    return _conform(build_long(own_code)[0])
+    """The conformed panel alone. Kept so the existing call sites need no change."""
+    return build(own_code).panel
 
 
 def month_index(year: int, month: int) -> int:
@@ -429,8 +450,7 @@ def notes(
 
 def main() -> None:
     own_code = c.load_summary("qcew_codes")["findings"]["private_own_code"]
-    long, predicates = build_long(own_code)
-    panel = _conform(long)
+    long, panel, predicates = build(own_code)
 
     states = panel.filter(pl.col("area_class") == "states_dc")
     n_cells = states.height

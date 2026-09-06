@@ -25,6 +25,7 @@ import pytest
 from qcew_panel import (
     PANEL_SCHEMA,
     _conform,
+    build,
     build_long,
     build_panel,
     disclosure_code_values,
@@ -352,3 +353,19 @@ def test_an_unparseable_raw_value_on_a_suppressed_row_is_not_counted_as_a_publis
     # The unparseable "-" and the genuine "5". NOT the published "0", and NOT the row that
     # published nothing.
     assert by_code["N"]["emplvl_raw_nonzero_rows"] == 2
+
+
+def test_the_panel_and_the_long_frame_come_from_one_composition_site(tmp_path, monkeypatch):
+    """`build_panel` and `main` each performed `build_long` -> `_conform` independently.
+
+    They agreed, but nothing enforced it. The deferred item proposed returning
+    `(panel, predicates)`; that is not sufficient, because `main` also needs the pre-`_conform`
+    frame for `disclosure_code_values` -- `emplvl_raw` exists only there. So the seam closes on
+    a three-value return, and `build_panel` stays as the one-value view onto it.
+    """
+    write_fixture(tmp_path, monkeypatch)
+    built = build("5")
+    assert built.panel.equals(build_panel("5"))
+    assert "emplvl_raw" in built.long.columns
+    assert "emplvl_raw" not in built.panel.columns
+    assert built.predicates and all(isinstance(p, str) for p in built.predicates)
