@@ -1,5 +1,7 @@
 # Test-Suite Assertion Integrity Implementation Plan
 
+**Status: COMPLETE (2026-09-06)** — executed via executing-plans; deferred items in specs/deferred_items.md
+
 > **For agentic workers:** REQUIRED SUB-SKILL: implement this plan task-by-task via subagent-driven-development (the default) — or executing-plans when your human partner chose inline execution at the handoff. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the test assertions that report green on evidence they never ran — dated literals pinned against gitignored data, and three audit tests that silently skip in a clean clone — with assertions computed at run time or read from tracked inputs.
@@ -87,13 +89,13 @@ Per R2 the state rows are included: without them
 is vacuous. The national-only variant is 18 KB and produces identical bounds — it is the wrong
 trade.
 
-- [ ] **Step 1: Confirm the source data is present**
+- [x] **Step 1: Confirm the source data is present**
 
 Run: `ls data/staged/qcew_monthly.parquet data/staged/qcew_national_size.parquet`
 Expected: both paths listed. If absent, run `logging-estimates build-harmonized` first — this task
 cannot be done from a clean clone, which is exactly why its output is committed.
 
-- [ ] **Step 2: Generate the fixture**
+- [x] **Step 2: Generate the fixture**
 
 Run the procedure below. It selects the March reference months of the configured window from
 `qcew_national_size`, the published state rows for those months from `qcew_monthly`, and writes
@@ -278,7 +280,7 @@ true statement about the engine — it just stops being coterminous with the con
 
 </details>
 
-- [ ] **Step 3: Verify the row counts and sizes**
+- [x] **Step 3: Verify the row counts and sizes**
 
 Run:
 ```bash
@@ -299,13 +301,13 @@ Byte sizes are polars-version dependent and may differ; row counts must match ex
 count differs, the window moved — stop and re-read R4 before continuing, because regenerating this
 fixture is a §17.6 golden update.
 
-- [ ] **Step 4: Write the README**
+- [x] **Step 4: Write the README**
 
 It records row counts, `snapshot_id`s and `release_vintage`s — **not** a byte hash (R5), because
 parquet bytes vary with the polars version. State that regenerating the fixture is itself a golden
 update requiring §17.6 approval (R4).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/fixtures/national_size_margin/
@@ -331,7 +333,7 @@ strongest form of golden, so it is kept. The defect was never the oracle; it was
 freezes its **input** and this one read live gitignored data. Freezing the input keeps every bit
 of the oracle's power, and as a side effect the test stops skipping in CI.
 
-- [ ] **Step 1: Write the file**
+- [x] **Step 1: Write the file**
 
 ```python
 """§17.6: the audited golden for the national by-size margin, on frozen input.
@@ -576,13 +578,20 @@ def test_the_golden_fixture_is_tracked_in_git_not_rebuilt_from_ignored_data() ->
         assert (REPO / line).exists()
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run: `uv run pytest tests/integration/test_national_size_margin_golden.py -q`
 Expected: `4 passed` in roughly 2 s. It must NOT skip — that is the point of the task. If it
 skips, the fixture from Task 1 is not where the test looks.
 
-- [ ] **Step 3: Prove the golden discriminates**
+- [x] **Step 3: Prove the golden discriminates**
+
+> Deviation: the step's `git checkout <path>` cannot restore this file — Step 4 is what commits
+> it, so at Step 3 it is still untracked and `git checkout` errors, leaving the mutation on disk
+> for Step 4 to commit as the deliverable. Restored from a byte-exact `/tmp` copy and verified by
+> sha256 instead. The prescribed mutation reddened as specified; the other three tests were
+> mutation-proven too (MILP threshold raised past the narrowest width; state rows stripped from
+> the fixture), each reddening only its own test.
 
 Perturb one endpoint and confirm RED:
 ```bash
@@ -598,7 +607,7 @@ git checkout tests/integration/test_national_size_margin_golden.py
 Expected: at least one FAILED, then the file restored. Confirm `git status --porcelain` is clean
 for that path afterwards.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/integration/test_national_size_margin_golden.py
@@ -635,13 +644,13 @@ labelled `unbounded` or `infeasible` — because that is the one claim the golde
 make: its fixture is generated FROM these tables, so a break in the live size-row build is
 invisible to it until someone regenerates.
 
-- [ ] **Step 1: Record the baseline**
+- [x] **Step 1: Record the baseline**
 
 Run: `uv run pytest tests/integration/test_d1_acceptance.py -q`
 Expected: `5 passed`. Note the duration. If it SKIPS, `data/staged/` is absent and this task cannot
 be verified here — stop and say so rather than committing unverified.
 
-- [ ] **Step 2: Replace the file in full**
+- [x] **Step 2: Replace the file in full**
 
 ```python
 """The roadmap's Stage 2 exit criteria, on the real D1 window.
@@ -1405,12 +1414,20 @@ def test_no_hard_constraint_rests_on_an_assumed_threshold(solved) -> None:
     )
 ```
 
-- [ ] **Step 3: Run it**
+- [x] **Step 3: Run it**
 
 Run: `uv run pytest tests/integration/test_d1_acceptance.py -q`
 Expected: `10 passed` in roughly 13 s.
 
-- [ ] **Step 4: Prove the rewrite did not go vacuous**
+- [x] **Step 4: Prove the rewrite did not go vacuous**
+
+> Deviation: reproduced exactly (`1 failed, 9 passed`, the size test). Extended beyond the one
+> prescribed mutation to cover the other nine tests, since the plan's acceptance criterion is
+> that every assertion can still fail: relative_width divided by upper instead of midpoint;
+> narrow flag stripped of its suppressed-only guard; exact_reconstruction_flag wired False;
+> the bound_status passthrough corrupted; every cell collapsed into one component; a hard row's
+> prose citing an assumed_threshold behind a legitimate kind; the rank cache always reporting a
+> hit; the >=0 floor lost on unbounded cells. All ten tests reddened, each on its own mutation.
 
 This is the acceptance criterion for the whole plan, so run it rather than assume it. Make
 `classify_bound_status` return `unbounded` unconditionally — every cell then carries a label that
@@ -1442,17 +1459,17 @@ Run: `git status --porcelain src/ && uv run pytest tests/integration/test_d1_acc
 Expected: no output from `git status`, then `10 passed`. Do not proceed with a dirty `src/` — this
 project has a recorded incident of a mutation run leaving the working tree modified.
 
-- [ ] **Step 5: Confirm no count survived**
+- [x] **Step 5: Confirm no count survived**
 
 Run: `grep -nE '== *[0-9]{3,}|>= *[0-9]{3,}|> *[0-9]{3,}' tests/integration/test_d1_acceptance.py`
 Expected: no output. Any hit is a literal the rewrite missed.
 
-- [ ] **Step 6: Style gates**
+- [x] **Step 6: Style gates**
 
 Run: `uv run ruff check tests/integration/test_d1_acceptance.py && uv run black --check tests/integration/test_d1_acceptance.py`
 Expected: `All checks passed!` and `1 file would be left unchanged`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add tests/integration/test_d1_acceptance.py
@@ -1487,7 +1504,7 @@ then either declines (flag off) or labels them `FALLBACK` (flag on), and the ref
 any labelling — so "reconciles with the flag on, declines with it off" is an independent witness
 that a mislabelling mutation cannot move.
 
-- [ ] **Step 1: Add the import**
+- [x] **Step 1: Add the import**
 
 Add to the import block, before the existing `...baselines.runner` import (alphabetical):
 
@@ -1495,7 +1512,7 @@ Add to the import block, before the existing `...baselines.runner` import (alpha
 from logging_employment.baselines.interfaces import FALLBACK, OWN
 ```
 
-- [ ] **Step 2: Replace lines 78-83 in full**
+- [x] **Step 2: Replace lines 78-83 in full**
 
 ```python
 def _status_by_estimator_month(frame: pl.DataFrame) -> dict[tuple[str, str], str]:
@@ -1580,14 +1597,21 @@ Do NOT convert the liveness precondition into `pytest.skip`. Under the hiding mu
 green in CI, which converts the vacuity hole into a quieter one. The `if without_history:` guard is
 what makes the assert safe, and it is guarded by data, not by a policy switch.
 
-- [ ] **Step 3: Run it**
+- [x] **Step 3: Run it**
 
 Run: `uv run pytest tests/integration/test_d1_baselines.py -q`
+
+> Deviation: `5 passed in 138.7s`, not the predicted `3 passed` in ~60 s. The file carried five
+> tests before this task and five after (`git show HEAD:...| grep -c '^def test_'` = 5), so the
+> plan's expectation was stale, not a miscount of this edit; the doubled runtime is the second
+> `run_baselines` call the new oracle makes. Derived quantities matched recon exactly:
+> |composed| = 564 and without_history = ['02','10','15','32','38','50'], both non-empty, so the
+> liveness assert is live rather than lapsed.
 Expected: `3 passed`, roughly 60 s. Measured at recon: `|composed| = 564`,
 `without_history = ['02','10','15','32','38','50']` — AK, DE, HI, NV, ND, VT, derived rather than
 typed.
 
-- [ ] **Step 4: Widen the unit test so per-cell integrity is pinned somewhere**
+- [x] **Step 4: Widen the unit test so per-cell integrity is pinned somewhere**
 
 The arms cannot be recomputed in the integration test — `CbpIntensity` supplies its own fallback
 arm `national * exposure` (`intensity.py:130`), and 303 of its 303 fallback rows fail a
@@ -1614,12 +1638,12 @@ Import `OWN`/`FALLBACK` from `logging_employment.baselines.interfaces` rather th
 strings. The units guard is unaffected: own median 1.5 against fallback median 9.0 is a ratio of
 6.0, well inside `MAX_SCALE_RATIO`.
 
-- [ ] **Step 5: Run both**
+- [x] **Step 5: Run both**
 
 Run: `uv run pytest tests/unit/test_baseline_interfaces.py tests/integration/test_d1_baselines.py -q`
 Expected: all pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tests/integration/test_d1_baselines.py tests/unit/test_baseline_interfaces.py
@@ -1643,7 +1667,7 @@ drops non-closing months — measured: (b1) alone PASSES under the gate-skipping
 (b1)+(b2) FAILS with `assert 1 == 2`. Shipping the prose fix alone would leave exactly the defect
 class this plan exists to remove.
 
-- [ ] **Step 1: Fix the docstring's false claim**
+- [x] **Step 1: Fix the docstring's false claim**
 
 Replace the docstring at `tests/unit/test_anchor.py:172-176`:
 
@@ -1671,7 +1695,7 @@ with:
     """
 ```
 
-- [ ] **Step 2: Make the fixture discriminate**
+- [x] **Step 2: Make the fixture discriminate**
 
 In the third row dict of the `make_monthly(...)` call (the 2024-04 national row,
 `test_anchor.py:194-202`), replace `"qtrly_establishments": 6,` with:
@@ -1682,7 +1706,7 @@ In the third row dict of the `make_monthly(...)` call (the 2024-04 national row,
             "qtrly_establishments": 7,
 ```
 
-- [ ] **Step 3: Assert the designed pattern rather than blanket success**
+- [x] **Step 3: Assert the designed pattern rather than blanket success**
 
 Replace the three closing assertions (`test_anchor.py:212-214`) with:
 
@@ -1693,7 +1717,12 @@ Replace the three closing assertions (`test_anchor.py:212-214`) with:
     assert audit["anchored"].to_list() == [True, False]
 ```
 
-- [ ] **Step 4: Run and mutation-check**
+- [x] **Step 4: Run and mutation-check**
+
+> Deviation: none in outcome — `9 passed`, and the gate-skipping mutation gives `assert 1 == 2`
+> on `audit.height` exactly as predicted. Checked R8 before applying Step 3's positional read:
+> `closure_audit` builds its rows in a `for month in sorted(...)` loop with no join, so the
+> `to_list()` equality is order-safe.
 
 Run: `uv run pytest tests/unit/test_anchor.py -q`
 Expected: all pass.
@@ -1701,7 +1730,7 @@ Expected: all pass.
 Then confirm the test now discriminates: make `closure_audit` skip non-closing months, re-run, and
 confirm this test FAILS (`assert 1 == 2` on `audit.height`). Restore with `git checkout src/`.
 
-- [ ] **Step 5: Drop the dated count from `anchor.py`**
+- [x] **Step 5: Drop the dated count from `anchor.py`**
 
 Replace (verbatim, unique in the file):
 
@@ -1729,7 +1758,7 @@ Per R11, `anchor.py:9` is the ONLY site fixed. The same `1,227` sits in `scaling
 `test_reconcile_properties.py:4`, where it scopes a claim rather than decorating one. Those get a
 deferred item at completion, not five unbudgeted rulings here.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tests/unit/test_anchor.py src/logging_employment/reconcile/anchor.py
@@ -1764,13 +1793,19 @@ locally because the data is present):
 Do NOT write those numbers into the code. An earlier draft typed `39 passed / 3 skipped` into a
 docstring in the present tense, where the conversion in the same commit would have made it false.
 
-- [ ] **Step 1: Confirm the starting state**
+- [x] **Step 1: Confirm the starting state**
 
 Run: `uv run pytest tests/audit/test_ces_levels.py -q`
 Expected locally: `42 passed` (the data is present, so nothing skips — which is the blind spot this
 task fixes). `grep -c '^def test_' tests/audit/test_ces_levels.py` → `42`.
 
-- [ ] **Step 2: Apply hunks H1–H6**
+- [x] **Step 2: Apply hunks H1–H6**
+
+> Deviation: extracting the hunks needs a line-anchored closing fence (`^```` with re.M`).
+> H2's and H6's bodies contain a literal ```` ```json ```` inside a Python string literal, so an
+> unanchored non-greedy ```` ```python\n(.*?)``` ```` match truncates them mid-string and produces
+> a syntactically invalid file. All seven OLD blocks were confirmed to occur exactly once before
+> replacement.
 
 Each `OLD` block below occurs exactly once in the file; verify that before replacing.
 
@@ -1989,7 +2024,7 @@ def _ces_findings_from_the_shipped_document() -> dict:
 (nothing — the block is removed entirely)
 
 
-- [ ] **Step 3: Apply H7 (corrected)**
+- [x] **Step 3: Apply H7 (corrected)**
 
 H7 differs from the version in the source patch document: that one false-failed on a legitimate
 future run. `broader_code_note` has an explicit empty-`excluded` branch returning a different
@@ -2028,12 +2063,21 @@ fixed here rather than shipped.
     assert fabricated_note not in findings["notes"]
 ```
 
-- [ ] **Step 4: Run, and check the line count**
+- [x] **Step 4: Run, and check the line count**
+
+> Deviation: `42 passed` as predicted, but 640 lines rather than 641. ruff, black and the whole
+> suite are clean on the result and the diff is exactly the seven hunks, so the plan's line
+> count was off by one.
 
 Run: `uv run pytest tests/audit/test_ces_levels.py -q && wc -l tests/audit/test_ces_levels.py`
 Expected: `42 passed` and `641` lines.
 
-- [ ] **Step 5: Verify in a clean clone — the only check that proves the task**
+- [x] **Step 5: Verify in a clean clone — the only check that proves the task**
+
+> Deviation: the per-file result matched exactly — `39 passed, 3 skipped` → `42 passed`. The
+> directory totals in the task header did not: a fresh clone of 49a48b5 gives `679 passed,
+> 4 skipped` for `tests/audit`, not the stated `678 passed, 5 skipped`, so every absolute figure
+> in that table is one out. The delta this task produces is exactly +3 passed / -3 skipped.
 
 ```bash
 TMP=$(mktemp -d) && git clone -q . "$TMP/clone" \
@@ -2043,7 +2087,7 @@ TMP=$(mktemp -d) && git clone -q . "$TMP/clone" \
 Expected: `42 passed` with NO skips. Before this task the same command gives
 `39 passed, 3 skipped`. Remove the temp directory afterwards.
 
-- [ ] **Step 6: Style gates and commit**
+- [x] **Step 6: Style gates and commit**
 
 ```bash
 uv run ruff check tests/audit/test_ces_levels.py && uv run black --check tests/audit/test_ces_levels.py
@@ -2069,7 +2113,19 @@ skips after Task 6 — one of the same family and one that is not:
 | `tests/audit/test_qcew_codes.py:399` | `data/raw/audit/qcew_codes/summary.json` (gitignored) | **Yes** — same fix as Task 6 if `specs/findings/source-audit.md` carries the same values |
 | `tests/audit/test_qcew_codes.py:378` | `~/.claude/skills/bls-data-context/references/qcew.md` | **No** — reads a personal skill file outside the repo entirely. Different problem, different fix. |
 
-- [ ] **Step 1: Establish whether a tracked equivalent exists**
+- [x] **Step 1: Establish whether a tracked equivalent exists**
+
+> Deviation: the tracked document does carry the value (`qcew_codes` →
+> `findings.alignment_srcqcew007.period_basis`), so the conversion went ahead. But the test has a
+> SECOND gitignored read the plan did not inventory — `data/raw/audit/qcew_routes/slices/*.csv`,
+> behind its own `pytest.skip` — and converting only the summary read would have left the test
+> skipping anyway. That read was pointed at `tests/fixtures/qcew/slice_2017q1.csv`, which is
+> byte-identical to the first recorded slice (verified) and whose SHA-256 is the one
+> `source-audit-extracts.csv` records for that path; all 32 recorded slices carry identical
+> columns, which is the only property the test reads. The test's docstring was rewritten with
+> it — it claimed to tie the sentence 'to the slice header on disk rather than to a fixture',
+> which the change would otherwise have made false. Result in a clean clone: `tests/audit` goes
+> to `683 passed, 0 skipped`, one better than the plan's target.
 
 Run: `grep -n "qcew_codes\|naics_vintage_by_year" specs/findings/source-audit.md | head -20`
 
@@ -2081,13 +2137,13 @@ If they are NOT present, STOP. Do not invent a tracked source. Record it as a de
 instead, with what you searched and why it did not resolve — a negative result without its scope
 overclaims, and inventing an artifact to satisfy a test is worse than the skip.
 
-- [ ] **Step 2: Record `:378` as deferred either way**
+- [x] **Step 2: Record `:378` as deferred either way**
 
 It reads a file under `~/.claude/skills/`, which no clone will ever have. That is not a
 gitignored-data problem and its fix is a different decision (vendor the quotation, or drop the
 test). Record it; do not fix it here.
 
-- [ ] **Step 3: Commit whatever landed**
+- [x] **Step 3: Commit whatever landed**
 
 ```bash
 git add -A tests/audit/

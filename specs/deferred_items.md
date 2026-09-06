@@ -700,7 +700,7 @@ which is why none was folded into the batch. See specs/plans/completed/7-p3-test
       *"All 1123 tests" is stale* — 1137 today, and they pass with the deletion in place, which is
       exactly why the item read as settled.
 
-- [ ] **Four anti-drift breaches in `tests/integration/test_d1_acceptance.py`.** Found by plan 7's
+- [x] **Four anti-drift breaches in `tests/integration/test_d1_acceptance.py`.** Found by plan 7's
       machine run of the `anti-drift in test blocks` cross-cutting unit. The Stage 3 plan's Global
       Constraint says every count in it is a measurement dated 2026-09-05 — compute at run time,
       assert on structure, never on the literal. These assert literals against the gitignored
@@ -719,13 +719,15 @@ which is why none was folded into the batch. See specs/plans/completed/7-p3-test
       needs a ruling on what its structural form is. Related:
       `tests/integration/test_d1_baselines.py` is plan-authored (`038c3af`) and carries one breach
       of the same family, so the fix is not confined to inherited Stage 2 code.
+      → done in plan 8.
 
-- [ ] **`tests/audit/test_ces_levels.py`'s three artifact tests skip in a clean clone.** `:534`,
+- [x] **`tests/audit/test_ces_levels.py`'s three artifact tests skip in a clean clone.** `:534`,
       `:544` and `:556` read `data/raw/audit/ces/summary.json` through `_ces_summary()`, and `data/`
       is gitignored in its entirety, so none runs on a fresh checkout or in CI. Plan 7 Task 1
       deliberately reads the tracked `specs/findings/source-audit.md` instead, which is why its
       truth pin never skips; converting the three existing tests to the same source is the residual.
       Check the sibling audit test files for the same pattern before fixing only this one.
+      → done in plan 8; the sibling sweep is plan 8 Task 7.
 
 ## 8-test-assertion-integrity — 2026-09-06
 
@@ -743,3 +745,20 @@ which is why none was folded into the batch. See specs/plans/completed/7-p3-test
       `tests/audit/` was enumerated in a fresh `git clone`, not grepped; after plan 8 that
       directory has none left, and this is the site that would return if the skill file were
       removed from this machine.
+
+- [ ] **The other five `1,227` sites, where the count scopes a claim rather than decorating one.**
+      Plan 8's R11 fixed `src/logging_employment/reconcile/anchor.py:9` only, where the number was
+      load-bearing on nothing — the §5.5 dimension-matching argument reads identically with "many".
+      The remaining five are not the same edit and were left rather than swept:
+      `src/logging_employment/reconcile/scaling.py:11` ("`selected_upper` is null on 1,227 of 1,241
+      unknown cells"), `src/logging_employment/baselines/simple.py:4`,
+      `tests/unit/test_scaling.py:32` ("1,227 of 1,241 D1 cells have this shape, so this is the
+      production path"), `tests/unit/test_baselines_runner.py:146` and
+      `tests/unit/test_reconcile_properties.py:4`. Each uses the count to say how much of the
+      window a code path covers, which is what justifies calling that path the production one — so
+      deleting the number deletes the justification, and "many" is not a substitute. Inventory
+      derived by `grep -rn "1,227" src/ tests/` at plan 8's completion, so it is current as of
+      2026-09-06 and excludes `tests/integration/test_d1_acceptance.py`, whose two occurrences are
+      historical ("the 1,227 this test used to assert"). What each needs is a ruling on whether the
+      claim survives as a derived statement (recompute the share at run time) or as a dated one
+      explicitly marked as measured-on-D1 — five decisions, not one rule.
