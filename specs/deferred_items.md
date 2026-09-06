@@ -396,26 +396,45 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       config is read. `reconcile_matrix` takes no config argument, so Stage 6 must call the guard
       itself when it wires the matrix path — nothing in the layer forces it to.
 
-- [ ] **`kl_project` returns silently on an infeasible bounded system.**
+- [x] **`kl_project` returns silently on an infeasible bounded system.**
       Its loop breaks on step size, not on violation, so a fully-clipped update exits on iteration
       one: `kl_project(seed=[1,1], margins=[[1,1]], targets=[10], upper=[1,1])` returns `[1., 1.]`
       with violation 8.0 and no exception. `reconcile_matrix` compensates with its own post-check,
       and a 5,417-case feasible sweep showed violation never increases — but `kl_project` is
       exported and Stage 5/6 can call it directly. It should return the achieved violation or
       raise. (Whole-branch review, Important.)
+      **→ done in plan 5.** It returns `(x, violation)` and deliberately does NOT raise. The item
+      offered either; measurement chose. `projection.py`'s own contract is "violation must never
+      increase -- rather than a convergence proof", and §17.3's property tests feed jointly
+      infeasible two-margin systems on purpose: achieved violation exceeds `tolerance` in 3 of 25
+      existing cases, worst 16.15. A raise would have broken a spec-mandated test. Not a half-done
+      fix — the branch not taken is recorded so it is not re-opened as one. `reconcile_matrix`
+      formats the returned value rather than recomputing it.
 
-- [ ] **The three provenance enums are declared but never enforced.**
+- [x] **The three provenance enums are declared but never enforced.**
       `RECONCILIATION_STATUSES`, `WEIGHT_BASES` and `ANCHOR_BASES` in `contracts.py` constrain
       nothing: `run_baselines` writes string literals and only `BASELINE_RESULT_SCHEMA`'s dtypes
       are checked, so a typo reaches `baseline_results.parquet` and passes every test. Validate
       the three columns before returning. (Whole-branch review, Important.)
+      **→ done in plan 5.** `contracts.assert_declared_provenance` sits beside the tuples, since the
+      defect was that declaration and enforcement lived apart; `run_baselines` calls it before
+      returning. That one call covers the whole write path: `runner.py` is the only constructor of a
+      `BASELINE_RESULT_SCHEMA` frame in `src/`, and the `reconcile` command reads the parquet rather
+      than building one. Nulls stay legal and are pinned, so declines remain representable. The
+      shipped D1 run's 12,270 rows already conform — this guards drift, it did not fix live data.
 
-- [ ] **`integerize` has three bound-handling gaps, all latent on D1 and all live in Stage 6.**
+- [x] **`integerize` has three bound-handling gaps, all latent on D1 and all live in Stage 6.**
       No `lower <= upper` check (a contradictory pair silently violates the lower bound); the cap
       loop iterates `upper` rather than `values`, so a cap for an absent cell injects a phantom
       entry; and the ordering key is the raw fractional part, which is no longer largest-remainder
       once `floors` has been raised by `lower` or lowered by `upper`. D1 has `lower=0, upper=None`
       throughout. (Whole-branch review, Minor.)
+      **→ done in plan 5, with one premise narrowed.** The phantom entry needs a NEGATIVE cap: with
+      `cap=0` the guard is `0 > 0` and no entry appears, so the reachable case is the one now tested.
+      All three closed and each reproduced against the shipped code first. Behaviour is unchanged
+      where it should be: over 4,000 random D1-shaped inputs old and new agree on every case; over
+      4,000 bounded inputs they differ in 118, all from the ordering fix, with no bound violation and
+      no sum error. Every pre-existing test passes unchanged.
 
 - [ ] **`BreakAdjustedShare` collapses to `RollingMedianShare` below four shares.**
       The pre-execution audit measured 111 of 360 cells taking that branch, and

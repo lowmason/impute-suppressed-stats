@@ -1,5 +1,7 @@
 # Reconciliation Correctness Batch — Implementation Plan
 
+**Status: COMPLETE (2026-09-05)** — executed via executing-plans; nothing deferred
+
 > **For agentic workers:** REQUIRED SUB-SKILL: **executing-plans** — inline execution was chosen
 > at the handoff on 2026-09-05, so run the tasks yourself in plan order rather than dispatching
 > subagents. Its stop-and-ask rules and completion chain apply. Steps use checkbox (`- [ ]`)
@@ -76,7 +78,7 @@ the only one today — keep raising, which they already do.
   absolute margin violation it achieved. `constraint_violation(x, margins, targets) -> float` is
   unchanged and stays exported.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/unit/test_projection.py`:
 
@@ -104,13 +106,18 @@ def test_an_infeasible_bounded_system_reports_its_violation_rather_than_returnin
     assert violation == pytest.approx(constraint_violation(out, np.array([[1.0, 1.0]]), np.array([10.0])))
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/unit/test_projection.py -q -k infeasible_bounded`
 Expected: FAIL with `ValueError: too many values to unpack (expected 2)` — `kl_project` still
 returns a bare array.
 
-- [ ] **Step 3: Change the return type**
+> Deviation: it failed, but not that way. numpy unpacked the 2-element `array([1., 1.])`
+> into two scalars without raising, so the test failed on `out.tolist()` instead. A red for
+> the right reason, via a different mechanism — and itself a small argument for the tuple,
+> since the old signature let a 2-cell unpack look like it worked.
+
+- [x] **Step 3: Change the return type**
 
 In `src/logging_employment/reconcile/projection.py`, replace the signature line and the final
 `return x`:
@@ -149,12 +156,12 @@ Then replace the last line of the function:
     return x, constraint_violation(x, margins, targets)
 ```
 
-- [ ] **Step 4: Run the new test to verify it passes**
+- [x] **Step 4: Run the new test to verify it passes**
 
 Run: `uv run pytest tests/unit/test_projection.py -q -k infeasible_bounded`
 Expected: PASS.
 
-- [ ] **Step 5: Update the five existing call sites in `tests/unit/test_projection.py`**
+- [x] **Step 5: Update the five existing call sites in `tests/unit/test_projection.py`**
 
 Each of these five currently binds `out = kl_project(...)`. Change each to `out, _ = kl_project(...)`.
 The two call sites inside `pytest.raises` blocks (`test_a_non_indicator_margin_row_is_refused`,
@@ -162,13 +169,18 @@ The two call sites inside `pytest.raises` blocks (`test_a_non_indicator_margin_r
 result and must be left alone.
 
 The five to change, by test name:
+
+> Deviation: the new test in Step 1 was renamed to
+> `test_an_infeasible_bounded_system_reports_its_violation`. The name as planned made the
+> `def` line 101 chars, and black wrapped the return annotation onto its own line.
+
 - `test_projection_reaches_a_single_sum_constraint_exactly`
 - `test_projection_never_increases_constraint_violation`
 - `test_a_zero_seed_is_floored_rather_than_making_the_objective_undefined`
 - `test_projection_respects_finite_upper_bounds`
 - `test_projection_output_is_strictly_positive`
 
-- [ ] **Step 6: Update the call site in `tests/unit/test_reconcile_properties.py`**
+- [x] **Step 6: Update the call site in `tests/unit/test_reconcile_properties.py`**
 
 In `test_property_4_projection_never_increases_constraint_violation`, change:
 
@@ -182,7 +194,7 @@ to:
         out, _ = kl_project(
 ```
 
-- [ ] **Step 7: Update `reconcile_matrix` to use the returned violation**
+- [x] **Step 7: Update `reconcile_matrix` to use the returned violation**
 
 In `src/logging_employment/reconcile/matrix.py`, change the call and the post-check. Current:
 
@@ -245,12 +257,12 @@ from .projection import kl_project
 This is safe: `reconcile/__init__.py` imports `constraint_violation` from `.projection` directly,
 not via `matrix`, so the package export is unaffected.
 
-- [ ] **Step 8: Run the full suite**
+- [x] **Step 8: Run the full suite**
 
 Run: `uv run pytest -q`
 Expected: `1106 passed` (baseline 1105 + the one new test), 0 failed.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add src/logging_employment/reconcile/projection.py \
@@ -295,7 +307,7 @@ second constructor to guard and no unguarded write path left behind.
 {establishment_fallback, none, own_estimator}, `anchor_basis` = {declared_national_total}. Step 6
 will not fail on the integration test.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/unit/test_baselines_runner.py`:
 
@@ -338,12 +350,19 @@ def test_a_typo_in_a_provenance_column_is_refused_rather_than_persisted() -> Non
 If `tests/unit/test_baselines_runner.py` does not already import `polars as pl` and `pytest`, add
 those imports at the top of the file.
 
-- [ ] **Step 2: Run it to verify it fails**
+> Deviation: `pl` and `pytest` were already imported. `assert_declared_provenance` and
+> `ConceptViolationError` were added to the module-level imports rather than imported inside
+> the test body, avoiding a redundant local re-import of `BASELINE_RESULT_SCHEMA`.
+> A second test was also added — `test_a_null_provenance_value_is_permitted_because_a_declining_row_has_none`
+> — pinning that nulls stay legal, so a later tightening cannot make declines unrepresentable.
+> That makes the count after Task 2 **1108**, not the 1107 the plan predicted.
+
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/unit/test_baselines_runner.py -q -k typo_in_a_provenance`
 Expected: FAIL with `ImportError: cannot import name 'assert_declared_provenance'`.
 
-- [ ] **Step 3: Add the guard to `contracts.py`**
+- [x] **Step 3: Add the guard to `contracts.py`**
 
 Change the import on line 17 from:
 
@@ -386,12 +405,12 @@ def assert_declared_provenance(frame: pl.DataFrame) -> None:
             )
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `uv run pytest tests/unit/test_baselines_runner.py -q -k typo_in_a_provenance`
 Expected: PASS.
 
-- [ ] **Step 5: Call the guard from `run_baselines`**
+- [x] **Step 5: Call the guard from `run_baselines`**
 
 In `src/logging_employment/baselines/runner.py`, change the import on line 25 from:
 
@@ -419,14 +438,14 @@ with:
     return results, audit
 ```
 
-- [ ] **Step 6: Run the full suite**
+- [x] **Step 6: Run the full suite**
 
 Run: `uv run pytest -q`
 Expected: `1107 passed`, 0 failed. In particular `tests/integration/test_d1_baselines.py` must
 still pass — it runs `run_baselines` over the real D1 window, so it proves every value the
 shipped estimators actually emit is inside the declared sets.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/logging_employment/contracts.py \
@@ -466,7 +485,10 @@ is true only for a **negative** cap. With `cap=0` the guard `floors.get(cell, 0)
 which is false, so no entry appears. The fix is the same either way — iterate the cells that have
 values — but write the test for the negative cap, because that is the reachable case.
 
-- [ ] **Step 1: Write the three failing tests**
+- [x] **Step 1: Write the three failing tests**
+
+> Deviation: the first test was renamed to `test_a_contradictory_bound_pair_is_refused`;
+> the planned name made the `def` line 103 chars. The other two kept their names.
 
 Append to `tests/unit/test_integerize.py`:
 
@@ -502,13 +524,13 @@ def test_the_remainder_order_is_taken_above_the_effective_floor_not_the_raw_valu
     assert integerize({"a": 0.9, "b": 0.8}, 3, lower={"a": 2}) == {"a": 2, "b": 1}
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `uv run pytest tests/unit/test_integerize.py -q -k "contradictory or phantom or effective_floor"`
 Expected: 3 failed —
 `DID NOT RAISE`; `assert {'a': 2, 'ghost': -1} == {'a': 1}`; `assert {'a': 3, 'b': 0} == {'a': 2, 'b': 1}`.
 
-- [ ] **Step 3: Rewrite the floor and ordering block**
+- [x] **Step 3: Rewrite the floor and ordering block**
 
 In `src/logging_employment/reconcile/integerize.py`, replace lines 42-60 — everything from
 `floors = {...}` through the close of the `order = sorted(...)` call. Current:
@@ -579,23 +601,26 @@ Replace with:
     )
 ```
 
-- [ ] **Step 4: Run the three tests to verify they pass**
+- [x] **Step 4: Run the three tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_integerize.py -q -k "contradictory or phantom or effective_floor"`
 Expected: 3 passed.
 
-- [ ] **Step 5: Run the whole integerize and property suites**
+- [x] **Step 5: Run the whole integerize and property suites**
 
 Run: `uv run pytest tests/unit/test_integerize.py tests/unit/test_reconcile_properties.py -q`
 Expected: all pass. §17.3's property 6 ("integerization preserves required totals") is the one that
 would catch a regression in the ordering change — the sum must still equal `total` exactly.
 
-- [ ] **Step 6: Run the full suite**
+- [x] **Step 6: Run the full suite**
 
 Run: `uv run pytest -q`
-Expected: `1110 passed`, 0 failed.
+Expected: `1110 passed`, 0 failed. (Actual: 1111 — see the deviation.)
 
-- [ ] **Step 7: Update the module docstring**
+> Deviation: **1111 passed** — one more than planned, from the extra null-permissiveness
+> test added in Task 2.
+
+- [x] **Step 7: Update the module docstring**
 
 `integerize.py`'s docstring explains the tie-break and the placement budget but not the bound
 handling. Add this paragraph after the `THE TIE-BREAK MUST BE DETERMINISTIC` paragraph:
@@ -609,7 +634,7 @@ that orders the round-robin is measured from the floor actually used, because a 
 `lower` has already consumed the cell's fractional claim.
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/logging_employment/reconcile/integerize.py tests/unit/test_integerize.py
@@ -626,7 +651,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Modify: `specs/deferred_items.md` (tick the three source items)
 - Modify: `specs/plans/5-reconciliation-correctness.md` (this file — status header and step ticks)
 
-- [ ] **Step 1: Run every gate**
+- [x] **Step 1: Run every gate**
 
 ```bash
 uv run pytest -q
@@ -639,13 +664,13 @@ Note that `uv run ruff check .` (without `--select I`) reports 24 pre-existing v
 ISC004/TRY004/UP037/RUF100/RET501/UP047 — those are out of scope for this plan and must be
 unchanged, not fixed. Confirm the count is still 24.
 
-- [ ] **Step 2: Confirm no unintended working-tree changes**
+- [x] **Step 2: Confirm no unintended working-tree changes**
 
 Run: `git status --porcelain`
 Expected: only the files this plan names. This repo has a recorded incident of audit subagents
 writing into the working tree, so check before committing rather than after.
 
-- [ ] **Step 3: Run the Plan Completion Protocol**
+- [x] **Step 3: Run the Plan Completion Protocol**
 
 Per the writing-plans skill: resolve-before-defer gate, then markup this file with a status header,
 then tick the three source items in `specs/deferred_items.md` with
