@@ -115,7 +115,13 @@ def test_property_2_bounded_scaling_respects_every_bound() -> None:
 
 
 def test_property_3_bounded_scaling_fails_on_infeasible_residuals() -> None:
-    """SYNTHETIC: the `sum U < R_t` half cannot fire on D1, where every upper is null."""
+    """SYNTHETIC: the `sum U < R_t` half cannot fire on D1, where every upper is null.
+
+    The `match=` is the property, not decoration. scaling.py's bracket-exhaustion `for...else`
+    raises the same InfeasibleResidualError type, so with §12.3's `sum U < R_t` refusal deleted the
+    bare form passed and the whole 1123-test suite stayed green. The two anchors are unrolled so
+    each arm can assert its own message.
+    """
     rng = np.random.default_rng(SEED + 2)
     for _ in range(TRIALS // 2):
         cells = _cells(int(rng.integers(2, 8)))
@@ -124,11 +130,11 @@ def test_property_3_bounded_scaling_fails_on_infeasible_residuals() -> None:
         anchor_low = Anchor("2024-03", sum(lower.values()) - 1.0, cells, "declared_national_total")
         anchor_high = Anchor("2024-03", sum(upper.values()) + 1.0, cells, "declared_national_total")
         bounds = Bounds(lower=lower, upper=upper)
-        for anchor in (anchor_low, anchor_high):
-            with pytest.raises(InfeasibleResidualError):
-                scale_into_bounds(
-                    anchor, _weights(cells, rng), bounds, tolerance=TOL, max_iterations=ITERS
-                )
+        weights = _weights(cells, rng)
+        with pytest.raises(InfeasibleResidualError, match="exceed residual"):
+            scale_into_bounds(anchor_low, weights, bounds, tolerance=TOL, max_iterations=ITERS)
+        with pytest.raises(InfeasibleResidualError, match="fall below residual"):
+            scale_into_bounds(anchor_high, weights, bounds, tolerance=TOL, max_iterations=ITERS)
 
 
 def test_property_3b_a_residual_exactly_on_a_bound_sum_is_feasible() -> None:
@@ -185,8 +191,11 @@ def test_property_5_row_and_column_reconciliation_is_exact() -> None:
         out = reconcile_matrix(
             seed, row_totals, column_totals, tolerance=TOL, max_iterations=5000, floor=FLOOR
         )
-        assert out.sum(axis=1) == pytest.approx(row_totals, rel=1e-4)
-        assert out.sum(axis=0) == pytest.approx(column_totals, rel=1e-4)
+        # rel=1e-9, not 1e-4: reconcile_matrix itself refuses unless np.allclose(rtol=1e-6), so a
+        # looser assertion here cannot fail if the function returns at all -- it would be testing
+        # "did not raise", not "is exact". Measured true error is 2.7e-11.
+        assert out.sum(axis=1) == pytest.approx(row_totals, rel=1e-9)
+        assert out.sum(axis=0) == pytest.approx(column_totals, rel=1e-9)
 
 
 def test_property_6_integerization_preserves_required_totals() -> None:
@@ -236,3 +245,60 @@ def test_property_7b_integerization_is_order_independent() -> None:
     forward = integerize(values, total=10)
     backward = integerize(dict(reversed(list(values.items()))), total=10)
     assert forward == backward
+
+
+# --- what the seven properties do not reach ----------------------------------------------------
+
+
+def test_projection_actually_reaches_a_feasible_systems_margins() -> None:
+    """Property 4's companion. "Never increases" is satisfied by an implementation that does
+    nothing: an identity kl_project passes test_property_4 on all 100 trials, because
+    after == before clears `after <= before + 1e-6`. On a system that IS feasible the projection
+    must arrive, not merely not-diverge.
+
+    Deterministic and separate rather than folded into property 4, which stays faithful to
+    spec:1740 -- 3 of its 100 trials legitimately do not move, so a strict-decrease assertion
+    inside its loop would be flaky by construction."""
+    seed = np.array([1.0, 2.0, 3.0, 4.0])
+    margins = np.vstack([np.ones(4), np.array([1.0, 1.0, 0.0, 0.0])])
+    targets = np.array([20.0, 8.0])
+
+    out, _ = kl_project(
+        seed,
+        margins,
+        targets,
+        lower=np.zeros(4),
+        upper=np.full(4, np.inf),
+        floor=FLOOR,
+        tolerance=TOL,
+        max_iterations=1000,
+    )
+
+    assert constraint_violation(out, margins, targets) == pytest.approx(0.0, abs=1e-8)
+
+
+@pytest.mark.parametrize("tolerance", [1.0e-9, 1.0e-6])
+def test_property_7_solver_tolerance_does_not_move_the_solution(tolerance: float) -> None:
+    """The second half of §17.3's last bullet -- "ordering or solver tolerances do not create
+    material instability". test_property_7_cell_ordering... varies cell order only, and no test in
+    the repo varied a reconcile tolerance at all: TOL is a pinned module constant in all four
+    reconcile test files.
+
+    Compared at the LOOSER tolerance's precision, never tighter than the looser solve can promise.
+    The residual is drawn strictly inside [sum L, sum U] so property 3's refusals never fire."""
+    rng = np.random.default_rng(SEED + 6)
+    for _ in range(20):
+        cells = _cells(int(rng.integers(2, 10)))
+        lower = {c: float(rng.uniform(0.0, 5.0)) for c in cells}
+        upper = {c: lower[c] + float(rng.uniform(1.0, 200.0)) for c in cells}
+        residual = float(rng.uniform(sum(lower.values()), sum(upper.values())))
+        anchor = Anchor("2024-01", residual, cells, "declared_national_total")
+        weights = _weights(cells, rng)
+        bounds = Bounds(lower=lower, upper=upper)
+
+        tight = scale_into_bounds(anchor, weights, bounds, tolerance=TOL, max_iterations=ITERS)
+        loose = scale_into_bounds(
+            anchor, weights, bounds, tolerance=tolerance, max_iterations=ITERS
+        )
+        for cell in cells:
+            assert tight[cell] == pytest.approx(loose[cell], abs=1e-5)

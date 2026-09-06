@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
+import re
 import zipfile
 from pathlib import Path
 
@@ -153,3 +155,136 @@ def test_an_ambiguous_industry_substring_fails_closed() -> None:
     """
     with pytest.raises(ValueError, match="expected one member for industry 11331"):
         qcew.read_bulk_zip(BULK.read_bytes(), "11331")
+
+
+# --- the bulk route, composed ------------------------------------------------------------------
+
+
+def _parsed(raw_frame: pl.DataFrame) -> pl.DataFrame:
+    """Both routes through the same normalization, so the comparison is of data and not of call
+    arguments."""
+    return qcew.apply_universe_filter(
+        qcew.parse_qcew_monthly(
+            raw_frame,
+            snapshot_id="fixture",
+            release_vintage="2026-09-05",
+            release_status="final",
+            naics_vintage="2017",
+        )
+    )
+
+
+def test_the_bulk_route_yields_the_same_rows_as_the_slice_route() -> None:
+    """The two routes are alternatives for the same data, and nothing composed them end to end
+    until now: route_for_year and read_bulk_zip were each tested alone, and read_bulk_zip's output
+    had never been fed to parse_qcew_monthly anywhere in the suite. Asserts the rows agree, not
+    merely that the chain ran -- a smoke chain would pass without testing what its name claims.
+
+    This does not prove any production caller composes them: read_bulk_zip has no caller in src/,
+    and build_harmonized reads only *.csv through read_slice_csv."""
+    assert qcew.route_for_year(2017, earliest_slice_year=2020) == "bulk"
+
+    bulk = _parsed(qcew.read_bulk_zip(BULK.read_bytes(), constants.INDUSTRY_CODE))
+    slice_ = _parsed(qcew.read_slice_csv(FIXTURE.read_bytes()))
+
+    # The bulk member carries q1-q4 in one file; the slice fixture is one quarter.
+    bulk_q1 = bulk.filter(pl.col("reference_month") <= "2017-03")
+    assert bulk_q1.height == slice_.height
+
+    joined = bulk_q1.join(slice_, on=["area_fips", "reference_month"], how="inner", suffix="_s")
+    assert joined.height == slice_.height
+    for column in ("employment_value", "observation_status", "source_row_hash"):
+        assert joined.filter(pl.col(column) != pl.col(f"{column}_s")).height == 0
+
+
+def test_bulk_url_interpolates_the_reference_year() -> None:
+    """The third function of the bulk trio, and the only one no test called: route_for_year's bulk
+    outcome and read_bulk_zip were both asserted, bulk_url never was."""
+    assert (
+        qcew.bulk_url(2017)
+        == "https://data.bls.gov/cew/data/files/2017/csv/2017_qtrly_by_industry.zip"
+    )
+
+
+def _qcew_routes_findings() -> tuple[dict, dict]:
+    """The tracked findings document, not data/raw/audit/: data/ is gitignored in its entirety, so
+    a boundary pin written against the summary is a silent skip in a clean clone."""
+    document = (
+        Path(__file__).resolve().parents[2] / "specs" / "findings" / "source-audit.md"
+    ).read_text(encoding="utf-8")
+    (block,) = [
+        b
+        for b in re.split(r"^### `", document, flags=re.MULTILINE)[1:]
+        if b.startswith("qcew_routes`")
+    ]
+
+    def fenced(label: str) -> dict:
+        return json.loads(block.split(f"**{label}**:\n\n```json\n", 1)[1].split("\n```", 1)[0])
+
+    return fenced("findings"), fenced("coverage_span")
+
+
+def test_every_window_year_still_routes_to_the_slice_endpoint() -> None:
+    """Derived, not typed: the measured boundary and the window both come out of the tracked
+    findings document at runtime, so a re-audit that moves the boundary past a window year turns
+    this red instead of leaving a prose condition nobody re-reads. What production would then do is
+    not take the bulk route -- probe_slice_boundary would face an all-404 candidate range and raise
+    ValueError -- which is why this is a monitor and not a coverage claim."""
+    findings, span = _qcew_routes_findings()
+    earliest = int(findings["earliest_year_served"])
+    window = range(int(span["window_start"][:4]), int(span["window_end"][:4]) + 1)
+
+    assert findings["bulk_years_required"] == []
+    assert {qcew.route_for_year(year, earliest) for year in window} == {"slice"}
+
+
+REAL_BULK = (
+    Path(__file__).resolve().parents[2]
+    / "data"
+    / "raw"
+    / "audit"
+    / "qcew_routes"
+    / "bulk"
+    / "2017_qtrly_by_industry.zip"
+)
+
+
+def _recorded_digest() -> str:
+    """From the tracked extracts manifest, never hard-coded: a typed digest is a transcription
+    defect, and this one is 64 characters of it."""
+    rows = (
+        (Path(__file__).resolve().parents[2] / "specs" / "findings" / "source-audit-extracts.csv")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
+    (row,) = [
+        r for r in rows if r.startswith("qcew_routes,") and "bulk/2017_qtrly_by_industry.zip," in r
+    ]
+    return row.split(",")[3]
+
+
+@pytest.mark.slow
+def test_the_member_selector_is_unique_in_the_real_archive_not_just_the_fixture() -> None:
+    """tests/fixtures/qcew/README.md concedes of the unanchored substring selector that the target
+    "really is unique here -- but that is a fact about this data, not a guarantee from the code."
+    A four-member fixture cannot establish otherwise; the 2,232-member archive can. Skips where the
+    gitignored archive is absent, per the tests/audit/test_qcew_codes.py:389 idiom.
+
+    The final equality is the fidelity statement the other tests rest on: only the CONTAINER was
+    reduced, not the data."""
+    if not REAL_BULK.exists():
+        pytest.skip(f"{REAL_BULK} not present; run scripts/audit/qcew_routes.py first")
+
+    raw = REAL_BULK.read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == _recorded_digest()
+
+    names = zipfile.ZipFile(io.BytesIO(raw)).namelist()
+    assert len(names) == 2232
+    assert len([n for n in names if constants.INDUSTRY_CODE in n]) == 1
+    assert len([n for n in names if "11331" in n]) == 3
+
+    real = qcew.read_bulk_zip(raw, constants.INDUSTRY_CODE)
+    assert real.equals(qcew.read_bulk_zip(BULK.read_bytes(), constants.INDUSTRY_CODE))
+
+    with pytest.raises(ValueError, match="expected one member for industry 11331"):
+        qcew.read_bulk_zip(raw, "11331")
