@@ -225,5 +225,5 @@ class BreakAdjustedShare(_ShareBaseline):
             return statistics.median(shares)
         steps = [abs(shares[i + 1] - shares[i]) for i in range(len(shares) - 1)]
         cut = steps.index(max(steps)) + 1
-        segment = shares[cut:] or shares
+        segment = shares[cut:]
         return statistics.median(segment)
