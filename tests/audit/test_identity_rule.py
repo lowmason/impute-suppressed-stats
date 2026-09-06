@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import polars as pl
 import pytest
-
 from qcew_identity import (
     INDETERMINATE,
     INSIDE,
@@ -46,9 +45,15 @@ from qcew_identity import (
 def quarters(rows):
     return pl.DataFrame(
         rows,
-        schema={"year": pl.Int32, "qtr": pl.Int8, "national_estabs": pl.Int64,
-                "states_dc_estabs": pl.Int64, "other_estabs": pl.Int64,
-                "estab_gap": pl.Int64, "estab_gap_after_other": pl.Int64},
+        schema={
+            "year": pl.Int32,
+            "qtr": pl.Int8,
+            "national_estabs": pl.Int64,
+            "states_dc_estabs": pl.Int64,
+            "other_estabs": pl.Int64,
+            "estab_gap": pl.Int64,
+            "estab_gap_after_other": pl.Int64,
+        },
         orient="row",
     )
 
@@ -56,9 +61,16 @@ def quarters(rows):
 def months(rows):
     return pl.DataFrame(
         rows,
-        schema={"year": pl.Int32, "month": pl.Int8, "national_emp": pl.Int64,
-                "states_dc_emp": pl.Int64, "other_emp": pl.Int64, "emp_gap": pl.Int64,
-                "emp_gap_after_other": pl.Int64, "n_states_suppressed": pl.Int64},
+        schema={
+            "year": pl.Int32,
+            "month": pl.Int8,
+            "national_emp": pl.Int64,
+            "states_dc_emp": pl.Int64,
+            "other_emp": pl.Int64,
+            "emp_gap": pl.Int64,
+            "emp_gap_after_other": pl.Int64,
+            "n_states_suppressed": pl.Int64,
+        },
         orient="row",
     )
 
@@ -198,8 +210,10 @@ def test_every_reason_is_free_of_sentence_breaks():
     clean_q = quarters([(2017, 1, 100, 100, 0, 0, 0)])
     cases = [
         # unevaluable quarters: a reference establishment count was never published
-        (quarters([(2017, 1, None, 100, 0, None, None)]),
-         months([(2017, 1, 500, 500, 0, 0, 0, 0)])),
+        (
+            quarters([(2017, 1, None, 100, 0, None, None)]),
+            months([(2017, 1, 500, 500, 0, 0, 0, 0)]),
+        ),
         (quarters([(2017, 1, 120, 100, 10, 20, 10)]), months([(2017, 1, 550, 500, 50, 50, 0, 0)])),
         (clean_q, months([(2017, 1, 500, 520, 0, -20, -20, 1)])),
         # no testable month: every month is missing a reference employment value
@@ -232,9 +246,14 @@ def test_every_reason_is_free_of_sentence_breaks():
 def raw_quarters(rows):
     return pl.DataFrame(
         rows,
-        schema={"year": pl.Int32, "qtr": pl.Int8, "national_estabs": pl.Int64,
-                "states_dc_estabs": pl.Int64, "other_published": pl.Int64,
-                "estab_gap": pl.Int64},
+        schema={
+            "year": pl.Int32,
+            "qtr": pl.Int8,
+            "national_estabs": pl.Int64,
+            "states_dc_estabs": pl.Int64,
+            "other_published": pl.Int64,
+            "estab_gap": pl.Int64,
+        },
         orient="row",
     )
 
@@ -285,10 +304,18 @@ def test_an_unpublished_non_state_count_is_counted_not_treated_as_discriminating
 def panel(rows):
     return pl.DataFrame(
         rows,
-        schema={"area_fips": pl.String, "area_title": pl.String, "area_class": pl.String,
-                "year": pl.Int32, "qtr": pl.Int8, "month": pl.Int8, "emplvl": pl.Int64,
-                "qtrly_estabs": pl.Int64, "disclosure_code": pl.String,
-                "suppressed": pl.Boolean},
+        schema={
+            "area_fips": pl.String,
+            "area_title": pl.String,
+            "area_class": pl.String,
+            "year": pl.Int32,
+            "qtr": pl.Int8,
+            "month": pl.Int8,
+            "emplvl": pl.Int64,
+            "qtrly_estabs": pl.Int64,
+            "disclosure_code": pl.String,
+            "suppressed": pl.Boolean,
+        },
         orient="row",
     )
 
@@ -302,8 +329,18 @@ def outside_containment_panel():
         rows += [
             ("US000", "US TOTAL", "national", 2017, 1, month, 500, 100, "", False),
             ("01000", "Alabama", "states_dc", 2017, 1, month, 500, 100, "", False),
-            ("72000", "Puerto Rico -- Statewide", "other_state_level", 2017, 1, month,
-             None, 1, "N", True),
+            (
+                "72000",
+                "Puerto Rico -- Statewide",
+                "other_state_level",
+                2017,
+                1,
+                month,
+                None,
+                1,
+                "N",
+                True,
+            ),
         ]
     return panel(rows)
 
@@ -333,8 +370,18 @@ def inside_containment_panel():
         rows += [
             ("US000", "US TOTAL", "national", 2017, 1, month, 500, 110, "", False),
             ("01000", "Alabama", "states_dc", 2017, 1, month, 450, 100, "", False),
-            ("72000", "Puerto Rico -- Statewide", "other_state_level", 2017, 1, month,
-             None, 10, "N", True),
+            (
+                "72000",
+                "Puerto Rico -- Statewide",
+                "other_state_level",
+                2017,
+                1,
+                month,
+                None,
+                10,
+                "N",
+                True,
+            ),
         ]
     return panel(rows)
 
@@ -354,8 +401,10 @@ def test_a_withheld_value_inside_the_national_total_makes_months_untestable():
 def test_qtrly_estabs_disagreeing_within_a_quarter_raises():
     """The establishment sums assume one quarterly value per area-quarter, so a disagreement
     fails loudly rather than being silently resolved by picking a row."""
-    rows = [("01000", "Alabama", "states_dc", 2017, 1, month, 10, estabs, "", False)
-            for month, estabs in ((1, 100), (2, 101), (3, 100))]
+    rows = [
+        ("01000", "Alabama", "states_dc", 2017, 1, month, 10, estabs, "", False)
+        for month, estabs in ((1, 100), (2, 101), (3, 100))
+    ]
     with pytest.raises(ValueError, match="qtrly_estabs varies"):
         comparison_tables(panel(rows))
 
@@ -374,8 +423,7 @@ def test_the_as_published_non_state_amount_survives_the_containment_adjustment()
 def test_the_suppressed_range_is_taken_over_testable_months_only():
     """The clause attributes the range to testable months, so an untestable month's count must
     not widen it."""
-    m = months([(2017, 1, 500, 400, 0, 100, 100, 5),
-                (2017, 2, None, 400, 0, None, None, 99)])
+    m = months([(2017, 1, 500, 400, 0, 100, 100, 5), (2017, 2, None, 400, 0, None, None, 99)])
     q = quarters([(2017, 1, 100, 100, 0, 0, 0), (2017, 2, 100, 100, 0, 0, 0)])
     clause = _clean_month_clause(classify_identity(q, m)["evidence"], m)
     assert "between 5 and 5" in clause
@@ -401,22 +449,41 @@ def write_scope_fixture(tmp_path, monkeypatch, predicates, private_own_code="5")
 
     def summary(name, extracts, findings):
         (tmp_path / name).mkdir(parents=True, exist_ok=True)
-        (tmp_path / name / "summary.json").write_text(json.dumps({
-            "source": name, "generated_utc": "x",
-            "coverage_span": dict.fromkeys(c.COVERAGE_KEYS, ""),
-            "access": {"route": "r", "status": "verified", "reason": None},
-            "extracts": extracts, "findings": findings,
-        }))
+        (tmp_path / name / "summary.json").write_text(
+            json.dumps(
+                {
+                    "source": name,
+                    "generated_utc": "x",
+                    "coverage_span": dict.fromkeys(c.COVERAGE_KEYS, ""),
+                    "access": {"route": "r", "status": "verified", "reason": None},
+                    "extracts": extracts,
+                    "findings": findings,
+                }
+            )
+        )
 
-    summary("qcew_codes",
-            [{"source": "qcew_codes", "url": "u", "path": str(titles), "sha256": "0",
-              "bytes": 1, "retrieved_utc": "x", "http_status": 200}],
-            {"private_own_code": private_own_code})
+    summary(
+        "qcew_codes",
+        [
+            {
+                "source": "qcew_codes",
+                "url": "u",
+                "path": str(titles),
+                "sha256": "0",
+                "bytes": 1,
+                "retrieved_utc": "x",
+                "http_status": 200,
+            }
+        ],
+        {"private_own_code": private_own_code},
+    )
     summary("qcew_panel", [], {"filter_predicates": predicates})
 
 
-BOTH_PREDICATES = ["industry_code == '113310'; retained 1 of 1 rows",
-                   "own_code == '5' (qcew_codes.findings.private_own_code); retained 1 of 1 rows"]
+BOTH_PREDICATES = [
+    "industry_code == '113310'; retained 1 of 1 rows",
+    "own_code == '5' (qcew_codes.findings.private_own_code); retained 1 of 1 rows",
+]
 
 
 def test_panel_scope_names_the_fetched_title_when_both_predicates_were_applied(
@@ -442,8 +509,9 @@ def test_panel_scope_refuses_when_the_panel_applied_a_different_ownership_code(
     tmp_path, monkeypatch
 ):
     """The check keys on the code, not on some own_code predicate merely existing."""
-    write_scope_fixture(tmp_path, monkeypatch,
-                        [BOTH_PREDICATES[0], "own_code == '1'; retained 1 of 1 rows"])
+    write_scope_fixture(
+        tmp_path, monkeypatch, [BOTH_PREDICATES[0], "own_code == '1'; retained 1 of 1 rows"]
+    )
     with pytest.raises(ValueError, match="ownership scope"):
         verified_panel_scope()
 
@@ -453,8 +521,14 @@ def render(build):
     quarters, months, containment = comparison_tables(frame)
     result = classify_identity(quarters, months)
     structural = structural_findings(frame, quarterly_estabs(frame))
-    return build_verdict_sentence(result, structural, containment, months,
-                                  "2017-01 through 2017-03", "industry 113310 and own_code 5")
+    return build_verdict_sentence(
+        result,
+        structural,
+        containment,
+        months,
+        "2017-01 through 2017-03",
+        "industry 113310 and own_code 5",
+    )
 
 
 def test_the_sentence_says_after_subtracting_only_when_a_subtraction_was_applied():

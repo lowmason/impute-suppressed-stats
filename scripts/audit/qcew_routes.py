@@ -12,10 +12,9 @@ import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 
+import _common as c
 import httpx
 import polars as pl
-
-import _common as c
 
 SOURCE = "qcew_routes"
 SLICE_URL = "https://data.bls.gov/cew/data/api/{year}/{qtr}/industry/{industry}.csv"
@@ -69,9 +68,11 @@ def column_parity(
     return {
         "slice_only": sorted(set(slice_header) - set(bulk_header)),
         "bulk_only": sorted(set(bulk_header) - set(slice_header)),
-        "identical": (slice_header == bulk_header
-                      and len(distinct_bulk_headers) <= 1
-                      and len(distinct_slice_headers) <= 1),
+        "identical": (
+            slice_header == bulk_header
+            and len(distinct_bulk_headers) <= 1
+            and len(distinct_slice_headers) <= 1
+        ),
         "bulk_header_disagreement": (
             {}
             if len(distinct_bulk_headers) <= 1
@@ -117,24 +118,41 @@ def main() -> None:
                     # content-type; keep the body so a parser bug and a real route
                     # boundary are never indistinguishable from an empty disk.
                     rows = 0
-            probe_rows.append({
-                "year": year, "qtr": qtr, "http_status": status,
-                "bytes": len(content), "content_type": ctype, "row_count": rows,
-            })
+            probe_rows.append(
+                {
+                    "year": year,
+                    "qtr": qtr,
+                    "http_status": status,
+                    "bytes": len(content),
+                    "content_type": ctype,
+                    "row_count": rows,
+                }
+            )
             if rows > 0:
                 served.add(year)
             if year in c.WINDOW_YEARS and status == 200 and content:
                 if rows > 0:
-                    extracts.append(c.record_extract(
-                        SOURCE, url, f"slices/{year}q{qtr}.csv", content, http_status=status,
-                    ))
+                    extracts.append(
+                        c.record_extract(
+                            SOURCE,
+                            url,
+                            f"slices/{year}q{qtr}.csv",
+                            content,
+                            http_status=status,
+                        )
+                    )
                 else:
                     # not a .csv path: Task 3/4 glob extracts by `.endswith(".csv")` and
                     # would try to parse this body as data.
-                    extracts.append(c.record_extract(
-                        SOURCE, url, f"slices/unparseable_{year}q{qtr}.body", content,
-                        http_status=status,
-                    ))
+                    extracts.append(
+                        c.record_extract(
+                            SOURCE,
+                            url,
+                            f"slices/unparseable_{year}q{qtr}.body",
+                            content,
+                            http_status=status,
+                        )
+                    )
 
     earliest = min(served) if served else None
     latest = max(served) if served else None
@@ -173,7 +191,8 @@ def main() -> None:
         coverage_span={
             "published_start": str(earliest) if earliest else "",
             "published_end": str(latest) if latest else "",
-            "window_start": c.WINDOW_START, "window_end": c.WINDOW_END,
+            "window_start": c.WINDOW_START,
+            "window_end": c.WINDOW_END,
             "covered": covered,
             "uncovered": ",".join(str(y) for y in required),
         },

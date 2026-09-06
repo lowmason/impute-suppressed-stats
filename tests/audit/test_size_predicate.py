@@ -1,6 +1,5 @@
 import polars as pl
 import pytest
-
 from qcew_size import all_sizes_code, has_simultaneous_state_industry_size
 
 STATE_AREAS = {"01000", "06000", "41000"}
@@ -32,13 +31,15 @@ def frame(rows):
 def test_national_industry_size_is_not_simultaneous_state_detail():
     df = frame([("US000", "113310", "1"), ("US000", "113310", "2")])
     assert not has_simultaneous_state_industry_size(
-        df, industry="113310", state_areas=STATE_AREAS, all_sizes="0")
+        df, industry="113310", state_areas=STATE_AREAS, all_sizes="0"
+    )
 
 
 def test_state_sector_size_is_not_simultaneous_six_digit_detail():
     df = frame([("41000", "11", "1"), ("41000", "113", "2")])
     assert not has_simultaneous_state_industry_size(
-        df, industry="113310", state_areas=STATE_AREAS, all_sizes="0")
+        df, industry="113310", state_areas=STATE_AREAS, all_sizes="0"
+    )
 
 
 def test_state_six_digit_aggregate_size_code_does_not_count():
@@ -47,19 +48,22 @@ def test_state_six_digit_aggregate_size_code_does_not_count():
     fetched titles file and passes it in."""
     df = frame([("41000", "113310", "0")])
     assert not has_simultaneous_state_industry_size(
-        df, industry="113310", state_areas=STATE_AREAS, all_sizes="0")
+        df, industry="113310", state_areas=STATE_AREAS, all_sizes="0"
+    )
 
 
 def test_one_true_row_flips_the_verdict():
     df = frame([("US000", "113310", "1"), ("41000", "113310", "3")])
     assert has_simultaneous_state_industry_size(
-        df, industry="113310", state_areas=STATE_AREAS, all_sizes="0")
+        df, industry="113310", state_areas=STATE_AREAS, all_sizes="0"
+    )
 
 
 def test_county_row_is_not_a_state_row():
     df = frame([("41005", "113310", "3")])
     assert not has_simultaneous_state_industry_size(
-        df, industry="113310", state_areas=STATE_AREAS, all_sizes="0")
+        df, industry="113310", state_areas=STATE_AREAS, all_sizes="0"
+    )
 
 
 # --- all_sizes_code -----------------------------------------------------------------------

@@ -66,9 +66,8 @@ import io
 import re
 from pathlib import Path
 
-import polars as pl
-
 import _common as c
+import polars as pl
 
 SOURCE = "susb"
 ROOT = "https://www2.census.gov/programs-surveys/susb/tables/"
@@ -244,9 +243,7 @@ def has_target_industry(df: pl.DataFrame, *, naics_col: str | None, target: str)
     return bool((codes == target).any())
 
 
-def describe_layout(
-    df: pl.DataFrame, *, state_fips: tuple[str, ...], target_industry: str
-) -> dict:
+def describe_layout(df: pl.DataFrame, *, state_fips: tuple[str, ...], target_industry: str) -> dict:
     """One file's shape: columns, row count, the detected size/NAICS/geography columns and
     their values, and both a file-wide and a state-scoped read of NAICS code granularity and
     target-industry presence. `size_values`/`geography_levels` are reported in full, not
@@ -312,7 +309,7 @@ def field_description(doc_text: str, column_name: str) -> str:
 
 
 def classify_size_concept(description: str) -> str:
-    """"enterprise" or "establishment" if exactly one of those words appears in `description`
+    """ "enterprise" or "establishment" if exactly one of those words appears in `description`
     (case-insensitively); "unclear" otherwise -- including when neither appears, and,
     deliberately, when BOTH appear. The record layout document as a whole contains both words
     (ENTRSIZE's own block says "Enterprise ... Size"; ESTB's block, a few fields away, says

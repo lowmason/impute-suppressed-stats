@@ -32,10 +32,9 @@ confirmed-absent window year -- must be `unknown`.
 
 from __future__ import annotations
 
-import pytest
-
 import _common as c
 import cbp_regime as m
+import pytest
 
 # --- flag_value_key ---------------------------------------------------------------------------
 
@@ -56,13 +55,35 @@ def test_flag_value_key_leaves_a_real_flag_letter_untouched():
 
 # --- flag_evidence -----------------------------------------------------------------------------
 
-HEADER = ["NAME", "NAICS2017_LABEL", "EMPSZES", "EMPSZES_LABEL", "ESTAB", "EMP", "EMP_F",
-          "EMP_N", "NAICS2017", "LFO", "state"]
+HEADER = [
+    "NAME",
+    "NAICS2017_LABEL",
+    "EMPSZES",
+    "EMPSZES_LABEL",
+    "ESTAB",
+    "EMP",
+    "EMP_F",
+    "EMP_N",
+    "NAICS2017",
+    "LFO",
+    "state",
+]
 
 
 def _row(name: str, emp_f, emp_n: str, state: str) -> list:
-    return [name, "Logging", "001", "All establishments", "10", "50", emp_f, emp_n, "113310",
-            "001", state]
+    return [
+        name,
+        "Logging",
+        "001",
+        "All establishments",
+        "10",
+        "50",
+        emp_f,
+        emp_n,
+        "113310",
+        "001",
+        state,
+    ]
 
 
 def test_flag_evidence_keeps_null_and_empty_string_and_a_real_flag_as_three_distinct_keys():
@@ -80,8 +101,12 @@ def test_flag_evidence_keeps_null_and_empty_string_and_a_real_flag_as_three_dist
 
 
 def test_flag_evidence_suppressed_share_counts_only_non_null_emp_f():
-    body = [_row("Alabama", None, "0", "01"), _row("Alaska", None, "0", "02"),
-            _row("Arizona", "a", "0", "04"), _row("Arkansas", None, "0", "05")]
+    body = [
+        _row("Alabama", None, "0", "01"),
+        _row("Alaska", None, "0", "02"),
+        _row("Arizona", "a", "0", "04"),
+        _row("Arkansas", None, "0", "05"),
+    ]
     ev = m.flag_evidence(HEADER, body)
     assert ev["suppressed_share"] == pytest.approx(0.25)
 
@@ -130,10 +155,13 @@ def test_flag_evidence_omits_emp_f_key_entirely_when_column_absent_from_header()
 
 
 def test_citation_url_extracts_the_leading_url():
-    citation = ("https://www.census.gov/programs-surveys/cbp/technical-documentation/"
-                "methodology.html -- section 'Protecting Confidentiality > Noise Infusion'")
+    citation = (
+        "https://www.census.gov/programs-surveys/cbp/technical-documentation/"
+        "methodology.html -- section 'Protecting Confidentiality > Noise Infusion'"
+    )
     assert m.citation_url(citation) == (
-        "https://www.census.gov/programs-surveys/cbp/technical-documentation/methodology.html")
+        "https://www.census.gov/programs-surveys/cbp/technical-documentation/methodology.html"
+    )
 
 
 def test_citation_url_raises_when_no_url_present():
@@ -160,8 +188,11 @@ def test_validate_regime_entry_raises_when_non_unknown_regime_has_no_citation():
 
 
 def test_validate_regime_entry_raises_when_citation_url_was_not_actually_fetched():
-    entry = {"regime": "noise_infusion", "evidence": "something happened",
-             "citation": "https://example.gov/not-fetched.html -- some section"}
+    entry = {
+        "regime": "noise_infusion",
+        "evidence": "something happened",
+        "citation": "https://example.gov/not-fetched.html -- some section",
+    }
     with pytest.raises(ValueError, match="not among this run's successfully fetched"):
         m.validate_regime_entry("2018", entry, OK_URLS)
 
@@ -172,8 +203,11 @@ def test_validate_regime_entry_passes_for_a_well_formed_unknown_entry():
 
 
 def test_validate_regime_entry_passes_for_a_well_formed_cited_entry():
-    entry = {"regime": "noise_infusion", "evidence": "documented",
-             "citation": "https://example.gov/methodology.html -- some section"}
+    entry = {
+        "regime": "noise_infusion",
+        "evidence": "documented",
+        "citation": "https://example.gov/methodology.html -- some section",
+    }
     m.validate_regime_entry("2018", entry, OK_URLS)  # must not raise
 
 
@@ -262,9 +296,12 @@ def test_year_set_problems_flags_incomplete_coverage():
 def test_year_set_problems_empty_for_the_shipped_year_sets():
     """The actual shipped constants satisfy both properties -- this is what lets the
     module-level assert pass at import time."""
-    assert m._year_set_problems(
-        m.YEARS_WITH_WRONG_PRODUCT_RECORD_LAYOUT, m.YEARS_WITH_NO_RECORD_LAYOUT_AT_ALL
-    ) == []
+    assert (
+        m._year_set_problems(
+            m.YEARS_WITH_WRONG_PRODUCT_RECORD_LAYOUT, m.YEARS_WITH_NO_RECORD_LAYOUT_AT_ALL
+        )
+        == []
+    )
 
 
 def test_no_year_specific_doc_evidence_2020_reports_a_wrong_product_file_not_no_file_at_all():
@@ -351,29 +388,41 @@ def test_doc_urls_includes_the_briefs_original_typo_and_the_fixed_url():
 # (distinct from EMP_N, an int-typed "noise range" value, and from EMP_F, the suppression flag).
 
 REAL_EMP_F_DOC = {
-    "name": "EMP_F", "label": "Flag for number of employees",
+    "name": "EMP_F",
+    "label": "Flag for number of employees",
     "concept": "All Sectors: County Business Patterns, including ZIP Code Business Patterns, by "
-               "Legal Form of Organization and Employment Size Class for the U.S., States, and "
-               "Selected Geographies: 2021",
-    "predicateType": "string", "group": "CB2100CBP", "limit": 0,
-    "attribute of": "EMP", "attribute type": "FLAG",
+    "Legal Form of Organization and Employment Size Class for the U.S., States, and "
+    "Selected Geographies: 2021",
+    "predicateType": "string",
+    "group": "CB2100CBP",
+    "limit": 0,
+    "attribute of": "EMP",
+    "attribute type": "FLAG",
 }
 
 REAL_EMP_N_F_DOC = {
-    "name": "EMP_N_F", "label": "Flag for Noise range for number of employees ",
+    "name": "EMP_N_F",
+    "label": "Flag for Noise range for number of employees ",
     "concept": "All Sectors: County Business Patterns, including ZIP Code Business Patterns, by "
-               "Legal Form of Organization and Employment Size Class for the U.S., States, and "
-               "Selected Geographies: 2021",
-    "predicateType": "string", "group": "CB2100CBP", "limit": 0,
-    "attribute of": "EMP_N", "attribute type": "FLAG",
+    "Legal Form of Organization and Employment Size Class for the U.S., States, and "
+    "Selected Geographies: 2021",
+    "predicateType": "string",
+    "group": "CB2100CBP",
+    "limit": 0,
+    "attribute of": "EMP_N",
+    "attribute type": "FLAG",
 }
 
 REAL_EMP_DOC_WITH_NO_ATTRIBUTE_OF = {
-    "name": "EMP", "label": "Number of employees",
+    "name": "EMP",
+    "label": "Number of employees",
     "concept": "All Sectors: County Business Patterns, including ZIP Code Business Patterns, by "
-               "Legal Form of Organization and Employment Size Class for the U.S., States, and "
-               "Selected Geographies: 2021",
-    "predicateType": "int", "group": "CB2100CBP", "limit": 0, "attributes": "EMP_F",
+    "Legal Form of Organization and Employment Size Class for the U.S., States, and "
+    "Selected Geographies: 2021",
+    "predicateType": "int",
+    "group": "CB2100CBP",
+    "limit": 0,
+    "attributes": "EMP_F",
 }
 
 
@@ -413,16 +462,18 @@ def test_variable_definition_summary_has_values_crosswalk_true_when_values_item_
 
 
 def test_emp_n_f_caveat_when_never_observed_in_any_response_says_so_and_names_the_label():
-    text = m.emp_n_f_caveat(observed_any=False, emp_n_f_label="Flag for Noise range for "
-                             "number of employees")
+    text = m.emp_n_f_caveat(
+        observed_any=False, emp_n_f_label="Flag for Noise range for " "number of employees"
+    )
     assert "does not appear in any year's 113310 x state response header" in text
     assert "Flag for Noise range for number of employees" in text
     assert "must not be read as evidence" in text
 
 
 def test_emp_n_f_caveat_when_observed_says_it_can_be_cross_checked():
-    text = m.emp_n_f_caveat(observed_any=True, emp_n_f_label="Flag for Noise range for "
-                             "number of employees")
+    text = m.emp_n_f_caveat(
+        observed_any=True, emp_n_f_label="Flag for Noise range for " "number of employees"
+    )
     assert "cross-checked" in text
 
 

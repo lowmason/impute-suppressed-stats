@@ -16,12 +16,10 @@ from __future__ import annotations
 import json
 import pathlib
 
+import _common
 import polars as pl
 import pytest
-
-import _common
 import qcew_codes
-
 
 # --- _observed_detail_sentence -----------------------------------------------------------
 
@@ -31,14 +29,14 @@ def _agglvl(code: str, title: str | None, row_count: int = 1) -> dict:
 
 
 def test_observed_detail_sentence_reports_one_clause_when_titles_agree():
-    sentence = qcew_codes._observed_detail_sentence([
-        _agglvl("18", "National, NAICS 6-digit -- by ownership sector"),
-        _agglvl("58", "State, NAICS 6-digit -- by ownership sector"),
-    ])
-    assert "all of them strip to one detail clause" in sentence
-    assert (
-        "'NAICS 6-digit -- by ownership sector' at codes 18 (National), 58 (State)" in sentence
+    sentence = qcew_codes._observed_detail_sentence(
+        [
+            _agglvl("18", "National, NAICS 6-digit -- by ownership sector"),
+            _agglvl("58", "State, NAICS 6-digit -- by ownership sector"),
+        ]
     )
+    assert "all of them strip to one detail clause" in sentence
+    assert "'NAICS 6-digit -- by ownership sector' at codes 18 (National), 58 (State)" in sentence
     # The count and the geography names are read out of the input, never typed.
     assert "computed from the 2 agglvl codes" in sentence
     # The lead is shared by both branches, so it must name no outcome of its own.
@@ -52,10 +50,12 @@ def test_observed_detail_sentence_reports_one_clause_when_titles_agree():
 def test_observed_detail_sentence_reports_disagreement_when_clauses_differ():
     """The branch no real run has taken: a future agglvl set spanning two NAICS-digit depths
     must say the clause is not uniform, not repeat today's agreement."""
-    sentence = qcew_codes._observed_detail_sentence([
-        _agglvl("18", "National, NAICS 6-digit -- by ownership sector"),
-        _agglvl("14", "National, NAICS 4-digit -- by ownership sector"),
-    ])
+    sentence = qcew_codes._observed_detail_sentence(
+        [
+            _agglvl("18", "National, NAICS 6-digit -- by ownership sector"),
+            _agglvl("14", "National, NAICS 4-digit -- by ownership sector"),
+        ]
+    )
     assert "they strip to 2 distinct detail clauses" in sentence
     assert "not uniform across the codes present on these rows" in sentence
     assert "all of them strip to one detail clause" not in sentence
@@ -70,10 +70,12 @@ def test_observed_detail_sentence_reports_disagreement_when_clauses_differ():
 def test_observed_detail_sentence_handles_a_code_with_no_fetched_title():
     """A code observed on the data but absent from the fetched titles file must not crash on
     `title.split`, and must be visible as a missing title rather than silently grouped."""
-    sentence = qcew_codes._observed_detail_sentence([
-        _agglvl("18", "National, NAICS 6-digit -- by ownership sector"),
-        _agglvl("99", None),
-    ])
+    sentence = qcew_codes._observed_detail_sentence(
+        [
+            _agglvl("18", "National, NAICS 6-digit -- by ownership sector"),
+            _agglvl("99", None),
+        ]
+    )
     assert "<no fetched title>" in sentence
     assert "they strip to 2 distinct detail clauses" in sentence
 
@@ -106,12 +108,22 @@ def test_dc_sentence_reports_presence_when_dc_starts_publishing():
 
 
 def test_extraneous_area_sentence_describes_each_area_outside_state_areas():
-    sentence = qcew_codes._extraneous_area_sentence([
-        {"area_fips": "72000", "title": "Puerto Rico -- Statewide", "row_count": 12,
-         "years": ["2017", "2018"]},
-        {"area_fips": "78000", "title": "Virgin Islands -- Statewide", "row_count": 3,
-         "years": ["2019"]},
-    ])
+    sentence = qcew_codes._extraneous_area_sentence(
+        [
+            {
+                "area_fips": "72000",
+                "title": "Puerto Rico -- Statewide",
+                "row_count": 12,
+                "years": ["2017", "2018"],
+            },
+            {
+                "area_fips": "78000",
+                "title": "Virgin Islands -- Statewide",
+                "row_count": 3,
+                "years": ["2019"],
+            },
+        ]
+    )
     assert "72000 ('Puerto Rico -- Statewide', 12 rows, in 2017, 2018) is present" in sentence
     assert "78000 ('Virgin Islands -- Statewide', 3 rows, in 2019) is present" in sentence
     assert "No state-like area code fell outside" not in sentence
@@ -182,8 +194,11 @@ def _note(*, dc_present: bool) -> str:
         32,
         ["01000", "02000"],
         [],
-        {"present": dc_present, "row_count": 4, "years": ["2017"]} if dc_present
-        else {"present": False, "row_count": 0, "years": []},
+        (
+            {"present": dc_present, "row_count": 4, "years": ["2017"]}
+            if dc_present
+            else {"present": False, "row_count": 0, "years": []}
+        ),
         ["71"],
     )
 
@@ -225,7 +240,8 @@ def test_geography_universe_note_wraps_the_dc_reading_in_an_inference_marker():
     assert note.index("INFERENCE MARKER, OPENING") < note.index("INFERENCE MARKER, CLOSING")
     # The measured sentences stay outside the marked span: what is marked is the reading.
     assert note.index("the state-like predicate above yields") < note.index(
-        "INFERENCE MARKER, OPENING")
+        "INFERENCE MARKER, OPENING"
+    )
 
 
 def test_geography_universe_note_omits_the_dc_paragraph_entirely_when_dc_publishes():
@@ -255,13 +271,28 @@ def test_geography_universe_note_keeps_marking_the_hand_authored_composition_arg
 # Present in every fixture below so each test is a real test of the anchoring, not of a header
 # that had nothing to over-collect.
 DECOYS = [
-    "lq_month1_emplvl", "lq_month2_emplvl", "lq_month3_emplvl",
-    "oty_month1_emplvl_chg", "oty_month1_emplvl_pct_chg",
-    "oty_month2_emplvl_chg", "oty_month2_emplvl_pct_chg",
-    "oty_month3_emplvl_chg", "oty_month3_emplvl_pct_chg",
+    "lq_month1_emplvl",
+    "lq_month2_emplvl",
+    "lq_month3_emplvl",
+    "oty_month1_emplvl_chg",
+    "oty_month1_emplvl_pct_chg",
+    "oty_month2_emplvl_chg",
+    "oty_month2_emplvl_pct_chg",
+    "oty_month3_emplvl_chg",
+    "oty_month3_emplvl_pct_chg",
 ]
-LIVE_HEADER = ["area_fips", "own_code", "industry_code", "year", "qtr", "qtrly_estabs",
-               "month1_emplvl", "month2_emplvl", "month3_emplvl", *DECOYS]
+LIVE_HEADER = [
+    "area_fips",
+    "own_code",
+    "industry_code",
+    "year",
+    "qtr",
+    "qtrly_estabs",
+    "month1_emplvl",
+    "month2_emplvl",
+    "month3_emplvl",
+    *DECOYS,
+]
 
 QUOTED_REFERENCE_SENTENCE = (
     "QCEW monthly employment counts covered workers who worked during, or received pay for, "
@@ -281,8 +312,10 @@ def test_period_basis_counts_only_the_bare_monthly_employment_columns():
     """The anchoring test. An unanchored 'month'/'emplvl' match over this header collects all
     twelve columns; the derivation must report the three that are monthly employment levels."""
     basis = qcew_codes._period_basis(LIVE_HEADER)
-    assert "Monthly employment level columns present: 3 (month1_emplvl, month2_emplvl, " \
-           "month3_emplvl)" in basis
+    assert (
+        "Monthly employment level columns present: 3 (month1_emplvl, month2_emplvl, "
+        "month3_emplvl)" in basis
+    )
     for decoy in DECOYS:
         assert decoy not in basis
 
@@ -302,8 +335,10 @@ def test_period_basis_reports_what_it_finds_rather_than_a_typed_three():
     typed 'three monthly employment columns'; a derivation that still hardcodes three would
     pass the live-header test above and fail here."""
     basis = qcew_codes._period_basis([*LIVE_HEADER, "month4_emplvl"])
-    assert "Monthly employment level columns present: 4 (month1_emplvl, month2_emplvl, " \
-           "month3_emplvl, month4_emplvl)" in basis
+    assert (
+        "Monthly employment level columns present: 4 (month1_emplvl, month2_emplvl, "
+        "month3_emplvl, month4_emplvl)" in basis
+    )
     assert "The 4 column(s) named above are read here" in basis
 
 
@@ -338,8 +373,7 @@ def test_period_basis_quotes_the_reference_verbatim_where_the_reference_is_reada
     """Truth, not presence: the quoted sentence must actually be in the file the artifact cites.
     The reference is a personal skill outside this repo, so a clone without it skips rather
     than failing -- but on a machine that has it, this is what stops the quotation drifting."""
-    ref = pathlib.Path(
-        "~/.claude/skills/bls-data-context/references/qcew.md").expanduser()
+    ref = pathlib.Path("~/.claude/skills/bls-data-context/references/qcew.md").expanduser()
     if not ref.exists():
         pytest.skip(f"{ref} not present; nothing to check the quotation against")
     text = ref.read_text(encoding="utf-8")
@@ -363,8 +397,9 @@ def test_shipped_period_basis_describes_the_header_actually_on_disk():
     summary = root / "data/raw/audit/qcew_codes/summary.json"
     if not summary.exists():
         pytest.skip(f"{summary} not present; run qcew_codes.py first")
-    basis = json.loads(summary.read_text(encoding="utf-8"))[
-        "findings"]["alignment_srcqcew007"]["period_basis"]
+    basis = json.loads(summary.read_text(encoding="utf-8"))["findings"]["alignment_srcqcew007"][
+        "period_basis"
+    ]
 
     # The replaced typed string, and the half it wrongly ran together with the measured one.
     assert "quarterly file, three monthly employment columns" not in basis
@@ -374,8 +409,7 @@ def test_shipped_period_basis_describes_the_header_actually_on_disk():
     if not slices:
         pytest.skip("no recorded slice CSVs; run qcew_routes.py first")
     columns = pl.read_csv(slices[0], infer_schema_length=0).columns
-    expected = sorted(col for col in columns
-                      if qcew_codes.MONTHLY_EMPLOYMENT_COLUMN.fullmatch(col))
+    expected = sorted(col for col in columns if qcew_codes.MONTHLY_EMPLOYMENT_COLUMN.fullmatch(col))
     assert f"columns present: {len(expected)} ({', '.join(expected)})" in basis
     keying = [col for col in ("year", "qtr") if col in columns]
     assert f"of 'year' and 'qtr': {', '.join(keying)}." in basis

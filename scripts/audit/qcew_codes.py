@@ -10,9 +10,8 @@ from __future__ import annotations
 import io
 import re
 
-import polars as pl
-
 import _common as c
+import polars as pl
 
 SOURCE = "qcew_codes"
 # Anchored on purpose, and the anchoring is the point. The slice header carries three
@@ -38,8 +37,9 @@ TITLES = {
 
 
 def load_slices() -> pl.DataFrame:
-    paths = [e["path"] for e in c.load_summary("qcew_routes")["extracts"]
-             if e["path"].endswith(".csv")]
+    paths = [
+        e["path"] for e in c.load_summary("qcew_routes")["extracts"] if e["path"].endswith(".csv")
+    ]
     if not paths:
         raise RuntimeError("no slice CSVs recorded by qcew_routes; run Task 2 first")
     frames = [pl.read_csv(p, infer_schema_length=0) for p in paths]
@@ -107,7 +107,8 @@ def _same_industry_detail(
     nat_title = agglvl_titles.get(nat_agglvl[0])
     st_title = agglvl_titles.get(st_agglvl[0])
     missing = [
-        code for code, title in ((nat_agglvl[0], nat_title), (st_agglvl[0], st_title))
+        code
+        for code, title in ((nat_agglvl[0], nat_title), (st_agglvl[0], st_title))
         if title is None
     ]
     if missing:
@@ -309,8 +310,7 @@ def _period_basis(slice_columns: list[str]) -> str:
     reading it onto this run's columns, and only the second is an inference.
     """
     period_cols = [col for col in ("year", "qtr") if col in slice_columns]
-    monthly = sorted(col for col in slice_columns
-                     if MONTHLY_EMPLOYMENT_COLUMN.fullmatch(col))
+    monthly = sorted(col for col in slice_columns if MONTHLY_EMPLOYMENT_COLUMN.fullmatch(col))
     measured = (
         "Measured this run, from the header of the concatenated slice frame load_slices() "
         "returns -- pl.concat(how='vertical') raises on a schema mismatch, so that one header "
@@ -428,12 +428,14 @@ def main() -> None:
     extraneous_detail = []
     for area in sorted(set(state_like_areas) - c.STATE_AREAS):
         sub = state_like.filter(pl.col("area_fips") == area)
-        extraneous_detail.append({
-            "area_fips": area,
-            "title": maps["area_fips"].get(area),
-            "row_count": sub.height,
-            "years": sorted(set(sub["year"].to_list())),
-        })
+        extraneous_detail.append(
+            {
+                "area_fips": area,
+                "title": maps["area_fips"].get(area),
+                "row_count": sub.height,
+                "years": sorted(set(sub["year"].to_list())),
+            }
+        )
     dc_rows = state_like.filter(pl.col("area_fips") == "11000")
     dc_detail = {
         "present": dc_rows.height > 0,
@@ -450,9 +452,14 @@ def main() -> None:
     # switch years fall on QCEW reference-year boundaries, so the mapping is a clean per-year
     # split with no year left "unconfirmed".
     naics_vintage = {
-        "2017": "NAICS 2017", "2018": "NAICS 2017", "2019": "NAICS 2017",
-        "2020": "NAICS 2017", "2021": "NAICS 2017",
-        "2022": "NAICS 2022", "2023": "NAICS 2022", "2024": "NAICS 2022",
+        "2017": "NAICS 2017",
+        "2018": "NAICS 2017",
+        "2019": "NAICS 2017",
+        "2020": "NAICS 2017",
+        "2021": "NAICS 2017",
+        "2022": "NAICS 2022",
+        "2023": "NAICS 2022",
+        "2024": "NAICS 2022",
     }
 
     # Neither same_own_code nor same_industry_code is computed as a separate check, for the one
@@ -471,15 +478,9 @@ def main() -> None:
     # opposite case and is genuinely computed: it reads the *fetched* agglvl titles, which no
     # filter in this script constrains, so it can and would return False on a titles-metadata
     # inconsistency between the two geography levels.
-    same_detail, detail_outcome = _same_industry_detail(
-        nat_agglvl, st_agglvl, maps["agglvl_code"]
-    )
+    same_detail, detail_outcome = _same_industry_detail(nat_agglvl, st_agglvl, maps["agglvl_code"])
 
-    aligned = (
-        len(nat_agglvl) == 1
-        and len(st_agglvl) == 1
-        and same_detail
-    )
+    aligned = len(nat_agglvl) == 1 and len(st_agglvl) == 1 and same_detail
 
     observed_detail_sentence = _observed_detail_sentence(codes_present["agglvl_code"])
 
@@ -565,33 +566,41 @@ def main() -> None:
         "than a comparison of the two vintages' definitional text."
     )
 
-    notes = " ".join([
-        filter_predicates_note,
-        title_evidence_note,
-        _geography_universe_note(
-            n_quarters, state_like_areas, extraneous_detail, dc_detail, nat_agglvl
-        ),
-        naics_vintage_note,
-    ])
+    notes = " ".join(
+        [
+            filter_predicates_note,
+            title_evidence_note,
+            _geography_universe_note(
+                n_quarters, state_like_areas, extraneous_detail, dc_detail, nat_agglvl
+            ),
+            naics_vintage_note,
+        ]
+    )
 
     c.write_summary(
         SOURCE,
         coverage_span={
-            "published_start": str(min(c.WINDOW_YEARS)), "published_end": str(max(c.WINDOW_YEARS)),
-            "window_start": c.WINDOW_START, "window_end": c.WINDOW_END,
-            "covered": f"{min(c.WINDOW_YEARS)}-{max(c.WINDOW_YEARS)}", "uncovered": "",
+            "published_start": str(min(c.WINDOW_YEARS)),
+            "published_end": str(max(c.WINDOW_YEARS)),
+            "window_start": c.WINDOW_START,
+            "window_end": c.WINDOW_END,
+            "covered": f"{min(c.WINDOW_YEARS)}-{max(c.WINDOW_YEARS)}",
+            "uncovered": "",
         },
-        access={"route": "https://data.bls.gov/cew/doc/titles/<dimension>/",
-                "status": "verified", "reason": None},
+        access={
+            "route": "https://data.bls.gov/cew/doc/titles/<dimension>/",
+            "status": "verified",
+            "reason": None,
+        },
         extracts=extracts,
         findings={
             "titles_available": TITLES,
             "codes_present": codes_present,
             "private_own_code": private_own,
-            "national_agglvl": [{"code": a, "title": maps["agglvl_code"].get(a)}
-                                for a in nat_agglvl],
-            "state_agglvl": [{"code": a, "title": maps["agglvl_code"].get(a)}
-                             for a in st_agglvl],
+            "national_agglvl": [
+                {"code": a, "title": maps["agglvl_code"].get(a)} for a in nat_agglvl
+            ],
+            "state_agglvl": [{"code": a, "title": maps["agglvl_code"].get(a)} for a in st_agglvl],
             "size_code_values": codes_present["size_code"],
             "alignment_srcqcew007": {
                 "national_agglvl": nat_agglvl,
@@ -607,8 +616,10 @@ def main() -> None:
             },
         },
     )
-    print(f"private own_code={private_own}; national agglvl={nat_agglvl}; "
-          f"state agglvl={st_agglvl}; aligned={aligned}")
+    print(
+        f"private own_code={private_own}; national agglvl={nat_agglvl}; "
+        f"state agglvl={st_agglvl}; aligned={aligned}"
+    )
 
 
 if __name__ == "__main__":

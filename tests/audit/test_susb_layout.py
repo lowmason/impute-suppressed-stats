@@ -32,7 +32,6 @@ block. `choose_file` (pure filename selection) and `read_table`'s .txt branch (p
 from __future__ import annotations
 
 import polars as pl
-
 import susb_layout as m
 
 # A faithful excerpt of the real record layout document fetched live from
@@ -62,8 +61,20 @@ RECORD_LAYOUT_EXCERPT = (
 # The real column order/names from both us_state_naics_detailedsizes_2022.txt and
 # us_state_6digitnaics_2022.txt's header rows -- identical between the two files.
 SUSB_REAL_COLUMNS = [
-    "STATE", "NAICS", "ENTRSIZE", "FIRM", "ESTB", "EMPL", "EMPLFL_N", "PAYR", "PAYRFL_N",
-    "RCPT", "RCPTFL_N", "STATEDSCR", "NAICSDSCR", "ENTRSIZEDSCR",
+    "STATE",
+    "NAICS",
+    "ENTRSIZE",
+    "FIRM",
+    "ESTB",
+    "EMPL",
+    "EMPLFL_N",
+    "PAYR",
+    "PAYRFL_N",
+    "RCPT",
+    "RCPTFL_N",
+    "STATEDSCR",
+    "NAICSDSCR",
+    "ENTRSIZEDSCR",
 ]
 
 # A compact reconstruction of the real hrefs observed on
@@ -111,24 +122,28 @@ def detailedsizes_shaped_df() -> pl.DataFrame:
     national/US-total row (STATE == "00"); the state-level rows never carry it, and their NAICS
     detail stops at the sector level ("11") or a combined-sector label ("3133", for the real
     sectors-31-33 label observed live)."""
-    return pl.DataFrame({
-        "STATE": ["00", "00", "01", "01"],
-        "NAICS": ["--", "113310", "11", "3133"],
-        "ENTRSIZE": ["01", "01", "01", "01"],
-        "ENTRSIZEDSCR": ["01: Total", "01: Total", "01: Total", "01: Total"],
-    })
+    return pl.DataFrame(
+        {
+            "STATE": ["00", "00", "01", "01"],
+            "NAICS": ["--", "113310", "11", "3133"],
+            "ENTRSIZE": ["01", "01", "01", "01"],
+            "ENTRSIZEDSCR": ["01: Total", "01: Total", "01: Total", "01: Total"],
+        }
+    )
 
 
 def sixdigit_shaped_df() -> pl.DataFrame:
     """Reproduces, in miniature, the real shape confirmed live in
     us_state_6digitnaics_2022.txt: the target industry (113310) appears on a real state row
     (STATE == "01"), not only the national/US-total row."""
-    return pl.DataFrame({
-        "STATE": ["00", "00", "01", "01"],
-        "NAICS": ["--", "113310", "11", "113310"],
-        "ENTRSIZE": ["01", "01", "01", "01"],
-        "ENTRSIZEDSCR": ["01: Total", "01: Total", "01: Total", "01: Total"],
-    })
+    return pl.DataFrame(
+        {
+            "STATE": ["00", "00", "01", "01"],
+            "NAICS": ["--", "113310", "11", "113310"],
+            "ENTRSIZE": ["01", "01", "01", "01"],
+            "ENTRSIZEDSCR": ["01: Total", "01: Total", "01: Total", "01: Total"],
+        }
+    )
 
 
 # --- module docstring: the 45-vs-46-states count (fix round 1, finding 1) ------------------------
@@ -242,7 +257,8 @@ def test_filenames_excludes_the_apache_sort_order_and_parent_links():
 
 def test_choose_file_prefers_txt_over_xlsx():
     candidates = [
-        "us_state_naics_detailedsizes_2022.xlsx", "us_state_naics_detailedsizes_2022.txt",
+        "us_state_naics_detailedsizes_2022.xlsx",
+        "us_state_naics_detailedsizes_2022.txt",
     ]
     assert m.choose_file(candidates) == "us_state_naics_detailedsizes_2022.txt"
 
@@ -364,7 +380,7 @@ def test_find_column_returns_none_when_nothing_matches():
 
 
 def test_code_lengths_excludes_the_all_industries_aggregate_placeholder():
-    """"--" (the all-industries aggregate) dash-strips to the empty string; its length (0) must
+    """ "--" (the all-industries aggregate) dash-strips to the empty string; its length (0) must
     not appear in a field describing real NAICS code granularity."""
     df = pl.DataFrame({"NAICS": ["--", "11", "1133", "113310"]})
     assert m.code_lengths(df, "NAICS") == [2, 4, 6]
@@ -487,13 +503,16 @@ def test_describe_layout_geography_levels_are_not_truncated():
     """The truncation ruling (see describe_layout's docstring): the brief capped
     geography_levels at 10; a fixture with more than 10 distinct geography codes must still
     report every one of them."""
-    df = pl.DataFrame({
-        "STATE": [f"{i:02d}" for i in range(1, 13)],
-        "NAICS": ["11"] * 12,
-        "ENTRSIZE": ["01"] * 12,
-    })
-    layout = m.describe_layout(df, state_fips=tuple(f"{i:02d}" for i in range(1, 13)),
-                                target_industry="113310")
+    df = pl.DataFrame(
+        {
+            "STATE": [f"{i:02d}" for i in range(1, 13)],
+            "NAICS": ["11"] * 12,
+            "ENTRSIZE": ["01"] * 12,
+        }
+    )
+    layout = m.describe_layout(
+        df, state_fips=tuple(f"{i:02d}" for i in range(1, 13)), target_industry="113310"
+    )
     assert len(layout["geography_levels"]) == 12
 
 
@@ -518,14 +537,14 @@ def test_field_description_returns_empty_string_for_an_undocumented_field():
 
 
 def test_field_description_does_not_match_a_field_name_that_is_a_strict_prefix():
-    """"STAT" is a strict prefix of the real field "STATE" -- the trailing \\b in the match
+    """ "STAT" is a strict prefix of the real field "STATE" -- the trailing \\b in the match
     pattern must reject it: STATE's own line is "STATE\\tC...", so "STAT" immediately followed
     by "E" is not a word boundary, and the shorter string must not count as a match."""
     assert m.field_description(RECORD_LAYOUT_EXCERPT, "STAT") == ""
 
 
 def test_field_description_does_not_match_a_field_name_appearing_mid_line():
-    """"Enterprise" appears inside ENTRSIZE's own description line ("ENTRSIZE\\tC\\tEnterprise
+    """ "Enterprise" appears inside ENTRSIZE's own description line ("ENTRSIZE\\tC\\tEnterprise
     Employment Size Code"), but not at the START of that line -- a field name that merely
     occurs somewhere in the document must not be treated as a match; only a line that BEGINS
     with the field name counts (the ^ anchor, not just \\b)."""

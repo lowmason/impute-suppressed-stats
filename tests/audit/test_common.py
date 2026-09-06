@@ -1,9 +1,8 @@
 from pathlib import Path
 
+import _common
 import httpx
 import pytest
-
-import _common
 
 
 def test_audit_root_and_findings_dir_resolve_from_module_location():
@@ -148,12 +147,18 @@ def test_write_summary_round_trips_and_validates(tmp_path, monkeypatch):
     _common.write_summary(
         "cbp",
         coverage_span={
-            "published_start": "2017", "published_end": "2022",
-            "window_start": "2017-01", "window_end": "2024-12",
-            "covered": "2017-2022", "uncovered": "2023-2024",
+            "published_start": "2017",
+            "published_end": "2022",
+            "window_start": "2017-01",
+            "window_end": "2024-12",
+            "covered": "2017-2022",
+            "uncovered": "2023-2024",
         },
-        access={"route": "https://api.census.gov/data/{year}/cbp", "status": "verified",
-                "reason": None},
+        access={
+            "route": "https://api.census.gov/data/{year}/cbp",
+            "status": "verified",
+            "reason": None,
+        },
         extracts=[rec],
         findings={"naics_predicate_by_year": {"2022": "NAICS2017"}},
     )
@@ -183,11 +188,19 @@ def test_write_summary_round_trips_and_validates(tmp_path, monkeypatch):
 )
 def test_validate_summary_rejects_broken_payloads(mutate):
     payload = {
-        "source": "s", "generated_utc": "2026-09-03T00:00:00+00:00",
-        "coverage_span": {"published_start": "", "published_end": "", "window_start": "2017-01",
-                          "window_end": "2024-12", "covered": "", "uncovered": ""},
+        "source": "s",
+        "generated_utc": "2026-09-03T00:00:00+00:00",
+        "coverage_span": {
+            "published_start": "",
+            "published_end": "",
+            "window_start": "2017-01",
+            "window_end": "2024-12",
+            "covered": "",
+            "uncovered": "",
+        },
         "access": {"route": "r", "status": "verified", "reason": None},
-        "extracts": [], "findings": {},
+        "extracts": [],
+        "findings": {},
     }
     mutate(payload)
     with pytest.raises(ValueError):
@@ -218,11 +231,21 @@ def test_write_summary_refuses_to_leak_a_key(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="CENSUS_API_KEY"):
         _common.write_summary(
             "cbp",
-            coverage_span={"published_start": "", "published_end": "", "window_start": "2017-01",
-                           "window_end": "2024-12", "covered": "", "uncovered": ""},
-            access={"route": "https://api.census.gov/data/2022/cbp?key=sekret-value-0123",
-                    "status": "verified", "reason": None},
-            extracts=[], findings={},
+            coverage_span={
+                "published_start": "",
+                "published_end": "",
+                "window_start": "2017-01",
+                "window_end": "2024-12",
+                "covered": "",
+                "uncovered": "",
+            },
+            access={
+                "route": "https://api.census.gov/data/2022/cbp?key=sekret-value-0123",
+                "status": "verified",
+                "reason": None,
+            },
+            extracts=[],
+            findings={},
         )
 
 
@@ -235,10 +258,17 @@ def test_write_summary_refuses_to_leak_a_non_ascii_key(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="CENSUS_API_KEY"):
         _common.write_summary(
             "cbp",
-            coverage_span={"published_start": "", "published_end": "", "window_start": "2017-01",
-                           "window_end": "2024-12", "covered": "", "uncovered": ""},
+            coverage_span={
+                "published_start": "",
+                "published_end": "",
+                "window_start": "2017-01",
+                "window_end": "2024-12",
+                "covered": "",
+                "uncovered": "",
+            },
             access={"route": "r", "status": "verified", "reason": None},
-            extracts=[], findings={"note": "leaked sekret-café-0123 here"},
+            extracts=[],
+            findings={"note": "leaked sekret-café-0123 here"},
         )
 
 
@@ -254,10 +284,17 @@ def test_write_summary_and_load_summary_round_trip_non_ascii_as_utf8(tmp_path, m
     note = "café 日本語"  # Latin-1-representable + characters with no cp1252/latin-1 form at all
     dest = _common.write_summary(
         "cbp",
-        coverage_span={"published_start": "", "published_end": "", "window_start": "2017-01",
-                       "window_end": "2024-12", "covered": "", "uncovered": ""},
+        coverage_span={
+            "published_start": "",
+            "published_end": "",
+            "window_start": "2017-01",
+            "window_end": "2024-12",
+            "covered": "",
+            "uncovered": "",
+        },
         access={"route": "r", "status": "verified", "reason": None},
-        extracts=[], findings={"note": note},
+        extracts=[],
+        findings={"note": note},
     )
     raw = dest.read_bytes()
     decoded = raw.decode("utf-8")  # raises UnicodeDecodeError if the bytes aren't valid UTF-8
@@ -296,10 +333,17 @@ def test_write_summary_and_load_summary_pass_explicit_utf8_encoding(tmp_path, mo
 
     _common.write_summary(
         "cbp",
-        coverage_span={"published_start": "", "published_end": "", "window_start": "2017-01",
-                       "window_end": "2024-12", "covered": "", "uncovered": ""},
+        coverage_span={
+            "published_start": "",
+            "published_end": "",
+            "window_start": "2017-01",
+            "window_end": "2024-12",
+            "covered": "",
+            "uncovered": "",
+        },
         access={"route": "r", "status": "verified", "reason": None},
-        extracts=[], findings={},
+        extracts=[],
+        findings={},
     )
     _common.load_summary("cbp")
 

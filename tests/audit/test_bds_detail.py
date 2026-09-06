@@ -132,7 +132,8 @@ def test_classify_html_with_unrelated_title_is_non_json_error_not_auth():
     """A maintenance page or rate-limit interstitial is non-JSON but is not evidence of a bad
     key -- must not collapse into the same bucket as invalid_key/missing_key."""
     outcome, payload = m.classify_probe_body(
-        200, HTML_CONTENT_TYPE, b"<html><head><title>Service Unavailable</title></head></html>")
+        200, HTML_CONTENT_TYPE, b"<html><head><title>Service Unavailable</title></head></html>"
+    )
     assert outcome == "non_json_error"
     assert payload is None
 
@@ -187,8 +188,11 @@ def test_probe_result_ok_reports_row_count_and_years_from_the_payload():
     ]
     row = m.probe_result("11", 200, "ok", header_and_rows)
     assert row == {
-        "naics": "11", "digits": 2, "http_status": 200,
-        "row_count": 2, "years_returned": [1978, 1979],
+        "naics": "11",
+        "digits": 2,
+        "http_status": 200,
+        "row_count": 2,
+        "years_returned": [1978, 1979],
     }
 
 
@@ -264,9 +268,10 @@ def test_zero_answer_cause_all_no_content_is_the_generic_boundary_cause():
 
 
 def test_zero_answer_cause_mixed_statuses_is_the_generic_cause():
-    assert m.zero_answer_cause(
-        ["invalid_key", "no_content", "transport_failure"]
-    ) == "no_naics_code_returned_rows"
+    assert (
+        m.zero_answer_cause(["invalid_key", "no_content", "transport_failure"])
+        == "no_naics_code_returned_rows"
+    )
 
 
 def test_zero_answer_cause_all_non_json_error_is_the_generic_cause_not_auth():

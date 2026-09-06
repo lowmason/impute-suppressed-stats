@@ -46,15 +46,16 @@ import re
 import subprocess
 
 import pytest
-
 import verify_extracts as m
 
 SPEC_TEXT = m.SPEC.read_text(encoding="utf-8")
 
 # The verdict sentence shape criterion E2 accepts, in miniature: one sentence, one line, citing
 # quarters and non-state areas. Not the real recorded sentence -- that lives under data/.
-GOOD_VERDICT = ("decline: the national count equals the states+DC sum in 32 of 32 quarter(s), "
-                "and the panel carries 1 non-state area(s).")
+GOOD_VERDICT = (
+    "decline: the national count equals the states+DC sum in 32 of 32 quarter(s), "
+    "and the panel carries 1 non-state area(s)."
+)
 
 
 def summary(source: str, *, findings=None, access=None, coverage=None, extracts=()) -> dict:
@@ -64,22 +65,35 @@ def summary(source: str, *, findings=None, access=None, coverage=None, extracts=
         "source": source,
         "generated_utc": "2026-09-04T00:00:00+00:00",
         "coverage_span": {
-            "published_start": "2017", "published_end": "2024",
-            "window_start": "2017-01", "window_end": "2024-12",
-            "covered": "2017-2024", "uncovered": "",
+            "published_start": "2017",
+            "published_end": "2024",
+            "window_start": "2017-01",
+            "window_end": "2024-12",
+            "covered": "2017-2024",
+            "uncovered": "",
             **(coverage or {}),
         },
-        "access": {"status": "verified", "route": "https://example.invalid/", "reason": None,
-                   **(access or {})},
+        "access": {
+            "status": "verified",
+            "route": "https://example.invalid/",
+            "reason": None,
+            **(access or {}),
+        },
         "extracts": list(extracts),
         "findings": {"measured": 1} if findings is None else findings,
     }
 
 
 def extract(source: str, path, *, sha256="0" * 64, status=200) -> dict:
-    return {"source": source, "url": "https://example.invalid/f", "path": str(path),
-            "sha256": sha256, "bytes": 3, "retrieved_utc": "2026-09-04T00:00:00+00:00",
-            "http_status": status}
+    return {
+        "source": source,
+        "url": "https://example.invalid/f",
+        "path": str(path),
+        "sha256": sha256,
+        "bytes": 3,
+        "retrieved_utc": "2026-09-04T00:00:00+00:00",
+        "http_status": status,
+    }
 
 
 def write_extract(root, source: str, name: str, body: bytes, *, sidecar=True):
@@ -115,10 +129,11 @@ def criterion_verdicts(out: str) -> dict[str, str]:
     Matches only the report lines (`PASS E3: ...`), never the per-failure detail lines, which
     carry the criterion in brackets (`FAIL [E3] ...`) and are a different statement: one says a
     check fired, the other is the summary a reader of this gate acts on."""
-    return {match[2]: match[1]
-            for match in (re.match(r"^(PASS|FAIL) ([A-Z]\d?): ", line)
-                          for line in out.splitlines())
-            if match}
+    return {
+        match[2]: match[1]
+        for match in (re.match(r"^(PASS|FAIL) ([A-Z]\d?): ", line) for line in out.splitlines())
+        if match
+    }
 
 
 def run_gate(tmp_path, monkeypatch, capsys, *, doc_text: str | None, **overrides):
@@ -189,11 +204,16 @@ def test_the_two_declared_empty_shapes_are_accepted_by_e1():
     assert ("cbp_metadata", "lfo_by_year") in m.LEGITIMATELY_EMPTY_FINDINGS
     assert ("qcew_routes", "bulk_years_required") in m.LEGITIMATELY_EMPTY_FINDINGS
     summaries = {
-        "cbp_metadata": summary("cbp_metadata", findings={
-            "lfo_by_year": {str(year): None for year in range(2017, 2025)},
-            "naics_predicate_by_year": {"2023": "NAICS2017", "2024": None}}),
-        "qcew_routes": summary("qcew_routes", findings={"bulk_years_required": [],
-                                                        "bulk_years_fetched": [2017]}),
+        "cbp_metadata": summary(
+            "cbp_metadata",
+            findings={
+                "lfo_by_year": {str(year): None for year in range(2017, 2025)},
+                "naics_predicate_by_year": {"2023": "NAICS2017", "2024": None},
+            },
+        ),
+        "qcew_routes": summary(
+            "qcew_routes", findings={"bulk_years_required": [], "bulk_years_fetched": [2017]}
+        ),
     }
     assert m.check_findings_filled(summaries) == []
 
@@ -383,8 +403,9 @@ def test_check_env_untracked_passes_when_git_tracks_no_dotenv(tmp_path):
     repo = git_repo(tmp_path)
     (repo / "README.md").write_text("hi\n")
     (repo / ".env.example").write_text("KEY=\n")
-    subprocess.run(["git", "add", "README.md", ".env.example"], cwd=repo, check=True,
-                   capture_output=True)
+    subprocess.run(
+        ["git", "add", "README.md", ".env.example"], cwd=repo, check=True, capture_output=True
+    )
     assert m.check_env_untracked(repo) == []
 
 
@@ -423,9 +444,12 @@ def test_the_repositorys_own_gitignore_covers_dotenv():
 
 def test_parse_classification_record_reads_all_four_fields_from_the_real_spec():
     record = m.parse_classification_record(SPEC_TEXT)
-    assert record == {"industry_code_supplied": "1113310", "industry_code_used": "113310",
-                      "industry_title": "Logging",
-                      "classification_status": "corrected_invalid_supplied_code"}
+    assert record == {
+        "industry_code_supplied": "1113310",
+        "industry_code_used": "113310",
+        "industry_title": "Logging",
+        "classification_status": "corrected_invalid_supplied_code",
+    }
 
 
 def test_parse_classification_record_raises_when_the_block_is_absent():
@@ -436,10 +460,12 @@ def test_parse_classification_record_raises_when_the_block_is_absent():
 
 
 # The four names as the spec's §3.1 fence publishes them, reused by the anchoring tests below.
-CLASSIFICATION_ASSIGNMENTS = ("industry_code_supplied = '1113310'\n"
-                              "industry_code_used     = '113310'\n"
-                              "industry_title         = 'Logging'\n"
-                              "classification_status = 'corrected_invalid_supplied_code'\n")
+CLASSIFICATION_ASSIGNMENTS = (
+    "industry_code_supplied = '1113310'\n"
+    "industry_code_used     = '113310'\n"
+    "industry_title         = 'Logging'\n"
+    "classification_status = 'corrected_invalid_supplied_code'\n"
+)
 
 
 def test_parse_classification_record_raises_when_the_names_sit_outside_the_section_31_fence():
@@ -449,14 +475,16 @@ def test_parse_classification_record_raises_when_the_names_sit_outside_the_secti
     §3.1 has lost its fence and `=`-form assignments survive in §3.2, which an unanchored scan
     would read from that wrong section instead of failing. Appendix A is included in the form
     the spec ships it -- YAML, and invisible to either scan."""
-    spec = ("## 3. Scope\n\n"
-            "### 3.1 Classification decision\n\n"
-            "The classification block moved.\n\n"
-            "### 3.2 Core estimand\n\n"
-            "```text\n" + CLASSIFICATION_ASSIGNMENTS + "```\n\n"
-            "## Appendix A. Example configuration\n\n"
-            "```yaml\nproject:\n  industry_code_supplied: '1113310'\n"
-            "  industry_code_used: '113310'\n  industry_title: 'Logging'\n```\n")
+    spec = (
+        "## 3. Scope\n\n"
+        "### 3.1 Classification decision\n\n"
+        "The classification block moved.\n\n"
+        "### 3.2 Core estimand\n\n"
+        "```text\n" + CLASSIFICATION_ASSIGNMENTS + "```\n\n"
+        "## Appendix A. Example configuration\n\n"
+        "```yaml\nproject:\n  industry_code_supplied: '1113310'\n"
+        "  industry_code_used: '113310'\n  industry_title: 'Logging'\n```\n"
+    )
     with pytest.raises(ValueError, match="§3.1"):
         m.parse_classification_record(spec)
 
@@ -465,9 +493,11 @@ def test_parse_classification_record_raises_when_one_name_left_the_31_fence():
     """Field granularity, same defect: a name that moved out of §3.1's fence but still exists
     later in the file must be reported missing, not picked up from where it moved to."""
     kept = "".join(line + "\n" for line in CLASSIFICATION_ASSIGNMENTS.splitlines()[:3])
-    spec = ("### 3.1 Classification decision\n\n```text\n" + kept + "```\n\n"
-            "### 3.2 Core estimand\n\n"
-            "```text\nclassification_status = 'corrected_invalid_supplied_code'\n```\n")
+    spec = (
+        "### 3.1 Classification decision\n\n```text\n" + kept + "```\n\n"
+        "### 3.2 Core estimand\n\n"
+        "```text\nclassification_status = 'corrected_invalid_supplied_code'\n```\n"
+    )
     with pytest.raises(ValueError, match="classification_status"):
         m.parse_classification_record(spec)
 
@@ -475,8 +505,11 @@ def test_parse_classification_record_raises_when_one_name_left_the_31_fence():
 def test_parse_classification_record_raises_on_an_unclosed_31_fence():
     """An unclosed fence is a broken spec, not a block running to the next heading: reading it
     that way would silently take whatever prose followed as assignments."""
-    spec = ("### 3.1 Classification decision\n\n```text\n" + CLASSIFICATION_ASSIGNMENTS
-            + "\n### 3.2 Core estimand\n")
+    spec = (
+        "### 3.1 Classification decision\n\n```text\n"
+        + CLASSIFICATION_ASSIGNMENTS
+        + "\n### 3.2 Core estimand\n"
+    )
     with pytest.raises(ValueError, match="never closed"):
         m.parse_classification_record(spec)
 
@@ -487,19 +520,25 @@ def test_classification_block_keeps_a_hash_prefixed_line_inside_the_fence():
     between the opening and closing fence, and the block was reported "never closed" -- an
     error naming a defect the spec does not have. Today's spec carries no such line, so this
     constructs one."""
-    spec = ("### 3.1 Classification decision\n\n```text\n"
-            "# the supplied code and the correction, both recorded\n"
-            + CLASSIFICATION_ASSIGNMENTS + "```\n\n### 3.2 Core estimand\n")
+    spec = (
+        "### 3.1 Classification decision\n\n```text\n"
+        "# the supplied code and the correction, both recorded\n"
+        + CLASSIFICATION_ASSIGNMENTS
+        + "```\n\n### 3.2 Core estimand\n"
+    )
     assert m.classification_block(spec) == [
         "# the supplied code and the correction, both recorded",
-        *CLASSIFICATION_ASSIGNMENTS.splitlines()]
+        *CLASSIFICATION_ASSIGNMENTS.splitlines(),
+    ]
     assert m.parse_classification_record(spec)["industry_title"] == "Logging"
 
 
 def test_classification_block_returns_only_the_fenced_lines():
-    spec = ("### 3.1 Classification decision\n\nProse before the fence.\n\n"
-            "```text\n" + CLASSIFICATION_ASSIGNMENTS + "```\n\nProse after it.\n\n"
-            "### 3.2 Core estimand\n")
+    spec = (
+        "### 3.1 Classification decision\n\nProse before the fence.\n\n"
+        "```text\n" + CLASSIFICATION_ASSIGNMENTS + "```\n\nProse after it.\n\n"
+        "### 3.2 Core estimand\n"
+    )
     assert m.classification_block(spec) == CLASSIFICATION_ASSIGNMENTS.splitlines()
 
 
@@ -514,12 +553,14 @@ def test_parse_appendix_a_sources_reads_the_real_spec_block():
 def test_parse_appendix_a_sources_does_not_let_enabled_drift_onto_a_sibling_key():
     """`release_status`, `api_key_env` and `fail_on_unknown_disclosure_regime` sit at the same
     indent as `enabled` in the real block; only an exact `enabled` match may set the flag."""
-    block = ("sources:\n"
-             "  qcew:\n    enabled: true\n    release_status: 'final'\n"
-             "  cbp:\n    api_key_env: 'CENSUS_API_KEY'\n    enabled: false\n"
-             "    fail_on_unknown_disclosure_regime: true\n"
-             "  mystery:\n    release_status: 'final'\n"
-             "\nconstraints:\n  enforce_integrality: true\n")
+    block = (
+        "sources:\n"
+        "  qcew:\n    enabled: true\n    release_status: 'final'\n"
+        "  cbp:\n    api_key_env: 'CENSUS_API_KEY'\n    enabled: false\n"
+        "    fail_on_unknown_disclosure_regime: true\n"
+        "  mystery:\n    release_status: 'final'\n"
+        "\nconstraints:\n  enforce_integrality: true\n"
+    )
     assert m.parse_appendix_a_sources(block) == {"qcew": True, "cbp": False, "mystery": False}
 
 
@@ -566,9 +607,12 @@ def test_check_findings_filled_reports_an_empty_access_route():
 def test_check_roadmap_fields_reports_a_field_absent_from_the_document():
     """Present and filled in the summary is not enough: criterion E1 is about the finding
     file, so a field that never reaches the document is a failure."""
-    summaries = {source: summary(source, findings={key: "x" for _, s, key in m.ROADMAP_FIELDS
-                                                   if s == source})
-                 for source in {s for _, s, _ in m.ROADMAP_FIELDS}}
+    summaries = {
+        source: summary(
+            source, findings={key: "x" for _, s, key in m.ROADMAP_FIELDS if s == source}
+        )
+        for source in {s for _, s, _ in m.ROADMAP_FIELDS}
+    }
     complete_doc = " ".join(f'"{key}"' for _, _, key in m.ROADMAP_FIELDS)
     assert m.check_roadmap_fields(summaries, complete_doc) == []
     failures = m.check_roadmap_fields(summaries, complete_doc.replace('"branch"', ""))
@@ -599,7 +643,8 @@ def test_every_roadmap_field_names_a_key_its_source_script_still_writes():
         for source in re.findall(r'^SOURCE(?:_[A-Z]+)? = "([a-z_]+)"$', text, re.MULTILINE):
             by_source[source] = text
     missing = [
-        (source, key) for _, source, key in m.ROADMAP_FIELDS
+        (source, key)
+        for _, source, key in m.ROADMAP_FIELDS
         if source not in by_source or f'"{key}"' not in by_source[source]
     ]
     assert missing == []
@@ -613,7 +658,7 @@ def test_check_verdict_sentence_accepts_a_one_sentence_verdict():
 
 
 def test_check_verdict_sentence_tolerates_an_interior_abbreviation():
-    """"U.S. TOTAL" and "D.C." are area titles, not sentence ends."""
+    """ "U.S. TOTAL" and "D.C." are area titles, not sentence ends."""
     sentence = GOOD_VERDICT[:-1] + " for U.S. TOTAL and the D.C. area."
     assert m.check_verdict_sentence(sentence) == []
 
@@ -646,20 +691,24 @@ def test_check_verdict_sentence_requires_the_geography_universe_statement():
 
 
 def test_check_verdict_reports_a_verdict_sentence_missing_from_the_document():
-    summaries = {"qcew_identity": summary("qcew_identity",
-                                          findings={"branch": "decline",
-                                                    "verdict_sentence": GOOD_VERDICT}),
-                 "qcew_routes": summary("qcew_routes", findings={"earliest_year_served": 2014})}
+    summaries = {
+        "qcew_identity": summary(
+            "qcew_identity", findings={"branch": "decline", "verdict_sentence": GOOD_VERDICT}
+        ),
+        "qcew_routes": summary("qcew_routes", findings={"earliest_year_served": 2014}),
+    }
     assert m.check_verdict(summaries, GOOD_VERDICT) == []
     failures = m.check_verdict(summaries, "a document without it")
     assert [f.criterion for f in failures] == ["E2"]
 
 
 def test_check_verdict_rejects_a_branch_outside_the_three():
-    summaries = {"qcew_identity": summary("qcew_identity",
-                                          findings={"branch": "maybe",
-                                                    "verdict_sentence": GOOD_VERDICT}),
-                 "qcew_routes": summary("qcew_routes", findings={"earliest_year_served": 2014})}
+    summaries = {
+        "qcew_identity": summary(
+            "qcew_identity", findings={"branch": "maybe", "verdict_sentence": GOOD_VERDICT}
+        ),
+        "qcew_routes": summary("qcew_routes", findings={"earliest_year_served": 2014}),
+    }
     failures = m.check_verdict(summaries, GOOD_VERDICT)
     assert any("enforce/residual_cells/decline" in f.detail for f in failures)
 
@@ -668,8 +717,7 @@ def test_check_verdict_rejects_a_branch_outside_the_three():
 def test_check_year_boundary_rejects_a_year_that_is_not_an_integer(year):
     """E3: a reference year, not an approximation -- and `True` is an `int` subclass, which is
     why the check tests for `bool` first."""
-    summaries = {"qcew_routes": summary("qcew_routes",
-                                        findings={"earliest_year_served": year})}
+    summaries = {"qcew_routes": summary("qcew_routes", findings={"earliest_year_served": year})}
     failures = m.check_year_boundary(summaries)
     assert [f.criterion for f in failures] == ["E3"]
 
@@ -677,8 +725,7 @@ def test_check_year_boundary_rejects_a_year_that_is_not_an_integer(year):
 def test_check_year_boundary_accepts_a_reference_year_and_needs_no_document():
     """E3's whole input is one findings value. It takes no `doc_text` parameter at all now, so
     it cannot be put back behind a document guard without the signature change being visible."""
-    summaries = {"qcew_routes": summary("qcew_routes",
-                                        findings={"earliest_year_served": 2014})}
+    summaries = {"qcew_routes": summary("qcew_routes", findings={"earliest_year_served": 2014})}
     assert m.check_year_boundary(summaries) == []
 
 
@@ -730,9 +777,11 @@ def test_the_verdict_check_runs_and_reports_against_an_empty_document():
     """`check_verdict` takes `str`, not `str | None`, and `main` calls it for any non-`None`
     `doc_text`. So for an empty document it runs, reads it, and fails E2 on the sentence it
     cannot find -- which is why no failure detail may say the verdict check did not run."""
-    summaries = {"qcew_identity": summary("qcew_identity",
-                                          findings={"branch": "decline",
-                                                    "verdict_sentence": GOOD_VERDICT})}
+    summaries = {
+        "qcew_identity": summary(
+            "qcew_identity", findings={"branch": "decline", "verdict_sentence": GOOD_VERDICT}
+        )
+    }
     failures = m.check_verdict(summaries, "   \n")
     assert [f.criterion for f in failures] == ["E2"]
     assert "not present in the finding document" in failures[0].detail
@@ -746,16 +795,19 @@ def test_the_empty_branch_claims_nothing_about_checks_that_did_not_run():
     assert all("did not run" not in f.detail for f in empty)
     assert all("the checks that" not in f.detail for f in empty)
     verdict_failure = next(f for f in empty if f.criterion == "E2")
-    assert verdict_failure.detail == "the finding file is empty, so it carries no verdict "\
-                                     "sentence"
+    assert (
+        verdict_failure.detail == "the finding file is empty, so it carries no verdict " "sentence"
+    )
 
     absent = m.check_document(None, {"industry_code_used": "113310"}, {"qcew": True})
     assert all("did not run" in f.detail for f in absent)
 
 
 def test_check_document_reports_a_missing_classification_value():
-    doc = "# findings\ncannot be implemented without\nGeography universe\nTPO/FIA coverage\n" \
-          "Optional state sources\n`qcew`\n"
+    doc = (
+        "# findings\ncannot be implemented without\nGeography universe\nTPO/FIA coverage\n"
+        "Optional state sources\n`qcew`\n"
+    )
     failures = m.check_document(doc, {"industry_code_supplied": "1113310"}, {"qcew": True})
     assert [f.criterion for f in failures] == ["E1"]
     assert "1113310" in failures[0].detail
@@ -763,8 +815,7 @@ def test_check_document_reports_a_missing_classification_value():
 
 def test_check_document_requires_the_appendix_a_sources_and_the_section_headings():
     doc = "# findings\n113310\n"
-    failures = m.check_document(doc, {"industry_code_used": "113310"},
-                                {"qcew": True, "bea": False})
+    failures = m.check_document(doc, {"industry_code_used": "113310"}, {"qcew": True, "bea": False})
     assert {f.criterion for f in failures} == {"C"}
     details = " ".join(f.detail for f in failures)
     assert "'qcew'" in details and "'bea'" in details
@@ -785,20 +836,29 @@ def test_main_does_not_pass_e3_when_the_document_is_absent(tmp_path, monkeypatch
     nothing having looked at `earliest_year_served` at all. Here it is a string, so an E3 that
     ran must fail."""
     code, verdicts = run_gate(
-        tmp_path, monkeypatch, capsys, doc_text=None,
-        qcew_routes=summary("qcew_routes", findings={"earliest_year_served": "2017"}))
+        tmp_path,
+        monkeypatch,
+        capsys,
+        doc_text=None,
+        qcew_routes=summary("qcew_routes", findings={"earliest_year_served": "2017"}),
+    )
     assert code == 1
     assert verdicts["E3"] == "FAIL"
     assert verdicts["E1"] == "FAIL"
 
 
 def test_main_passes_e3_on_a_real_reference_year_with_the_document_absent(
-        tmp_path, monkeypatch, capsys):
+    tmp_path, monkeypatch, capsys
+):
     """The other direction, so the fix above is a check that ran and not a criterion wired to
     fail: the same document-absent run passes E3 when the year is an `int`."""
     _, verdicts = run_gate(
-        tmp_path, monkeypatch, capsys, doc_text=None,
-        qcew_routes=summary("qcew_routes", findings={"earliest_year_served": 2017}))
+        tmp_path,
+        monkeypatch,
+        capsys,
+        doc_text=None,
+        qcew_routes=summary("qcew_routes", findings={"earliest_year_served": 2017}),
+    )
     assert verdicts["E3"] == "PASS"
 
 
@@ -812,8 +872,7 @@ def test_main_does_not_pass_c_for_an_empty_finding_document(tmp_path, monkeypatc
     assert verdicts["E1"] == "FAIL"
 
 
-def test_main_reports_a_criterion_line_for_every_declared_criterion(
-        tmp_path, monkeypatch, capsys):
+def test_main_reports_a_criterion_line_for_every_declared_criterion(tmp_path, monkeypatch, capsys):
     """The report is only readable as a whole: a criterion silently dropped from the output is
     as bad as one printing an unchecked PASS."""
     _, verdicts = run_gate(tmp_path, monkeypatch, capsys, doc_text=None)
@@ -826,16 +885,17 @@ def test_main_reports_a_criterion_line_for_every_declared_criterion(
 def test_write_manifest_writes_lf_line_endings_and_sorted_rows(tmp_path):
     """`csv.DictWriter` defaults to CRLF; this file is tracked text in an LF repository."""
     path = tmp_path / "manifest.csv"
-    rows = [{**extract("ces", "x"), "path": "ces/b.json"},
-            {**extract("bds", "x"), "path": "bds/z.json"},
-            {**extract("bds", "x"), "path": "bds/a.json"}]
+    rows = [
+        {**extract("ces", "x"), "path": "ces/b.json"},
+        {**extract("bds", "x"), "path": "bds/z.json"},
+        {**extract("bds", "x"), "path": "bds/a.json"},
+    ]
     m.write_manifest(path, rows)
     raw = path.read_bytes()
     assert b"\r\n" not in raw
     lines = raw.decode().splitlines()
     assert lines[0] == ",".join(m.FIELDS)
-    assert [line.split(",")[2] for line in lines[1:]] == ["bds/a.json", "bds/z.json",
-                                                          "ces/b.json"]
+    assert [line.split(",")[2] for line in lines[1:]] == ["bds/a.json", "bds/z.json", "ces/b.json"]
 
 
 # --- the shipped artifacts (tracked files only) ------------------------------------------------

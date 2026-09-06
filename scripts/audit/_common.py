@@ -46,10 +46,57 @@ TIMEOUT_SECONDS = 300.0
 # Appendix A `geography_universe: 'states_dc'` — the 50 states plus D.C., as two-digit FIPS.
 # Shared here, not re-declared per script, so Tasks 4 and 6 cannot drift against each other.
 STATES_DC_FIPS = (
-    "01", "02", "04", "05", "06", "08", "09", "10", "11", "12", "13", "15", "16", "17",
-    "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
-    "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "44", "45", "46",
-    "47", "48", "49", "50", "51", "53", "54", "55", "56",
+    "01",
+    "02",
+    "04",
+    "05",
+    "06",
+    "08",
+    "09",
+    "10",
+    "11",
+    "12",
+    "13",
+    "15",
+    "16",
+    "17",
+    "18",
+    "19",
+    "20",
+    "21",
+    "22",
+    "23",
+    "24",
+    "25",
+    "26",
+    "27",
+    "28",
+    "29",
+    "30",
+    "31",
+    "32",
+    "33",
+    "34",
+    "35",
+    "36",
+    "37",
+    "38",
+    "39",
+    "40",
+    "41",
+    "42",
+    "44",
+    "45",
+    "46",
+    "47",
+    "48",
+    "49",
+    "50",
+    "51",
+    "53",
+    "54",
+    "55",
+    "56",
 )
 assert len(STATES_DC_FIPS) == 51, "states_dc universe must be 50 states + D.C."
 STATE_AREAS = {f"{f}000" for f in STATES_DC_FIPS}
@@ -57,8 +104,14 @@ NATIONAL_AREA = "US000"
 
 SECRET_ENV_VARS = ("CENSUS_API_KEY", "BLS_API_KEY", "BEA_API_KEY", "FRED_API_KEY")
 ACCESS_STATUSES = ("verified", "documented", "not_obtainable")
-COVERAGE_KEYS = ("published_start", "published_end", "window_start", "window_end",
-                 "covered", "uncovered")
+COVERAGE_KEYS = (
+    "published_start",
+    "published_end",
+    "window_start",
+    "window_end",
+    "covered",
+    "uncovered",
+)
 # `window_start`/`window_end` are D1's window, identical in every summary. `published_start`
 # and `published_end` are NOT uniform, and a reader who takes them as always-measured, or as
 # always denominated in years, will be wrong. Across the twelve shipped summaries they carry:
@@ -107,9 +160,7 @@ def contact_email() -> str:
 
 def build_client() -> httpx.Client:
     ua = f"logging-employment-audit/0 ({contact_email()})"
-    return httpx.Client(
-        headers={"User-Agent": ua}, timeout=TIMEOUT_SECONDS, follow_redirects=True
-    )
+    return httpx.Client(headers={"User-Agent": ua}, timeout=TIMEOUT_SECONDS, follow_redirects=True)
 
 
 _T = TypeVar("_T")
@@ -248,9 +299,7 @@ def record_extract(
     return ExtractRecord(source, url, str(dest), digest, len(content), _utcnow(), http_status)
 
 
-def download_extract(
-    client: httpx.Client, source: str, url: str, rel_path: str
-) -> ExtractRecord:
+def download_extract(client: httpx.Client, source: str, url: str, rel_path: str) -> ExtractRecord:
     """Stream a large file to disk, hashing as it goes (QCEW bulk ZIPs are 300-500 MB).
 
     Streams to a `.part` sibling of `dest` and `os.replace`s it into place only once the

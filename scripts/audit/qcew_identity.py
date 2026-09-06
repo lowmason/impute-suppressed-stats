@@ -45,9 +45,8 @@ from __future__ import annotations
 
 from typing import Any
 
-import polars as pl
-
 import _common as c
+import polars as pl
 
 SOURCE = "qcew_identity"
 
@@ -62,10 +61,25 @@ MONTH_KEYS = ["year", "month"]
 
 # The two comparison-table contracts. `classify_identity` reads nothing outside these, so the
 # rule can be exercised on toy frames that never touch the panel.
-QUARTER_COLUMNS = ("year", "qtr", "national_estabs", "states_dc_estabs", "other_estabs",
-                   "estab_gap", "estab_gap_after_other")
-MONTH_COLUMNS = ("year", "month", "national_emp", "states_dc_emp", "other_emp", "emp_gap",
-                 "emp_gap_after_other", "n_states_suppressed")
+QUARTER_COLUMNS = (
+    "year",
+    "qtr",
+    "national_estabs",
+    "states_dc_estabs",
+    "other_estabs",
+    "estab_gap",
+    "estab_gap_after_other",
+)
+MONTH_COLUMNS = (
+    "year",
+    "month",
+    "national_emp",
+    "states_dc_emp",
+    "other_emp",
+    "emp_gap",
+    "emp_gap_after_other",
+    "n_states_suppressed",
+)
 
 # What gets persisted: the rule's columns plus the as-published non-state amount. `other_estabs`
 # and `other_emp` are containment-adjusted (see `comparison_tables`), so on an `outside` verdict
@@ -167,8 +181,10 @@ def classify_identity(quarters: pl.DataFrame, months: pl.DataFrame) -> dict:
 
     evidence = {
         "estab_identity_closes_after_other_areas": estab_closes,
-        "other_areas_present": (_has_nonzero_or_unpublished(quarters["other_estabs"])
-                                or _has_nonzero_or_unpublished(months["other_emp"])),
+        "other_areas_present": (
+            _has_nonzero_or_unpublished(quarters["other_estabs"])
+            or _has_nonzero_or_unpublished(months["other_emp"])
+        ),
         "employment_residual_never_negative": n_negative == 0,
         "clean_months": int(clean.height),
         "clean_months_close": clean_closes,
@@ -190,50 +206,82 @@ def classify_identity(quarters: pl.DataFrame, months: pl.DataFrame) -> dict:
         return {"branch": branch, "reason": reason, "evidence": evidence}
 
     if evaluable.height != quarters.height or quarters.height == 0:
-        return decided("decline", (
-            f"only {evaluable.height} of {quarters.height} quarter(s) carry an evaluable "
-            f"establishment gap, because a reference establishment count is unpublished in the "
-            f"other {n_unevaluable}, so the state universe cannot be shown to exhaust the "
-            f"national universe"))
+        return decided(
+            "decline",
+            (
+                f"only {evaluable.height} of {quarters.height} quarter(s) carry an evaluable "
+                f"establishment gap, because a reference establishment count is unpublished in the "
+                f"other {n_unevaluable}, so the state universe cannot be shown to exhaust the "
+                f"national universe"
+            ),
+        )
     if not estab_closes:
-        return decided("decline", (
-            f"the establishment gap after non-state areas is non-zero in "
-            f"{evaluable.height - n_closing} of {evaluable.height} evaluable quarter(s), "
-            f"reaching {max_estab_gap} in absolute value, so the national universe is not "
-            f"explained by the configured state geography"))
+        return decided(
+            "decline",
+            (
+                f"the establishment gap after non-state areas is non-zero in "
+                f"{evaluable.height - n_closing} of {evaluable.height} evaluable quarter(s), "
+                f"reaching {max_estab_gap} in absolute value, so the national universe is not "
+                f"explained by the configured state geography"
+            ),
+        )
     if n_negative:
-        return decided("decline", (
-            f"{n_negative} of {testable.height} testable month(s) carry a negative employment "
-            f"residual after non-state areas, the smallest being {min_emp_gap}, which no amount "
-            f"of state suppression can produce and which therefore indicates a definitional "
-            f"mismatch rather than a withheld cell"))
+        return decided(
+            "decline",
+            (
+                f"{n_negative} of {testable.height} testable month(s) carry a negative employment "
+                f"residual after non-state areas, the smallest being {min_emp_gap}, which no amount "
+                f"of state suppression can produce and which therefore indicates a definitional "
+                f"mismatch rather than a withheld cell"
+            ),
+        )
     if testable.height == 0:
-        return decided("decline", (
-            f"none of the {months.height} month(s) carries both a published national and a "
-            f"published non-state employment value, so the employment identity is untestable "
-            f"on published values"))
+        return decided(
+            "decline",
+            (
+                f"none of the {months.height} month(s) carries both a published national and a "
+                f"published non-state employment value, so the employment identity is untestable "
+                f"on published values"
+            ),
+        )
     if clean.height == 0:
-        return decided("decline", (
-            f"every one of the {testable.height} testable month(s) carries at least one "
-            f"{SUPPRESSION_CODE_MEANING} state cell, so the employment identity is untestable "
-            f"on a complete published state sum"))
+        return decided(
+            "decline",
+            (
+                f"every one of the {testable.height} testable month(s) carries at least one "
+                f"{SUPPRESSION_CODE_MEANING} state cell, so the employment identity is untestable "
+                f"on a complete published state sum"
+            ),
+        )
     if not clean_closes:
-        return decided("decline", (
-            f"the employment gap after non-state areas is non-zero in "
-            f"{clean.height - n_clean_closing} of the {clean.height} month(s) with no "
-            f"{SUPPRESSION_CODE_MEANING} state cell, reaching {max_clean_gap} in absolute "
-            f"value, so the national total is not the sum of the state universe in an "
-            f"unsuppressed month"))
+        return decided(
+            "decline",
+            (
+                f"the employment gap after non-state areas is non-zero in "
+                f"{clean.height - n_clean_closing} of the {clean.height} month(s) with no "
+                f"{SUPPRESSION_CODE_MEANING} state cell, reaching {max_clean_gap} in absolute "
+                f"value, so the national total is not the sum of the state universe in an "
+                f"unsuppressed month"
+            ),
+        )
     if evidence["other_areas_present"]:
-        return decided("residual_cells", (
-            f"the identity closes across all {evaluable.height} quarter(s) and all "
-            f"{clean.height} unsuppressed month(s) only once the non-state areas the panel "
-            f"carries are subtracted, so those areas have to enter as explicit residual cells "
-            f"rather than be controlled away"))
-    return decided("enforce", (
-        f"the national total equals the states+DC published sum exactly across all "
-        f"{evaluable.height} quarter(s) and all {clean.height} month(s) with no "
-        f"{SUPPRESSION_CODE_MEANING} state cell, with no non-state area contributing a value"))
+        return decided(
+            "residual_cells",
+            (
+                f"the identity closes across all {evaluable.height} quarter(s) and all "
+                f"{clean.height} unsuppressed month(s) only once the non-state areas the panel "
+                f"carries are subtracted, so those areas have to enter as explicit residual cells "
+                f"rather than be controlled away"
+            ),
+        )
+    return decided(
+        "enforce",
+        (
+            f"the national total equals the states+DC published sum exactly across all "
+            f"{evaluable.height} quarter(s) and all {clean.height} month(s) with no "
+            f"{SUPPRESSION_CODE_MEANING} state cell, with no non-state area contributing a value"
+        ),
+    )
 
 
 def _published_sum(frame: pl.DataFrame, keys: list[str], value: str, alias: str) -> pl.DataFrame:
@@ -241,9 +289,7 @@ def _published_sum(frame: pl.DataFrame, keys: list[str], value: str, alias: str)
     return frame.group_by(keys).agg(pl.col(value).sum().cast(pl.Int64).alias(alias))
 
 
-def _reference_parts(
-    frame: pl.DataFrame, keys: list[str], value: str, alias: str
-) -> pl.DataFrame:
+def _reference_parts(frame: pl.DataFrame, keys: list[str], value: str, alias: str) -> pl.DataFrame:
     """The reference side: carry the sum *and* the count of unpublished cells, so the join
     below can tell 'this area published nothing here' from 'this area is absent here'."""
     return frame.group_by(keys).agg(
@@ -297,13 +343,29 @@ def raw_quarter_table(estabs: pl.DataFrame) -> pl.DataFrame:
     subtraction. `estab_gap` here is the raw `national - states_dc`; nothing is netted out of it
     until containment has been measured."""
     return (
-        estabs.select(QUARTER_KEYS).unique()
-        .join(_reference_parts(_by_class(estabs, NATIONAL), QUARTER_KEYS,
-                               "qtrly_estabs", "national_estabs"), on=QUARTER_KEYS, how="left")
-        .join(_published_sum(_by_class(estabs, STATES_DC), QUARTER_KEYS,
-                             "qtrly_estabs", "states_dc_estabs"), on=QUARTER_KEYS, how="left")
-        .join(_reference_parts(_by_class(estabs, OTHER), QUARTER_KEYS,
-                               "qtrly_estabs", "other_published"), on=QUARTER_KEYS, how="left")
+        estabs.select(QUARTER_KEYS)
+        .unique()
+        .join(
+            _reference_parts(
+                _by_class(estabs, NATIONAL), QUARTER_KEYS, "qtrly_estabs", "national_estabs"
+            ),
+            on=QUARTER_KEYS,
+            how="left",
+        )
+        .join(
+            _published_sum(
+                _by_class(estabs, STATES_DC), QUARTER_KEYS, "qtrly_estabs", "states_dc_estabs"
+            ),
+            on=QUARTER_KEYS,
+            how="left",
+        )
+        .join(
+            _reference_parts(
+                _by_class(estabs, OTHER), QUARTER_KEYS, "qtrly_estabs", "other_published"
+            ),
+            on=QUARTER_KEYS,
+            how="left",
+        )
         .with_columns(
             # A missing national row means no national total was published for that quarter,
             # which is unevaluable -- not zero. A missing non-state group means no such area
@@ -313,8 +375,9 @@ def raw_quarter_table(estabs: pl.DataFrame) -> pl.DataFrame:
             pl.col("states_dc_estabs").fill_null(0),
         )
         .with_columns(estab_gap=pl.col("national_estabs") - pl.col("states_dc_estabs"))
-        .select([*QUARTER_KEYS, "national_estabs", "states_dc_estabs", "other_published",
-                 "estab_gap"])
+        .select(
+            [*QUARTER_KEYS, "national_estabs", "states_dc_estabs", "other_published", "estab_gap"]
+        )
         .sort(QUARTER_KEYS)
     )
 
@@ -396,17 +459,29 @@ def comparison_tables(panel: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame, 
     )
 
     suppressed_states = (
-        _by_class(panel, STATES_DC).filter(pl.col("suppressed"))
-        .group_by(MONTH_KEYS).agg(pl.len().cast(pl.Int64).alias("n_states_suppressed"))
+        _by_class(panel, STATES_DC)
+        .filter(pl.col("suppressed"))
+        .group_by(MONTH_KEYS)
+        .agg(pl.len().cast(pl.Int64).alias("n_states_suppressed"))
     )
     months = (
-        panel.select(MONTH_KEYS).unique()
-        .join(_reference_parts(_by_class(panel, NATIONAL), MONTH_KEYS, "emplvl", "national_emp"),
-              on=MONTH_KEYS, how="left")
-        .join(_published_sum(_by_class(panel, STATES_DC), MONTH_KEYS, "emplvl", "states_dc_emp"),
-              on=MONTH_KEYS, how="left")
-        .join(_reference_parts(_by_class(panel, OTHER), MONTH_KEYS, "emplvl", "other_published"),
-              on=MONTH_KEYS, how="left")
+        panel.select(MONTH_KEYS)
+        .unique()
+        .join(
+            _reference_parts(_by_class(panel, NATIONAL), MONTH_KEYS, "emplvl", "national_emp"),
+            on=MONTH_KEYS,
+            how="left",
+        )
+        .join(
+            _published_sum(_by_class(panel, STATES_DC), MONTH_KEYS, "emplvl", "states_dc_emp"),
+            on=MONTH_KEYS,
+            how="left",
+        )
+        .join(
+            _reference_parts(_by_class(panel, OTHER), MONTH_KEYS, "emplvl", "other_published"),
+            on=MONTH_KEYS,
+            how="left",
+        )
         .join(suppressed_states, on=MONTH_KEYS, how="left")
         .with_columns(
             _resolve_reference("national_emp", None),
@@ -414,9 +489,7 @@ def comparison_tables(panel: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame, 
             pl.col("states_dc_emp").fill_null(0),
             pl.col("n_states_suppressed").fill_null(0),
         )
-        .with_columns(
-            other_emp=pl.col("other_published") if subtract else pl.lit(0, pl.Int64)
-        )
+        .with_columns(other_emp=pl.col("other_published") if subtract else pl.lit(0, pl.Int64))
         .with_columns(emp_gap=pl.col("national_emp") - pl.col("states_dc_emp"))
         .with_columns(emp_gap_after_other=pl.col("emp_gap") - pl.col("other_emp"))
         .rename({"other_published": "other_emp_published"})
@@ -459,8 +532,11 @@ def structural_findings(panel: pl.DataFrame, estabs: pl.DataFrame) -> dict:
         .to_dicts()
     )
     short_span = (
-        states.group_by("area_fips", "area_title").agg(pl.len().cast(pl.Int64).alias("months"))
-        .filter(pl.col("months") < n_months).sort("area_fips").to_dicts()
+        states.group_by("area_fips", "area_title")
+        .agg(pl.len().cast(pl.Int64).alias("months"))
+        .filter(pl.col("months") < n_months)
+        .sort("area_fips")
+        .to_dicts()
     )
     national, other = _by_class(panel, NATIONAL), _by_class(panel, OTHER)
     nat_estabs, other_estabs = _by_class(estabs, NATIONAL), _by_class(estabs, OTHER)
@@ -474,7 +550,8 @@ def structural_findings(panel: pl.DataFrame, estabs: pl.DataFrame) -> dict:
         "quarters_covered": int(panel.select(QUARTER_KEYS).n_unique()),
         "states_dc_areas": int(n_areas),
         "states_dc_areas_per_month": {
-            "min": int(per_month["n_areas"].min()), "max": int(per_month["n_areas"].max()),
+            "min": int(per_month["n_areas"].min()),
+            "max": int(per_month["n_areas"].max()),
             "constant": bool(per_month["n_areas"].min() == per_month["n_areas"].max()),
         },
         "states_dc_suppressed_per_month": {
@@ -485,9 +562,7 @@ def structural_findings(panel: pl.DataFrame, estabs: pl.DataFrame) -> dict:
         "states_dc_short_span_areas": short_span,
         "states_dc_suppressed_cells": int(flagged),
         "states_dc_unpublished_emp_cells": int(unpublished_emp),
-        "states_dc_unpublished_emp_is_exactly_suppressed": bool(
-            unpublished_emp == flagged == both
-        ),
+        "states_dc_unpublished_emp_is_exactly_suppressed": bool(unpublished_emp == flagged == both),
         "states_dc_unpublished_estab_cells": int(
             _by_class(estabs, STATES_DC).filter(pl.col("qtrly_estabs").is_null()).height
         ),
@@ -509,10 +584,13 @@ def structural_findings(panel: pl.DataFrame, estabs: pl.DataFrame) -> dict:
 def absent_state_months_note(structural: dict, evidence: dict) -> str:
     """Why a states+DC area-month with no published row is read as a true zero. The counts are
     computed; the reading drawn from them is not, and is marked inline as such."""
-    areas = ", ".join(
-        f"{a['area_title'] or a['area_fips']} ({a['months']} month(s))"
-        for a in structural["states_dc_short_span_areas"]
-    ) or "none"
+    areas = (
+        ", ".join(
+            f"{a['area_title'] or a['area_fips']} ({a['months']} month(s))"
+            for a in structural["states_dc_short_span_areas"]
+        )
+        or "none"
+    )
     per_month = structural["states_dc_areas_per_month"]
     return (
         f"Absent states+DC area-months, measured: {structural['states_dc_area_months_absent']} "
@@ -566,11 +644,13 @@ def verified_panel_scope() -> str:
     own_code = codes["findings"]["private_own_code"]
     require_applied(f"own_code == '{own_code}'", "ownership")
 
-    titles_path = next(e["path"] for e in codes["extracts"]
-                       if e["path"].endswith("titles/own_code.csv"))
+    titles_path = next(
+        e["path"] for e in codes["extracts"] if e["path"].endswith("titles/own_code.csv")
+    )
     titles = pl.read_csv(titles_path, infer_schema_length=0)
-    title = dict(zip(titles[titles.columns[0]].to_list(),
-                     titles[titles.columns[1]].to_list(), strict=True))[own_code]
+    title = dict(
+        zip(titles[titles.columns[0]].to_list(), titles[titles.columns[1]].to_list(), strict=True)
+    )[own_code]
     return f"industry {c.INDUSTRY_CODE} and own_code {own_code} ('{title}')"
 
 
@@ -603,24 +683,29 @@ def _clean_month_clause(evidence: dict, months: pl.DataFrame) -> str:
     month in the panel, which is a different population whenever some month is untestable.
     """
     if evidence["testable_months"] == 0:
-        return (f"none of the {evidence['months_total']} month(s) carries both a published "
-                f"national and a published non-state employment value")
+        return (
+            f"none of the {evidence['months_total']} month(s) carries both a published "
+            f"national and a published non-state employment value"
+        )
     testable = months.filter(pl.col("emp_gap_after_other").is_not_null())
     if evidence["clean_months"] == 0:
-        return (f"each of the {evidence['testable_months']} testable month(s) carries between "
-                f"{int(testable['n_states_suppressed'].min())} and "
-                f"{int(testable['n_states_suppressed'].max())} {SUPPRESSION_CODE_MEANING} "
-                f"states+DC cells and an employment gap after non-state areas of at least "
-                f"{evidence['min_emp_gap_after_other']}")
-    return (f"in {evidence['clean_months_closing']} of the {evidence['clean_months']} testable "
-            f"month(s) carrying no {SUPPRESSION_CODE_MEANING} states+DC cell the employment "
-            f"gap after non-state areas is exactly zero, its largest absolute value being "
-            f"{evidence['max_abs_clean_emp_gap']}")
+        return (
+            f"each of the {evidence['testable_months']} testable month(s) carries between "
+            f"{int(testable['n_states_suppressed'].min())} and "
+            f"{int(testable['n_states_suppressed'].max())} {SUPPRESSION_CODE_MEANING} "
+            f"states+DC cells and an employment gap after non-state areas of at least "
+            f"{evidence['min_emp_gap_after_other']}"
+        )
+    return (
+        f"in {evidence['clean_months_closing']} of the {evidence['clean_months']} testable "
+        f"month(s) carrying no {SUPPRESSION_CODE_MEANING} states+DC cell the employment "
+        f"gap after non-state areas is exactly zero, its largest absolute value being "
+        f"{evidence['max_abs_clean_emp_gap']}"
+    )
 
 
 def build_verdict_sentence(
-    result: dict, structural: dict, containment: dict, months: pl.DataFrame,
-    span: str, scope: str
+    result: dict, structural: dict, containment: dict, months: pl.DataFrame, span: str, scope: str
 ) -> str:
     """One sentence, every figure in it interpolated from this run's tables.
 
@@ -632,8 +717,11 @@ def build_verdict_sentence(
     evidence = result["evidence"]
     others = structural["other_state_level_areas"]
     names = ", ".join(o["area_title"] or o["area_fips"] for o in others) or "none"
-    subtracted = (" after subtracting the non-state amount measured inside it"
-                  if containment["subtraction_applied"] else "")
+    subtracted = (
+        " after subtracting the non-state amount measured inside it"
+        if containment["subtraction_applied"]
+        else ""
+    )
     return (
         f"{result['branch']}: across the {evidence['quarters_total']} quarter(s) and "
         f"{evidence['months_total']} month(s) the panel covers ({span}), the national "
@@ -663,31 +751,40 @@ def coverage_span(months: pl.DataFrame) -> dict[str, str]:
     window = [f"{y}-{m:02d}" for y in c.WINDOW_YEARS for m in range(1, 13)]
     uncovered = [label for label in window if label not in set(labels)]
     return {
-        "published_start": labels[0], "published_end": labels[-1],
-        "window_start": c.WINDOW_START, "window_end": c.WINDOW_END,
+        "published_start": labels[0],
+        "published_end": labels[-1],
+        "window_start": c.WINDOW_START,
+        "window_end": c.WINDOW_END,
         "covered": f"{labels[0]}..{labels[-1]} ({len(labels)} month(s))",
         "uncovered": ",".join(uncovered),
     }
 
 
 def main() -> None:
-    panel_path = next(e["path"] for e in c.load_summary("qcew_panel")["extracts"]
-                      if e["path"].endswith("panel.parquet"))
+    panel_path = next(
+        e["path"]
+        for e in c.load_summary("qcew_panel")["extracts"]
+        if e["path"].endswith("panel.parquet")
+    )
     panel = pl.read_parquet(panel_path)
 
     quarters, months, containment = comparison_tables(panel)
     result = classify_identity(quarters, months)
     structural = structural_findings(panel, quarterly_estabs(panel))
 
-    sentence = build_verdict_sentence(result, structural, containment, months,
-                                      _period_label(months), verified_panel_scope())
+    sentence = build_verdict_sentence(
+        result, structural, containment, months, _period_label(months), verified_panel_scope()
+    )
     assert_one_sentence(sentence)
 
     c.write_summary(
         SOURCE,
         coverage_span=coverage_span(months),
-        access={"route": f"derived from qcew_panel ({panel_path})", "status": "verified",
-                "reason": None},
+        access={
+            "route": f"derived from qcew_panel ({panel_path})",
+            "status": "verified",
+            "reason": None,
+        },
         extracts=[],
         findings={
             "quarter_table": quarters.to_dicts(),

@@ -23,10 +23,9 @@ import json
 import pathlib
 
 import _common
+import ces_levels as m
 import polars as pl
 import pytest
-
-import ces_levels as m
 
 # --- embedded_naics -------------------------------------------------------------------------
 
@@ -94,63 +93,105 @@ def test_level_of_an_unrelated_naics_is_other():
 
 # --- sole_code (against the real fetched vocabulary, Task 9) --------------------------------
 
-REAL_DATA_TYPE_TITLES = pl.DataFrame({
-    "data_type_code": ["01", "02", "03", "06", "07", "08", "11", "21", "22", "23", "24", "26",
-                       "30"],
-    "data_type_text": [
-        "All Employees, In Thousands",
-        "Average Weekly Hours of All Employees",
-        "Average Hourly Earnings of All Employees, In Dollars",
-        "Production or Nonsupervisory Employees, In Thousands",
-        "Average Weekly Hours of Production Employees",
-        "Average Hourly Earnings of Production Employees, In Dollars",
-        "Average Weekly Earnings of All Employees, In Dollars",
-        "Diffusion Indexes, 1-month span, seasonally adjusted, total nonfarm",
-        "Diffusion Indexes, 3-month span, seasonally adjusted, total nonfarm",
-        "Diffusion Indexes, 6-month span, seasonally adjusted, total nonfarm",
-        "Diffusion Indexes, 12-month span, seasonally adjusted, total nonfarm",
-        "All Employees, 3-month average change, In Thousands, seasonally adjusted",
-        "Average Weekly Earnings of Production Employees, In Dollars",
-    ],
-})
+REAL_DATA_TYPE_TITLES = pl.DataFrame(
+    {
+        "data_type_code": [
+            "01",
+            "02",
+            "03",
+            "06",
+            "07",
+            "08",
+            "11",
+            "21",
+            "22",
+            "23",
+            "24",
+            "26",
+            "30",
+        ],
+        "data_type_text": [
+            "All Employees, In Thousands",
+            "Average Weekly Hours of All Employees",
+            "Average Hourly Earnings of All Employees, In Dollars",
+            "Production or Nonsupervisory Employees, In Thousands",
+            "Average Weekly Hours of Production Employees",
+            "Average Hourly Earnings of Production Employees, In Dollars",
+            "Average Weekly Earnings of All Employees, In Dollars",
+            "Diffusion Indexes, 1-month span, seasonally adjusted, total nonfarm",
+            "Diffusion Indexes, 3-month span, seasonally adjusted, total nonfarm",
+            "Diffusion Indexes, 6-month span, seasonally adjusted, total nonfarm",
+            "Diffusion Indexes, 12-month span, seasonally adjusted, total nonfarm",
+            "All Employees, 3-month average change, In Thousands, seasonally adjusted",
+            "Average Weekly Earnings of Production Employees, In Dollars",
+        ],
+    }
+)
 
-REAL_AREA_TITLES = pl.DataFrame({
-    "area_code": ["00000", "10180", "10380"],
-    "area_name": ["Statewide", "Abilene, TX", "Aguadilla, PR"],
-})
+REAL_AREA_TITLES = pl.DataFrame(
+    {
+        "area_code": ["00000", "10180", "10380"],
+        "area_name": ["Statewide", "Abilene, TX", "Aguadilla, PR"],
+    }
+)
 
-REAL_INDUSTRY_TITLES = pl.DataFrame({
-    "industry_code": ["10000000", "10113300", "15000000"],
-    "industry_name": ["Mining and Logging", "Logging", "Mining, Logging and Construction"],
-})
+REAL_INDUSTRY_TITLES = pl.DataFrame(
+    {
+        "industry_code": ["10000000", "10113300", "15000000"],
+        "industry_name": ["Mining and Logging", "Logging", "Mining, Logging and Construction"],
+    }
+)
 
 
 def test_sole_code_all_employees_ignores_the_3_month_average_change_series():
     """A looser "^all employees" pattern (no ", in thousands" suffix, no anchor) would also
     match code "26"; the anchored, full-title pattern this script actually uses picks "01"
     alone."""
-    assert m.sole_code(REAL_DATA_TYPE_TITLES, "data_type_code", "data_type_text",
-                       r"(?i)^all employees, in thousands$", "sm.data_type") == "01"
+    assert (
+        m.sole_code(
+            REAL_DATA_TYPE_TITLES,
+            "data_type_code",
+            "data_type_text",
+            r"(?i)^all employees, in thousands$",
+            "sm.data_type",
+        )
+        == "01"
+    )
 
 
 def test_sole_code_statewide_area_matches_the_one_real_row():
-    assert m.sole_code(REAL_AREA_TITLES, "area_code", "area_name", r"(?i)^statewide$",
-                       "sm.area") == "00000"
+    assert (
+        m.sole_code(REAL_AREA_TITLES, "area_code", "area_name", r"(?i)^statewide$", "sm.area")
+        == "00000"
+    )
 
 
 def test_sole_code_mining_and_logging_supersector_excludes_the_broader_title():
     """The exact defect this task found: an anchored, exact-title match on "Mining and Logging"
     picks only "10000000", never "15000000 Mining, Logging and Construction" -- a real, broader
     CES supersector that also contains "logging" as a substring."""
-    assert m.sole_code(REAL_INDUSTRY_TITLES, "industry_code", "industry_name",
-                       r"(?i)^mining and logging$", "sm.industry") == "10000000"
+    assert (
+        m.sole_code(
+            REAL_INDUSTRY_TITLES,
+            "industry_code",
+            "industry_name",
+            r"(?i)^mining and logging$",
+            "sm.industry",
+        )
+        == "10000000"
+    )
 
 
 def test_sole_code_raises_when_no_title_matches():
     empty = REAL_DATA_TYPE_TITLES.filter(pl.col("data_type_code") != "01")
     with pytest.raises(RuntimeError, match="expected exactly one"):
-        m.sole_code(empty, "data_type_code", "data_type_text",
-                   r"(?i)^all employees, in thousands$", "sm.data_type")
+        m.sole_code(
+            empty,
+            "data_type_code",
+            "data_type_text",
+            r"(?i)^all employees, in thousands$",
+            "sm.data_type",
+        )
 
 
 def test_sole_code_raises_when_more_than_one_title_matches():
@@ -160,8 +201,9 @@ def test_sole_code_raises_when_more_than_one_title_matches():
     supersectors and the target itself), not just the two the brief's illustrative filter
     would have silently folded together."""
     with pytest.raises(RuntimeError, match="expected exactly one") as exc_info:
-        m.sole_code(REAL_INDUSTRY_TITLES, "industry_code", "industry_name", r"(?i)logging",
-                   "sm.industry")
+        m.sole_code(
+            REAL_INDUSTRY_TITLES, "industry_code", "industry_name", r"(?i)logging", "sm.industry"
+        )
     for code in ("10000000", "10113300", "15000000"):
         assert code in str(exc_info.value)
 
@@ -172,21 +214,30 @@ def test_sole_code_raises_when_more_than_one_title_matches():
 def _series_frame(rows: list[tuple[str, str, str, str, str, str]]) -> pl.DataFrame:
     return pl.DataFrame(
         rows,
-        schema=["series_id", "state_code", "industry_code", "data_type_code", "area_code",
-                "begin_year", "end_year"],
+        schema=[
+            "series_id",
+            "state_code",
+            "industry_code",
+            "data_type_code",
+            "area_code",
+            "begin_year",
+            "end_year",
+        ],
         orient="row",
     )
 
 
 def test_qualifying_series_keeps_only_matching_industry_type_area_and_window_overlap():
-    df = _series_frame([
-        ("A", "06", "10113300", "01", "00000", "1990", "2026"),  # matches everything
-        ("B", "06", "10113300", "02", "00000", "1990", "2026"),  # wrong data_type
-        ("C", "06", "10113300", "01", "10180", "1990", "2026"),  # wrong area (not statewide)
-        ("D", "06", "10000000", "01", "00000", "1990", "2026"),  # not in codes
-        ("E", "06", "10113300", "01", "00000", "1990", "2016"),  # ends before window starts
-        ("F", "06", "10113300", "01", "00000", "2025", "2026"),  # begins after window ends
-    ])
+    df = _series_frame(
+        [
+            ("A", "06", "10113300", "01", "00000", "1990", "2026"),  # matches everything
+            ("B", "06", "10113300", "02", "00000", "1990", "2026"),  # wrong data_type
+            ("C", "06", "10113300", "01", "10180", "1990", "2026"),  # wrong area (not statewide)
+            ("D", "06", "10000000", "01", "00000", "1990", "2026"),  # not in codes
+            ("E", "06", "10113300", "01", "00000", "1990", "2016"),  # ends before window starts
+            ("F", "06", "10113300", "01", "00000", "2025", "2026"),  # begins after window ends
+        ]
+    )
     out = m.qualifying_series(df, {"10113300"}, "01", "00000")
     assert out["series_id"].to_list() == ["A"]
 
@@ -194,10 +245,12 @@ def test_qualifying_series_keeps_only_matching_industry_type_area_and_window_ove
 def test_qualifying_series_keeps_a_series_that_only_partially_overlaps_the_window():
     """The Interfaces wording is "overlapping the D1 window", not "fully covering" it -- a
     series that starts mid-window or ends mid-window still counts."""
-    df = _series_frame([
-        ("PARTIAL_START", "06", "10113300", "01", "00000", "2020", "2026"),
-        ("PARTIAL_END", "06", "10113300", "01", "00000", "1990", "2019"),
-    ])
+    df = _series_frame(
+        [
+            ("PARTIAL_START", "06", "10113300", "01", "00000", "2020", "2026"),
+            ("PARTIAL_END", "06", "10113300", "01", "00000", "1990", "2019"),
+        ]
+    )
     out = m.qualifying_series(df, {"10113300"}, "01", "00000")
     assert sorted(out["series_id"].to_list()) == ["PARTIAL_END", "PARTIAL_START"]
 
@@ -212,8 +265,9 @@ def test_excluded_broader_codes_returns_the_logging_named_code_not_selected():
         {"industry_code": "15000000", "industry_name": "Mining, Logging and Construction"},
     ]
     out = m.excluded_broader_codes(named, {"10000000", "10113300"})
-    assert out == [{"industry_code": "15000000",
-                    "industry_name": "Mining, Logging and Construction"}]
+    assert out == [
+        {"industry_code": "15000000", "industry_name": "Mining, Logging and Construction"}
+    ]
 
 
 def test_excluded_broader_codes_empty_when_every_named_code_is_a_candidate():
@@ -252,10 +306,11 @@ def test_broader_code_note_says_nothing_excluded_when_the_list_is_empty():
 
 
 def test_broader_code_note_names_the_excluded_code_and_the_near_miss_sm_state_codes():
-    excluded = [{"industry_code": "15000000",
-                "industry_name": "Mining, Logging and Construction"}]
-    near_miss = [{"state_code": "11", "industry_code": "15000000", "series_id": "X1"},
-                {"state_code": "10", "industry_code": "15000000", "series_id": "X2"}]
+    excluded = [{"industry_code": "15000000", "industry_name": "Mining, Logging and Construction"}]
+    near_miss = [
+        {"state_code": "11", "industry_code": "15000000", "series_id": "X1"},
+        {"state_code": "10", "industry_code": "15000000", "series_id": "X2"},
+    ]
     note = m.broader_code_note(excluded, near_miss)
     assert "15000000 ('Mining, Logging and Construction')" in note
     assert "10, 11" in note
@@ -265,8 +320,7 @@ def test_broader_code_note_names_the_excluded_code_and_the_near_miss_sm_state_co
 def test_broader_code_note_reports_excluded_with_no_near_miss_sm_state_codes():
     """The branch where a broader code is excluded but no state's classification actually
     depends on it -- must not claim a near-miss that did not happen."""
-    excluded = [{"industry_code": "15000000",
-                "industry_name": "Mining, Logging and Construction"}]
+    excluded = [{"industry_code": "15000000", "industry_name": "Mining, Logging and Construction"}]
     note = m.broader_code_note(excluded, [])
     assert "15000000" in note
     assert "No state's only D1-window-overlapping" in note
@@ -310,10 +364,12 @@ def _series_df(rows: list[tuple[str, str, str, str, str]]) -> pl.DataFrame:
 
 
 def test_window_coverage_note_true_when_every_series_spans_the_full_window():
-    df = _series_df([
-        ("A", "1990", "M01", "2026", "M07"),
-        ("B", "2017", "M01", "2024", "M12"),
-    ])
+    df = _series_df(
+        [
+            ("A", "1990", "M01", "2026", "M07"),
+            ("B", "2017", "M01", "2024", "M12"),
+        ]
+    )
     covered, note = m.window_coverage_note(df)
     assert covered is True
     assert "latest start observed" in note
@@ -325,10 +381,12 @@ def test_window_coverage_note_false_when_a_series_starts_mid_year_after_window_s
     """The exact gap the year-only check missed: begin_year=2017 alone would have passed
     qualifying_series' overlap filter, but begin_period="M06" means this series does not
     cover January 2017 -- window_coverage_note must catch what the year-grain check cannot."""
-    df = _series_df([
-        ("FULL", "1990", "M01", "2026", "M07"),
-        ("MID_YEAR_START", "2017", "M06", "2026", "M07"),
-    ])
+    df = _series_df(
+        [
+            ("FULL", "1990", "M01", "2026", "M07"),
+            ("MID_YEAR_START", "2017", "M06", "2026", "M07"),
+        ]
+    )
     covered, note = m.window_coverage_note(df)
     assert covered is False
     assert "MID_YEAR_START" in note
@@ -338,10 +396,12 @@ def test_window_coverage_note_false_when_a_series_starts_mid_year_after_window_s
 def test_window_coverage_note_false_and_names_a_partially_overlapping_series():
     """The branch this task's dispatch flagged as unchecked in the brief's illustrative code:
     a series that only overlaps part of D1 must not be silently counted as full coverage."""
-    df = _series_df([
-        ("FULL", "1990", "M01", "2026", "M07"),
-        ("LATE_START", "2020", "M01", "2026", "M07"),
-    ])
+    df = _series_df(
+        [
+            ("FULL", "1990", "M01", "2026", "M07"),
+            ("LATE_START", "2020", "M01", "2026", "M07"),
+        ]
+    )
     covered, note = m.window_coverage_note(df)
     assert covered is False
     assert "LATE_START" in note
@@ -371,28 +431,34 @@ def _candidate_codes(industry: pl.DataFrame, supersector: str) -> set[str]:
 
 
 def test_select_candidates_excludes_the_broader_mining_logging_construction_code():
-    industry = _industry_df([
-        ("10000000", "Mining and Logging"),
-        ("10113300", "Logging"),
-        ("15000000", "Mining, Logging and Construction"),
-        ("10212100", "Coal Mining"),
-    ])
+    industry = _industry_df(
+        [
+            ("10000000", "Mining and Logging"),
+            ("10113300", "Logging"),
+            ("15000000", "Mining, Logging and Construction"),
+            ("10212100", "Coal Mining"),
+        ]
+    )
     assert _candidate_codes(industry, supersector="10000000") == {"10000000", "10113300"}
 
 
 def test_select_candidates_keeps_every_embedded_113_code_regardless_of_supersector():
-    industry = _industry_df([
-        ("10113300", "Logging"),
-        ("99113100", "Some Sibling Under 113"),
-    ])
+    industry = _industry_df(
+        [
+            ("10113300", "Logging"),
+            ("99113100", "Some Sibling Under 113"),
+        ]
+    )
     assert _candidate_codes(industry, supersector="10000000") == {"10113300", "99113100"}
 
 
 def test_select_candidates_keeps_only_the_anchored_supersector_not_a_broader_one():
-    industry = _industry_df([
-        ("10000000", "Mining and Logging"),
-        ("15000000", "Mining, Logging and Construction"),
-    ])
+    industry = _industry_df(
+        [
+            ("10000000", "Mining and Logging"),
+            ("15000000", "Mining, Logging and Construction"),
+        ]
+    )
     assert _candidate_codes(industry, supersector="10000000") == {"10000000"}
 
 
@@ -452,8 +518,10 @@ def test_granularity_note_explains_zero_differently_when_113310_is_defined():
 
 # --- shipped findings key names --------------------------------------------------------------
 
-RENAMES = (("publication_level_by_sm_state_code", "publication_level_by_state"),
-           ("near_miss_sm_state_codes", "near_miss_states"))
+RENAMES = (
+    ("publication_level_by_sm_state_code", "publication_level_by_state"),
+    ("near_miss_sm_state_codes", "near_miss_states"),
+)
 
 
 def _ces_summary() -> dict:

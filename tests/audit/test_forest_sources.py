@@ -36,11 +36,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import httpx
-import pytest
-
 import _common
 import forest_sources as m
+import httpx
+import pytest
 
 # --- classify_probe ---------------------------------------------------------------------
 
@@ -334,9 +333,9 @@ def test_extract_json_object_raises_when_braces_never_balance():
 
 def _box_page(payload: str) -> str:
     return (
-        "<html><head><script> Box.config = {\"unrelated\": {}};"
+        '<html><head><script> Box.config = {"unrelated": {}};'
         f" Box.postStreamData = {payload};"
-        " Box.otherThing = {\"also\": \"unrelated\"};</script></head></html>"
+        ' Box.otherThing = {"also": "unrelated"};</script></head></html>'
     )
 
 
@@ -511,7 +510,9 @@ WORKBOOK_RELS_XML = (
 
 def test_xlsx_first_sheet_part_resolves_the_first_sheet_through_its_relationship_id():
     assert m.xlsx_first_sheet_part(WORKBOOK_XML, WORKBOOK_RELS_XML) == (
-        "County Production", "xl/worksheets/sheet1.xml")
+        "County Production",
+        "xl/worksheets/sheet1.xml",
+    )
 
 
 def test_xlsx_first_sheet_part_follows_the_rel_id_not_the_sheet_file_numbering():
@@ -524,7 +525,9 @@ def test_xlsx_first_sheet_part_follows_the_rel_id_not_the_sheet_file_numbering()
         'worksheet" Target="worksheets/sheet7.xml"',
     )
     assert m.xlsx_first_sheet_part(WORKBOOK_XML, rels) == (
-        "County Production", "xl/worksheets/sheet7.xml")
+        "County Production",
+        "xl/worksheets/sheet7.xml",
+    )
 
 
 def test_xlsx_first_sheet_part_returns_none_when_the_relationship_is_absent():
@@ -540,10 +543,28 @@ def test_xlsx_first_sheet_part_returns_none_when_there_are_no_sheets():
 # The real 22-column header row of Alabama_2024.xlsx's first sheet, as recorded in
 # box_navigation.sample_file_first_sheet_headers by the run that fetched it.
 REAL_FIRST_SHEET_HEADERS = [
-    "REGION", "STATECD", "STATE_NAME", "COUNTYCD", "COUNTY_NAME", "YEAR", "OWNCD",
-    "OWNER_MEANING", "SPGRPCD", "SPGRP_NAME", "REMCLASSCD", "REMCLASSCD_MEANING", "SOURCECD",
-    "SOURCECD_MEANING", "PRODCD", "PRODCD_MEANING", "MCFVOL", "RPA_STD_AMOUNT",
-    "RPA_STD_AMOUNT_UOM_CODE", "RPA_STD_AMOUNT_UOM_MEANING", "SAWREMVOL", "GREEN_TONS",
+    "REGION",
+    "STATECD",
+    "STATE_NAME",
+    "COUNTYCD",
+    "COUNTY_NAME",
+    "YEAR",
+    "OWNCD",
+    "OWNER_MEANING",
+    "SPGRPCD",
+    "SPGRP_NAME",
+    "REMCLASSCD",
+    "REMCLASSCD_MEANING",
+    "SOURCECD",
+    "SOURCECD_MEANING",
+    "PRODCD",
+    "PRODCD_MEANING",
+    "MCFVOL",
+    "RPA_STD_AMOUNT",
+    "RPA_STD_AMOUNT_UOM_CODE",
+    "RPA_STD_AMOUNT_UOM_MEANING",
+    "SAWREMVOL",
+    "GREEN_TONS",
 ]
 
 
@@ -565,15 +586,16 @@ def test_classify_header_row_does_not_count_a_uom_code_column_as_a_measure():
 
 def test_classify_header_row_on_an_unread_header_row_reports_empty_lists():
     assert m.classify_header_row([]) == {
-        "county_identifier_headers": [], "volume_measure_headers": []}
+        "county_identifier_headers": [],
+        "volume_measure_headers": [],
+    }
 
 
 # --- scannable_text_page ---------------------------------------------------------------------
 
 
 def test_scannable_text_page_accepts_a_200_with_a_body():
-    assert m.scannable_text_page(
-        {"http_status": 200, "body": b"<html>x</html>"})
+    assert m.scannable_text_page({"http_status": 200, "body": b"<html>x</html>"})
 
 
 def test_scannable_text_page_rejects_a_200_with_an_empty_body():
@@ -600,8 +622,14 @@ def test_scannable_text_page_rejects_a_transport_failure():
 # The real sheet names from Ohio_2021.xlsx, fetched via the legacy Box download route this
 # session and inspected directly with `zipfile` (no new dependency: xlsx is a zip container).
 REAL_TPO_SHEET_NAMES = [
-    "County Production", "State Production", "Receipts", "Wood Movement-IMPORTS",
-    "Wood Movement-EXPORTS", "Mill Locations", "Residue Use State", "Regional Production",
+    "County Production",
+    "State Production",
+    "Receipts",
+    "Wood Movement-IMPORTS",
+    "Wood Movement-EXPORTS",
+    "Mill Locations",
+    "Residue Use State",
+    "Regional Production",
 ]
 
 
@@ -630,8 +658,12 @@ def test_probe_with_retries_stops_early_on_first_real_response():
     calls = iter([(0, 0), (200, 500)])
     sleeps = []
     result = m.probe_with_retries(
-        lambda: next(calls), url="https://example/x", attempts=5, wait_seconds=3.0,
-        sleep=sleeps.append, now=lambda: 0.0,
+        lambda: next(calls),
+        url="https://example/x",
+        attempts=5,
+        wait_seconds=3.0,
+        sleep=sleeps.append,
+        now=lambda: 0.0,
     )
     assert len(result["attempts"]) == 2
     assert result["attempts"][-1]["outcome"] == "reachable"
@@ -640,8 +672,12 @@ def test_probe_with_retries_stops_early_on_first_real_response():
 
 def test_probe_with_retries_exhausts_the_bound_when_every_attempt_transport_fails():
     result = m.probe_with_retries(
-        lambda: (0, 0), url="https://example/x", attempts=3, wait_seconds=1.0,
-        sleep=lambda s: None, now=lambda: 0.0,
+        lambda: (0, 0),
+        url="https://example/x",
+        attempts=3,
+        wait_seconds=1.0,
+        sleep=lambda s: None,
+        now=lambda: 0.0,
     )
     assert len(result["attempts"]) == 3
     assert all(a["outcome"] == "transport_failure" for a in result["attempts"])
@@ -650,8 +686,12 @@ def test_probe_with_retries_exhausts_the_bound_when_every_attempt_transport_fail
 def test_probe_with_retries_records_elapsed_seconds_from_the_injected_clock():
     clock = iter([100.0, 107.5])
     result = m.probe_with_retries(
-        lambda: (200, 10), url="https://example/x", attempts=3, wait_seconds=1.0,
-        sleep=lambda s: None, now=lambda: next(clock),
+        lambda: (200, 10),
+        url="https://example/x",
+        attempts=3,
+        wait_seconds=1.0,
+        sleep=lambda s: None,
+        now=lambda: next(clock),
     )
     assert result["elapsed_seconds"] == 7.5
 
@@ -728,7 +768,8 @@ def test_parse_snum_estimate_attributes_keeps_other_removals_out_of_the_harvest_
     # bare `removals` predicate would overstate what the catalog offers.
     index = m.parse_snum_estimate_attributes(SNUM_TABLE_EXCERPT)
     assert index["non_harvest_removals_groups"] == [
-        "Annual other removals volume", "Annual removals volume",
+        "Annual other removals volume",
+        "Annual removals volume",
     ]
     assert "574159" not in index["harvest_removals_attribute_nbrs"]
     assert "574163" not in index["harvest_removals_attribute_nbrs"]
@@ -743,8 +784,11 @@ def test_parse_snum_estimate_attributes_records_the_eval_typs_present():
 def test_parse_snum_estimate_attributes_on_absent_table_returns_an_empty_result():
     index = m.parse_snum_estimate_attributes("<html><body>nothing here</body></html>")
     assert index == {
-        "row_count": 0, "harvest_removals_groups": [], "harvest_removals_attribute_count": 0,
-        "harvest_removals_attribute_nbrs": [], "non_harvest_removals_groups": [],
+        "row_count": 0,
+        "harvest_removals_groups": [],
+        "harvest_removals_attribute_count": 0,
+        "harvest_removals_attribute_nbrs": [],
+        "non_harvest_removals_groups": [],
         "eval_typs_present": [],
     }
 
@@ -808,10 +852,18 @@ def test_proved_estimate_measure_is_none_when_metadata_names_no_measure():
 SNUM_INDEX_WITH_HARVEST = {
     "row_count": 752,
     "harvest_removals_groups": [
-        {"estimate_group": "Annual harvest removals dry weight", "attribute_count": 38,
-         "lowest_attribute_nbr": "574201", "eval_typs": ["EXPREMV"]},
-        {"estimate_group": "Annual harvest removals volume", "attribute_count": 17,
-         "lowest_attribute_nbr": "574161", "eval_typs": ["EXPREMV"]},
+        {
+            "estimate_group": "Annual harvest removals dry weight",
+            "attribute_count": 38,
+            "lowest_attribute_nbr": "574201",
+            "eval_typs": ["EXPREMV"],
+        },
+        {
+            "estimate_group": "Annual harvest removals volume",
+            "attribute_count": 17,
+            "lowest_attribute_nbr": "574161",
+            "eval_typs": ["EXPREMV"],
+        },
     ],
     "harvest_removals_attribute_count": 55,
     "harvest_removals_attribute_nbrs": ["574161", "574201"],
@@ -819,12 +871,16 @@ SNUM_INDEX_WITH_HARVEST = {
     "eval_typs_present": ["EXPCURR", "EXPREMV"],
 }
 SNUM_INDEX_UNREADABLE = {
-    "row_count": 0, "harvest_removals_groups": [], "harvest_removals_attribute_count": 0,
-    "harvest_removals_attribute_nbrs": [], "non_harvest_removals_groups": [],
+    "row_count": 0,
+    "harvest_removals_groups": [],
+    "harvest_removals_attribute_count": 0,
+    "harvest_removals_attribute_nbrs": [],
+    "non_harvest_removals_groups": [],
     "eval_typs_present": [],
 }
 SNUM_INDEX_NO_HARVEST = dict(SNUM_INDEX_WITH_HARVEST) | {
-    "harvest_removals_groups": [], "harvest_removals_attribute_count": 0,
+    "harvest_removals_groups": [],
+    "harvest_removals_attribute_count": 0,
     "harvest_removals_attribute_nbrs": [],
 }
 MEASURE_AREA = {
@@ -837,8 +893,10 @@ MEASURE_AREA = {
 def _fia_access(**overrides):
     kwargs = {
         "route": "https://apps.fs.usda.gov/fiadb-api/fullreport",
-        "doc_params_parsed": True, "real_probe_parsed": True,
-        "measure_proved": MEASURE_AREA, "snum_index": SNUM_INDEX_WITH_HARVEST,
+        "doc_params_parsed": True,
+        "real_probe_parsed": True,
+        "measure_proved": MEASURE_AREA,
+        "snum_index": SNUM_INDEX_WITH_HARVEST,
     }
     return m.compose_fia_access(**(kwargs | overrides))
 
@@ -860,9 +918,13 @@ def test_compose_fia_access_verified_states_the_harvest_capability_is_catalogued
 
 
 def test_compose_fia_access_verified_says_so_when_the_proved_measure_is_a_harvest_removal():
-    access = _fia_access(measure_proved={
-        "num_est_desc": "574161 Average annual harvest removals, in cubic feet",
-        "est_meta": "Harvest removals estimate.", "attribute_nbr": "574161"})
+    access = _fia_access(
+        measure_proved={
+            "num_est_desc": "574161 Average annual harvest removals, in cubic feet",
+            "est_meta": "Harvest removals estimate.",
+            "attribute_nbr": "574161",
+        }
+    )
     assert "not one of those harvest-removals attributes" not in access["reason"]
     assert "is itself one of those harvest-removals attributes" in access["reason"]
 
@@ -943,17 +1005,21 @@ def test_compose_fia_access_verified_says_which_measure_when_the_number_is_unrea
 
 
 def test_compose_fia_access_documented_branch_does_not_name_an_unnamed_measure():
-    reason = _fia_access(
-        measure_proved=None, snum_index=SNUM_INDEX_UNREADABLE)["reason"]
+    reason = _fia_access(measure_proved=None, snum_index=SNUM_INDEX_UNREADABLE)["reason"]
     assert "could not be read this run" in reason
     assert "no numEstDesc/estMeta metadata naming the measure it returned" in reason
 
 
 def test_compose_fia_access_reason_is_never_none():
-    for kwargs in ({}, {"doc_params_parsed": False}, {"real_probe_parsed": False},
-                   {"snum_index": SNUM_INDEX_UNREADABLE},
-                   {"snum_index": SNUM_INDEX_NO_HARVEST}, {"measure_proved": None},
-                   {"measure_proved": MEASURE_WITHOUT_A_NUMBER}):
+    for kwargs in (
+        {},
+        {"doc_params_parsed": False},
+        {"real_probe_parsed": False},
+        {"snum_index": SNUM_INDEX_UNREADABLE},
+        {"snum_index": SNUM_INDEX_NO_HARVEST},
+        {"measure_proved": None},
+        {"measure_proved": MEASURE_WITHOUT_A_NUMBER},
+    ):
         assert _fia_access(**kwargs)["reason"]
 
 
@@ -971,7 +1037,8 @@ def test_compose_fia_uncovered_interpolates_the_measured_term_counts():
     # not by industry code") was typed -- zero occurrences of NAICS/industry/species in
     # anything the run fetched. Every number below now comes from this run's own scan.
     text = m.compose_fia_uncovered(
-        industry_scan=INDUSTRY_SCAN, dc_has_evaluation=False, wc_row_count=1138)
+        industry_scan=INDUSTRY_SCAN, dc_has_evaluation=False, wc_row_count=1138
+    )
     assert "NAICS=0" in text
     assert "species=282" in text
     assert "fiadb_api_doc.html" in text
@@ -979,7 +1046,8 @@ def test_compose_fia_uncovered_interpolates_the_measured_term_counts():
 
 def test_compose_fia_uncovered_delimits_the_unbacked_reading_with_the_marker_convention():
     text = m.compose_fia_uncovered(
-        industry_scan=INDUSTRY_SCAN, dc_has_evaluation=False, wc_row_count=1138)
+        industry_scan=INDUSTRY_SCAN, dc_has_evaluation=False, wc_row_count=1138
+    )
     assert text.count("INFERENCE MARKER, OPENING") == 1
     assert text.count("INFERENCE MARKER, CLOSING") == 1
     assert text.index("INFERENCE MARKER, OPENING") < text.index("INFERENCE MARKER, CLOSING")
@@ -990,14 +1058,16 @@ def test_compose_fia_uncovered_keeps_the_derived_dc_clause_outside_the_marked_re
     # Sub-trap (b): a marking's scope ends where the reader thinks it does. The D.C. clause is
     # interpolated from the fetched evaluation index and must not sit inside the marker.
     text = m.compose_fia_uncovered(
-        industry_scan=INDUSTRY_SCAN, dc_has_evaluation=False, wc_row_count=1138)
+        industry_scan=INDUSTRY_SCAN, dc_has_evaluation=False, wc_row_count=1138
+    )
     assert "1138-row" in text
     assert text.index("1138-row") > text.index("INFERENCE MARKER, CLOSING")
 
 
 def test_compose_fia_uncovered_omits_the_dc_clause_when_dc_has_an_evaluation():
     text = m.compose_fia_uncovered(
-        industry_scan=INDUSTRY_SCAN, dc_has_evaluation=True, wc_row_count=1138)
+        industry_scan=INDUSTRY_SCAN, dc_has_evaluation=True, wc_row_count=1138
+    )
     assert "District of Columbia" not in text
     assert "NAICS=0" in text
 
@@ -1007,9 +1077,14 @@ def test_compose_fia_uncovered_does_not_read_an_empty_scan_as_a_zero_hit_finding
     # non-200, and this composer is called unconditionally. "Zero industry-term hits across
     # those pages" over zero pages is a vacuous zero presented as a substantive finding.
     text = m.compose_fia_uncovered(
-        industry_scan={"pages_scanned": [], "industry_classification_terms": {"NAICS": 0},
-                       "fia_taxonomy_terms": {"species": 0}},
-        dc_has_evaluation=False, wc_row_count=0)
+        industry_scan={
+            "pages_scanned": [],
+            "industry_classification_terms": {"NAICS": 0},
+            "fia_taxonomy_terms": {"species": 0},
+        },
+        dc_has_evaluation=False,
+        wc_row_count=0,
+    )
     assert "Zero industry-term hits" not in text
     assert "no industry concept to join on at all" not in text
     assert "fetched and hashed ()" not in text
@@ -1026,9 +1101,14 @@ def test_compose_fia_uncovered_empty_scan_does_not_deny_that_anything_was_fetche
     # bodies are fetched and hashed too -- at any status, 200 included -- and never reach the
     # scan, so a sentence about what the run fetched cannot stand in for one about the corpus.
     text = m.compose_fia_uncovered(
-        industry_scan={"pages_scanned": [], "industry_classification_terms": {"NAICS": 0},
-                       "fia_taxonomy_terms": {"species": 0}},
-        dc_has_evaluation=False, wc_row_count=0)
+        industry_scan={
+            "pages_scanned": [],
+            "industry_classification_terms": {"NAICS": 0},
+            "fia_taxonomy_terms": {"species": 0},
+        },
+        dc_has_evaluation=False,
+        wc_row_count=0,
+    )
     assert "fetched and hashed" not in text
     assert "status-200 body" in text
 
@@ -1038,7 +1118,8 @@ def test_compose_fia_uncovered_names_the_scan_corpus_not_every_hashed_extract():
     # where an `other_route_*` fetch answers with a body, so "the N FIA page(s) this run
     # fetched and hashed" misdescribes the set it counts. The count phrase names the corpus.
     text = m.compose_fia_uncovered(
-        industry_scan=INDUSTRY_SCAN, dc_has_evaluation=True, wc_row_count=1138)
+        industry_scan=INDUSTRY_SCAN, dc_has_evaluation=True, wc_row_count=1138
+    )
     assert "fetched and hashed" not in text
     assert "status-200 body" in text
     assert "fiadb_api_doc.html" in text
@@ -1046,9 +1127,11 @@ def test_compose_fia_uncovered_names_the_scan_corpus_not_every_hashed_extract():
 
 def test_compose_fia_uncovered_does_not_draw_the_zero_reading_when_terms_were_found():
     text = m.compose_fia_uncovered(
-        industry_scan=INDUSTRY_SCAN | {
-            "industry_classification_terms": {"NAICS": 0, "SIC": 0, "industry": 4}},
-        dc_has_evaluation=True, wc_row_count=1138)
+        industry_scan=INDUSTRY_SCAN
+        | {"industry_classification_terms": {"NAICS": 0, "SIC": 0, "industry": 4}},
+        dc_has_evaluation=True,
+        wc_row_count=1138,
+    )
     assert "industry=4" in text
     assert "Zero industry-term hits" not in text
     assert "no industry concept to join on at all" not in text
@@ -1061,9 +1144,11 @@ def test_compose_fia_uncovered_does_not_assert_the_taxonomy_terms_are_used():
     # The clause "hits for the concepts those same pages do use are {taxonomy}" names an
     # outcome the function never branches on: an all-zero taxonomy count contradicts it.
     text = m.compose_fia_uncovered(
-        industry_scan=INDUSTRY_SCAN | {
-            "fia_taxonomy_terms": {"land use": 0, "product": 0, "species": 0}},
-        dc_has_evaluation=True, wc_row_count=1138)
+        industry_scan=INDUSTRY_SCAN
+        | {"fia_taxonomy_terms": {"land use": 0, "product": 0, "species": 0}},
+        dc_has_evaluation=True,
+        wc_row_count=1138,
+    )
     assert "do use" not in text
     assert "species=0" in text
 
@@ -1072,7 +1157,8 @@ def test_compose_fia_uncovered_does_not_place_dc_outside_an_index_that_was_never
     # Same class as the vacuous zero: `dc_has_evaluation` is False both when D.C. is absent
     # from a parsed index and when no index parsed at all.
     text = m.compose_fia_uncovered(
-        industry_scan=INDUSTRY_SCAN, dc_has_evaluation=False, wc_row_count=0)
+        industry_scan=INDUSTRY_SCAN, dc_has_evaluation=False, wc_row_count=0
+    )
     assert "no FIA evaluation unit for the District of Columbia" not in text
     assert "was not read this run" in text
 
@@ -1086,13 +1172,17 @@ BOX_NAV_VERIFIED = {
     "probed_year": "2024",
     "sample_file": "Alabama_2024.xlsx",
     "sample_file_sheet_names": [
-        "County Production", "State Production", "Receipts", "Mill Locations",
+        "County Production",
+        "State Production",
+        "Receipts",
+        "Mill Locations",
     ],
     "sample_file_first_sheet_name": "County Production",
     "sample_file_first_sheet_headers": REAL_FIRST_SHEET_HEADERS,
 }
 BOX_NAV_VERIFIED_NO_HEADER_ROW = {
-    k: v for k, v in BOX_NAV_VERIFIED.items()
+    k: v
+    for k, v in BOX_NAV_VERIFIED.items()
     if k not in ("sample_file_first_sheet_name", "sample_file_first_sheet_headers")
 }
 # The Box share page answered non-200 (a 5xx outage is not a transport failure), so nothing
@@ -1149,8 +1239,10 @@ def _marked_spans(text: str) -> list[str]:
 
 def _tpo_access(**overrides):
     kwargs = {
-        "route": "nrum -> box -> legacy download", "harvest_origin_available": True,
-        "box_navigation": BOX_NAV_VERIFIED, "probes": PROBES_ALL_ANSWERED,
+        "route": "nrum -> box -> legacy download",
+        "harvest_origin_available": True,
+        "box_navigation": BOX_NAV_VERIFIED,
+        "probes": PROBES_ALL_ANSWERED,
     }
     return m.compose_tpo_access(**(kwargs | overrides))
 
@@ -1182,8 +1274,9 @@ def test_compose_tpo_access_not_obtainable_without_a_share_url_claims_no_folder_
     # Finding 2, second bullet: the shipped reason asserted "no probed route -- including the
     # Box folder discovered this run -- yielded a machine-readable file", which is false when
     # no folder was discovered at all.
-    access = _tpo_access(harvest_origin_available=False,
-                         box_navigation={"share_url_discovered": None})
+    access = _tpo_access(
+        harvest_origin_available=False, box_navigation={"share_url_discovered": None}
+    )
     assert access["status"] == "not_obtainable"
     assert "no Box share link" in access["reason"]
     assert "discovered this run" not in access["reason"]
@@ -1194,16 +1287,14 @@ def test_compose_tpo_access_not_obtainable_says_the_folder_was_entered_only_once
     # was selected by `share_url is not None` alone, which establishes only that a URL was
     # found in the page markup. `nrum_data_folder_id` / `year_subfolders_found` are the
     # signals that the folder page actually answered and parsed.
-    access = _tpo_access(harvest_origin_available=False,
-                         box_navigation=BOX_NAV_NO_YEAR_SELECTED)
+    access = _tpo_access(harvest_origin_available=False, box_navigation=BOX_NAV_NO_YEAR_SELECTED)
     assert "was entered" in access["reason"]
     assert "no Box share link" not in access["reason"]
     assert "none of which this run selected to probe" in access["reason"]
 
 
 def test_compose_tpo_access_not_obtainable_claims_no_entry_when_the_share_page_never_answered():
-    access = _tpo_access(harvest_origin_available=False,
-                         box_navigation=BOX_NAV_SHARE_PAGE_UNREAD)
+    access = _tpo_access(harvest_origin_available=False, box_navigation=BOX_NAV_SHARE_PAGE_UNREAD)
     reason = access["reason"]
     assert "was entered" not in reason
     assert "no file fetched from it" not in reason
@@ -1212,8 +1303,9 @@ def test_compose_tpo_access_not_obtainable_claims_no_entry_when_the_share_page_n
 
 
 def test_compose_tpo_access_not_obtainable_names_the_folder_parse_failure():
-    reason = _tpo_access(harvest_origin_available=False,
-                         box_navigation=BOX_NAV_SHARE_PAGE_UNPARSED)["reason"]
+    reason = _tpo_access(
+        harvest_origin_available=False, box_navigation=BOX_NAV_SHARE_PAGE_UNPARSED
+    )["reason"]
     assert "did not parse as a Box folder listing" in reason
     assert "marker not found: sharedFolder" in reason
     assert "was entered" not in reason
@@ -1224,8 +1316,9 @@ def test_compose_tpo_access_takes_the_parse_failure_branch_only_when_the_parse_r
     # parse leaves behind when the payload carries no `currentFolderID`, and on that state the
     # old predicate asserted "that body did not parse" with no parse error to name, while
     # `year_subfolders_found` was non-empty. The exact signal is `shared_folder_parse_error`.
-    reason = _tpo_access(harvest_origin_available=False,
-                         box_navigation=BOX_NAV_PARSED_WITHOUT_A_FOLDER_ID)["reason"]
+    reason = _tpo_access(
+        harvest_origin_available=False, box_navigation=BOX_NAV_PARSED_WITHOUT_A_FOLDER_ID
+    )["reason"]
     assert "did not parse as a Box folder listing" not in reason
     assert "was entered" in reason
     assert "2023" in reason and "2024" in reason
@@ -1234,8 +1327,9 @@ def test_compose_tpo_access_takes_the_parse_failure_branch_only_when_the_parse_r
 def test_compose_tpo_access_parse_failure_branch_always_names_the_error():
     # State (a): `shared_folder_parse_error` is set in the same except that produces this
     # branch, so the branch can no longer be reached with no error to name.
-    reason = _tpo_access(harvest_origin_available=False,
-                         box_navigation=BOX_NAV_SHARE_PAGE_UNPARSED)["reason"]
+    reason = _tpo_access(
+        harvest_origin_available=False, box_navigation=BOX_NAV_SHARE_PAGE_UNPARSED
+    )["reason"]
     assert "(marker not found: sharedFolder)" in reason
 
 
@@ -1243,16 +1337,18 @@ def test_compose_tpo_access_unanswered_share_page_outranks_the_missing_parse_err
     # State (c): a share page that never answered 200-with-a-body sets neither
     # `year_subfolders_found` nor `shared_folder_parse_error`. The absent parse-error key must
     # not read as "the parse succeeded" -- the "did not answer" clause still wins.
-    reason = _tpo_access(harvest_origin_available=False,
-                         box_navigation=BOX_NAV_SHARE_PAGE_UNREAD)["reason"]
+    reason = _tpo_access(harvest_origin_available=False, box_navigation=BOX_NAV_SHARE_PAGE_UNREAD)[
+        "reason"
+    ]
     assert "did not answer this run with a status-200 body" in reason
     assert "did not parse as a Box folder listing" not in reason
     assert "was entered" not in reason
 
 
 def test_compose_tpo_access_not_obtainable_when_no_workbook_was_inspected():
-    reason = _tpo_access(harvest_origin_available=False,
-                         box_navigation=BOX_NAV_NO_WORKBOOK_INSPECTED)["reason"]
+    reason = _tpo_access(
+        harvest_origin_available=False, box_navigation=BOX_NAV_NO_WORKBOOK_INSPECTED
+    )["reason"]
     assert "2024 subfolder" in reason
     assert "both fetched and inspected" in reason
     assert "File is not a zip file" in reason
@@ -1260,8 +1356,8 @@ def test_compose_tpo_access_not_obtainable_when_no_workbook_was_inspected():
 
 def test_compose_tpo_access_not_obtainable_names_the_sheets_the_inspected_workbook_had():
     reason = _tpo_access(
-        harvest_origin_available=False,
-        box_navigation=BOX_NAV_WORKBOOK_WITHOUT_BOTH_SHEET_KINDS)["reason"]
+        harvest_origin_available=False, box_navigation=BOX_NAV_WORKBOOK_WITHOUT_BOTH_SHEET_KINDS
+    )["reason"]
     assert "Alabama_2024.xlsx" in reason
     assert "State Production" in reason
     assert "do not include both" in reason
@@ -1270,8 +1366,7 @@ def test_compose_tpo_access_not_obtainable_names_the_sheets_the_inspected_workbo
 def test_compose_tpo_access_not_obtainable_names_a_transport_failure_as_the_weakest_basis():
     # Finding 3: a transport failure collapsing into `not_obtainable` is what `classify_probe`'s
     # own docstring calls the weakest possible basis for that verdict; the reason must say so.
-    access = _tpo_access(harvest_origin_available=False,
-                         probes=PROBES_WITH_TRANSPORT_FAILURE)
+    access = _tpo_access(harvest_origin_available=False, probes=PROBES_WITH_TRANSPORT_FAILURE)
     assert "transport_failure" in access["reason"]
     assert "https://a/3" in access["reason"]
     assert "weakest basis" in access["reason"]
@@ -1314,7 +1409,8 @@ def test_compose_tpo_access_verified_keeps_the_whose_county_caveat_outside_the_m
     reason = _tpo_access()["reason"]
     assert "is not settled by a column name" in reason
     assert reason.index("is not settled by a column name") < reason.index(
-        "INFERENCE MARKER, OPENING")
+        "INFERENCE MARKER, OPENING"
+    )
 
 
 def test_compose_tpo_access_verified_says_so_when_no_header_row_was_read():
@@ -1339,16 +1435,16 @@ def test_compose_tpo_access_verified_marks_the_carried_over_route_provenance():
 
 def test_compose_pagination_note_reports_a_page_capped_listing():
     note = m.compose_pagination_note(
-        {"probed_year": "2021", "files_listed_this_page": 20,
-         "filescount_per_box_metadata": 37})
+        {"probed_year": "2021", "files_listed_this_page": 20, "filescount_per_box_metadata": 37}
+    )
     assert "page-capped" in note
     assert "20" in note and "37" in note
 
 
 def test_compose_pagination_note_reports_an_exact_match():
     note = m.compose_pagination_note(
-        {"probed_year": "2024", "files_listed_this_page": 13,
-         "filescount_per_box_metadata": 13})
+        {"probed_year": "2024", "files_listed_this_page": 13, "filescount_per_box_metadata": 13}
+    )
     assert "exactly" in note
     # The caveat that a *different* year could still be page-capped is kept; what must not
     # appear is a claim that this year was.
@@ -1359,8 +1455,8 @@ def test_compose_pagination_note_does_not_claim_an_exact_match_when_listed_excee
     # Finding 2, third bullet: the shipped else-branch said "matching that folder's filesCount
     # metadata exactly" but fired for `listed > claimed` too.
     note = m.compose_pagination_note(
-        {"probed_year": "2024", "files_listed_this_page": 15,
-         "filescount_per_box_metadata": 13})
+        {"probed_year": "2024", "files_listed_this_page": 15, "filescount_per_box_metadata": 13}
+    )
     assert "exactly" not in note
     assert "matching" not in note
     assert "more rendered than claimed" in note
@@ -1369,23 +1465,28 @@ def test_compose_pagination_note_does_not_claim_an_exact_match_when_listed_excee
 def test_compose_pagination_note_when_the_comparison_was_not_performed():
     assert "not performed" in m.compose_pagination_note({"probed_year": None})
     assert "not performed" in m.compose_pagination_note(
-        {"files_listed_this_page": 13, "filescount_per_box_metadata": None})
+        {"files_listed_this_page": 13, "filescount_per_box_metadata": None}
+    )
 
 
 # --- compose_cadence_claim --------------------------------------------------------------------
 
 
 def test_compose_cadence_claim_full_window_contradicts_a_blanket_biennial_claim():
-    nav = {"year_subfolders_found": [str(y) for y in range(2017, 2025)],
-           "window_year_subfolders_found": [str(y) for y in range(2017, 2025)]}
+    nav = {
+        "year_subfolders_found": [str(y) for y in range(2017, 2025)],
+        "window_year_subfolders_found": [str(y) for y in range(2017, 2025)],
+    }
     claim = m.compose_cadence_claim(nav, window_years=WINDOW_YEARS, window_start_year=2017)
     assert "every D1 window year" in claim
     assert "2024" in claim
 
 
 def test_compose_cadence_claim_partial_window_says_coverage_is_incomplete():
-    nav = {"year_subfolders_found": ["2017", "2019"],
-           "window_year_subfolders_found": ["2017", "2019"]}
+    nav = {
+        "year_subfolders_found": ["2017", "2019"],
+        "window_year_subfolders_found": ["2017", "2019"],
+    }
     claim = m.compose_cadence_claim(nav, window_years=WINDOW_YEARS, window_start_year=2017)
     assert "incomplete" in claim
     assert "every D1 window year" not in claim
@@ -1394,7 +1495,9 @@ def test_compose_cadence_claim_partial_window_says_coverage_is_incomplete():
 def test_compose_cadence_claim_with_no_window_year_found():
     claim = m.compose_cadence_claim(
         {"year_subfolders_found": [], "window_year_subfolders_found": []},
-        window_years=WINDOW_YEARS, window_start_year=2017)
+        window_years=WINDOW_YEARS,
+        window_start_year=2017,
+    )
     assert claim == "no D1 window year subfolder was found this run"
 
 
@@ -1402,8 +1505,10 @@ def test_compose_cadence_claim_appends_a_biennial_suffix_for_pre_window_years_tw
     """Renamed with its predicate. It used to be `..._for_all_odd_pre_window_years`, and the
     name was the tell: all-odd is not biennial, it merely coincides with it on the real folder
     set. The suffix now rides on the spacing, so the name and the claim say the same thing."""
-    nav = {"year_subfolders_found": ["1997", "1999", "2001", "2017"],
-           "window_year_subfolders_found": ["2017"]}
+    nav = {
+        "year_subfolders_found": ["1997", "1999", "2001", "2017"],
+        "window_year_subfolders_found": ["2017"],
+    }
     claim = m.compose_cadence_claim(nav, window_years=WINDOW_YEARS, window_start_year=2017)
     assert "biennial cadence, verified this run" in claim
     assert "only for odd years back to 1997" in claim
@@ -1413,8 +1518,10 @@ def test_compose_cadence_claim_does_not_call_all_odd_quadrennial_years_biennial(
     """The defect the rename exists for. `["1997", "2001", "2005"]` is every-year-odd and
     four-yearly; the previous predicate called it "biennial cadence, verified this run" in a
     sentence that ships in `tpo/summary.json`'s `coverage_span.covered`."""
-    nav = {"year_subfolders_found": ["1997", "2001", "2005", "2017"],
-           "window_year_subfolders_found": ["2017"]}
+    nav = {
+        "year_subfolders_found": ["1997", "2001", "2005", "2017"],
+        "window_year_subfolders_found": ["2017"],
+    }
     claim = m.compose_cadence_claim(nav, window_years=WINDOW_YEARS, window_start_year=2017)
     assert "biennial" not in claim.split("; ")[-1].replace("not biennial", "")
     assert "biennial cadence, verified this run" not in claim
@@ -1426,8 +1533,10 @@ def test_compose_cadence_claim_reports_even_spaced_pre_window_years_as_even():
     """The parity word is read off the data, not typed. A step of two fixes the parity but not
     which one it is, and the real run happens to be odd -- so an even biennial run must not
     inherit the word "odd" from it."""
-    nav = {"year_subfolders_found": ["1998", "2000", "2002", "2017"],
-           "window_year_subfolders_found": ["2017"]}
+    nav = {
+        "year_subfolders_found": ["1998", "2000", "2002", "2017"],
+        "window_year_subfolders_found": ["2017"],
+    }
     claim = m.compose_cadence_claim(nav, window_years=WINDOW_YEARS, window_start_year=2017)
     assert "only for even years back to 1998" in claim
     assert "odd" not in claim
@@ -1437,8 +1546,7 @@ def test_compose_cadence_claim_calls_a_single_pre_window_folder_no_cadence_at_al
     """`all()` over the empty pairwise of a one-element list is True, so a bare `all(b - a == 2
     ...)` would call one folder a verified biennial cadence. The `len >= 2` guard is what stops
     that, and this is the test that holds it in place."""
-    nav = {"year_subfolders_found": ["2013", "2017"],
-           "window_year_subfolders_found": ["2017"]}
+    nav = {"year_subfolders_found": ["2013", "2017"], "window_year_subfolders_found": ["2017"]}
     claim = m.compose_cadence_claim(nav, window_years=WINDOW_YEARS, window_start_year=2017)
     assert "biennial cadence, verified this run" not in claim
     assert "one folder fixes no cadence in either direction" in claim
@@ -1446,8 +1554,10 @@ def test_compose_cadence_claim_calls_a_single_pre_window_folder_no_cadence_at_al
 
 
 def test_compose_cadence_claim_does_not_claim_biennial_when_pre_window_years_are_mixed():
-    nav = {"year_subfolders_found": ["1998", "1999", "2017"],
-           "window_year_subfolders_found": ["2017"]}
+    nav = {
+        "year_subfolders_found": ["1998", "1999", "2017"],
+        "window_year_subfolders_found": ["2017"],
+    }
     claim = m.compose_cadence_claim(nav, window_years=WINDOW_YEARS, window_start_year=2017)
     assert "not biennial across this range" in claim
     assert "biennial cadence, verified this run" not in claim
@@ -1541,7 +1651,6 @@ def test_module_docstring_scopes_the_retention_rule_and_retracts_the_empty_200_c
     assert "which discards bodies by construction" in doc
 
 
-
 def test_compose_retention_rule_counts_the_retained_non_200_bodies():
     # Ruling D-B: the 4,208-byte 404 body and the 914-byte 403 body are what distinguish
     # "404 not published" from "reachable but empty" from "blocked".
@@ -1568,26 +1677,35 @@ def test_compose_retention_rule_warns_the_reader_not_to_generalise_it_to_other_s
 
 def _summary_payload(access: dict) -> dict:
     return {
-        "source": "fia", "generated_utc": "2026-01-01T00:00:00+00:00",
+        "source": "fia",
+        "generated_utc": "2026-01-01T00:00:00+00:00",
         "coverage_span": {
-            "published_start": "1968", "published_end": "2026",
-            "window_start": _common.WINDOW_START, "window_end": _common.WINDOW_END,
-            "covered": "x", "uncovered": "y",
+            "published_start": "1968",
+            "published_end": "2026",
+            "window_start": _common.WINDOW_START,
+            "window_end": _common.WINDOW_END,
+            "covered": "x",
+            "uncovered": "y",
         },
-        "access": access, "extracts": [], "findings": {},
+        "access": access,
+        "extracts": [],
+        "findings": {},
     }
 
 
-@pytest.mark.parametrize("overrides", [
-    {},
-    {"doc_params_parsed": False},
-    {"real_probe_parsed": False},
-    {"snum_index": SNUM_INDEX_UNREADABLE},
-    {"snum_index": SNUM_INDEX_NO_HARVEST},
-    {"measure_proved": None},
-    {"measure_proved": MEASURE_WITHOUT_A_NUMBER},
-    {"measure_proved": None, "snum_index": SNUM_INDEX_UNREADABLE},
-])
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {},
+        {"doc_params_parsed": False},
+        {"real_probe_parsed": False},
+        {"snum_index": SNUM_INDEX_UNREADABLE},
+        {"snum_index": SNUM_INDEX_NO_HARVEST},
+        {"measure_proved": None},
+        {"measure_proved": MEASURE_WITHOUT_A_NUMBER},
+        {"measure_proved": None, "snum_index": SNUM_INDEX_UNREADABLE},
+    ],
+)
 def test_every_composed_fia_access_passes_the_summary_schema(overrides):
     # `_common.validate_summary` raises unless a non-verified status carries a truthy reason.
     # The live run only ever exercises whichever branch the day's fetches produce, so the two
@@ -1596,19 +1714,24 @@ def test_every_composed_fia_access_passes_the_summary_schema(overrides):
     _common.validate_summary(_summary_payload(_fia_access(**overrides)))
 
 
-@pytest.mark.parametrize("overrides", [
-    {},
-    {"box_navigation": BOX_NAV_VERIFIED_NO_HEADER_ROW},
-    {"harvest_origin_available": False},
-    {"harvest_origin_available": False, "box_navigation": {"share_url_discovered": None}},
-    {"harvest_origin_available": False, "box_navigation": BOX_NAV_SHARE_PAGE_UNREAD},
-    {"harvest_origin_available": False, "box_navigation": BOX_NAV_SHARE_PAGE_UNPARSED},
-    {"harvest_origin_available": False, "box_navigation": BOX_NAV_NO_YEAR_SELECTED},
-    {"harvest_origin_available": False, "box_navigation": BOX_NAV_NO_WORKBOOK_INSPECTED},
-    {"harvest_origin_available": False,
-     "box_navigation": BOX_NAV_WORKBOOK_WITHOUT_BOTH_SHEET_KINDS},
-    {"harvest_origin_available": False, "probes": PROBES_WITH_TRANSPORT_FAILURE},
-])
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {},
+        {"box_navigation": BOX_NAV_VERIFIED_NO_HEADER_ROW},
+        {"harvest_origin_available": False},
+        {"harvest_origin_available": False, "box_navigation": {"share_url_discovered": None}},
+        {"harvest_origin_available": False, "box_navigation": BOX_NAV_SHARE_PAGE_UNREAD},
+        {"harvest_origin_available": False, "box_navigation": BOX_NAV_SHARE_PAGE_UNPARSED},
+        {"harvest_origin_available": False, "box_navigation": BOX_NAV_NO_YEAR_SELECTED},
+        {"harvest_origin_available": False, "box_navigation": BOX_NAV_NO_WORKBOOK_INSPECTED},
+        {
+            "harvest_origin_available": False,
+            "box_navigation": BOX_NAV_WORKBOOK_WITHOUT_BOTH_SHEET_KINDS,
+        },
+        {"harvest_origin_available": False, "probes": PROBES_WITH_TRANSPORT_FAILURE},
+    ],
+)
 def test_every_composed_tpo_access_passes_the_summary_schema(overrides):
     payload = _summary_payload(_tpo_access(**overrides)) | {"source": "tpo"}
     _common.validate_summary(payload)
@@ -1633,8 +1756,10 @@ def test_docstring_makes_no_claim_about_what_other_audit_scripts_retain():
     stay. Negative pin, so re-adding the sentence beside the corrected text is still caught."""
     doc = " ".join(m.__doc__.split())
     assert "Every other Stage 0 audit script records a fetched body" not in doc
-    assert ("records a body whenever a route it probes for bytes answers with a non-empty "
-            "one, whatever the status") in doc
+    assert (
+        "records a body whenever a route it probes for bytes answers with a non-empty "
+        "one, whatever the status"
+    ) in doc
 
 
 # --- the scan corpus and the extract set, on a composed run --------------------------------------
@@ -1659,8 +1784,11 @@ def test_a_composed_fia_run_backs_every_scanned_page_with_a_hashed_extract(tmp_p
     """
     monkeypatch.setattr(_common, "AUDIT_ROOT", tmp_path)
     assert _common.AUDIT_ROOT.is_relative_to(tmp_path), "guard: never write into the real root"
-    client = httpx.Client(transport=httpx.MockTransport(
-        lambda request: httpx.Response(200, text="<html><body>an answer</body></html>")))
+    client = httpx.Client(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, text="<html><body>an answer</body></html>")
+        )
+    )
 
     m.run_fia(client)
 
@@ -1668,5 +1796,6 @@ def test_a_composed_fia_run_backs_every_scanned_page_with_a_hashed_extract(tmp_p
     hashed = {Path(e["path"]).name for e in written["extracts"]}
     scanned = set(written["findings"]["industry_concept_scan"]["pages_scanned"])
     assert scanned, "an empty corpus would make the subset check vacuous"
-    assert scanned <= hashed, (
-        f"pages_scanned names files no extract backs: {sorted(scanned - hashed)}")
+    assert (
+        scanned <= hashed
+    ), f"pages_scanned names files no extract backs: {sorted(scanned - hashed)}"

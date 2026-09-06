@@ -62,9 +62,8 @@ import zipfile
 from collections.abc import Callable
 from itertools import pairwise
 
-import httpx
-
 import _common as c
+import httpx
 
 SOURCE_FIA = "fia"
 SOURCE_TPO = "tpo"
@@ -210,8 +209,11 @@ def retain_body(extracts: list, source: str, res: dict, rel_path: str) -> None:
     coerced to 200, which would erase the very distinction the retained non-200 body exists to
     record."""
     if answered_with_body(res):
-        extracts.append(c.record_extract(
-            source, res["url"], rel_path, res["body"], http_status=res["http_status"]))
+        extracts.append(
+            c.record_extract(
+                source, res["url"], rel_path, res["body"], http_status=res["http_status"]
+            )
+        )
 
 
 def scannable_text_page(res: dict) -> bool:
@@ -260,12 +262,14 @@ def probe_with_retries(
     attempt_records = []
     for attempt_no in range(attempts):
         status, nbytes = probe_fn()
-        attempt_records.append({
-            "attempt": attempt_no + 1,
-            "http_status": status,
-            "bytes": nbytes,
-            "outcome": classify_probe(status, nbytes),
-        })
+        attempt_records.append(
+            {
+                "attempt": attempt_no + 1,
+                "http_status": status,
+                "bytes": nbytes,
+                "outcome": classify_probe(status, nbytes),
+            }
+        )
         if status != 0 or attempt_no == attempts - 1:
             break
         sleep(wait_seconds)
@@ -298,15 +302,17 @@ def parse_fia_doc_parameters(html: str) -> list[dict]:
         raw_name = re.sub(r"<[^>]+>", "", name_match.group(1)).strip()
         desc = re.sub(r"<[^>]+>", " ", desc_match.group(1))
         desc = html_module.unescape(re.sub(r"\s+", " ", desc)).strip()
-        params.append({
-            "parameter": raw_name.rstrip("*"),
-            # A trailing "*" flags a required parameter on this page (lat*/lon*/radius* are
-            # the one exception -- required only "FOR CIRCULAR ESTIMATES ONLY", per that row's
-            # own description text -- left visible in `description` rather than special-cased
-            # here, since this function only reports what the markup structurally encodes).
-            "required": raw_name.endswith("*"),
-            "description": desc,
-        })
+        params.append(
+            {
+                "parameter": raw_name.rstrip("*"),
+                # A trailing "*" flags a required parameter on this page (lat*/lon*/radius* are
+                # the one exception -- required only "FOR CIRCULAR ESTIMATES ONLY", per that row's
+                # own description text -- left visible in `description` rather than special-cased
+                # here, since this function only reports what the markup structurally encodes).
+                "required": raw_name.endswith("*"),
+                "description": desc,
+            }
+        )
     return params
 
 
@@ -393,8 +399,11 @@ def parse_snum_estimate_attributes(html: str) -> dict:
     set is checkable rather than asserted."""
     body_match = re.search(r"<tbody>(.*?)</tbody>", html, re.DOTALL)
     empty = {
-        "row_count": 0, "harvest_removals_groups": [], "harvest_removals_attribute_count": 0,
-        "harvest_removals_attribute_nbrs": [], "non_harvest_removals_groups": [],
+        "row_count": 0,
+        "harvest_removals_groups": [],
+        "harvest_removals_attribute_count": 0,
+        "harvest_removals_attribute_nbrs": [],
+        "non_harvest_removals_groups": [],
         "eval_typs_present": [],
     }
     if not body_match:
@@ -414,8 +423,14 @@ def parse_snum_estimate_attributes(html: str) -> dict:
     for nbr, _descr, _cts, _basis, group, eval_typ, *_rest in rows:
         if HARVEST_REMOVALS_GROUP_PATTERN.search(group):
             entry = groups.setdefault(
-                group, {"estimate_group": group, "attribute_count": 0,
-                        "lowest_attribute_nbr": nbr, "eval_typs": set()})
+                group,
+                {
+                    "estimate_group": group,
+                    "attribute_count": 0,
+                    "lowest_attribute_nbr": nbr,
+                    "eval_typs": set(),
+                },
+            )
             entry["attribute_count"] += 1
             entry["eval_typs"].add(eval_typ)
             if _as_int(nbr) < _as_int(entry["lowest_attribute_nbr"]):
@@ -426,9 +441,12 @@ def parse_snum_estimate_attributes(html: str) -> dict:
     return {
         "row_count": len(rows),
         "harvest_removals_groups": [
-            {"estimate_group": g["estimate_group"], "attribute_count": g["attribute_count"],
-             "lowest_attribute_nbr": g["lowest_attribute_nbr"],
-             "eval_typs": sorted(g["eval_typs"])}
+            {
+                "estimate_group": g["estimate_group"],
+                "attribute_count": g["attribute_count"],
+                "lowest_attribute_nbr": g["lowest_attribute_nbr"],
+                "eval_typs": sorted(g["eval_typs"]),
+            }
             for g in sorted(groups.values(), key=lambda g: g["estimate_group"])
         ],
         "harvest_removals_attribute_count": len(harvest_nbrs),
@@ -576,13 +594,17 @@ def box_legacy_download_url(shared_name: str, file_id: int | str) -> str:
     )
 
 
-def select_latest_window_year_folder(items: list[dict], window_years: tuple[int, ...]) -> dict | None:
+def select_latest_window_year_folder(
+    items: list[dict], window_years: tuple[int, ...]
+) -> dict | None:
     """The most recent D1-window year with its own subfolder in the NRUM Data share --
     deterministic and reproducible (not "whichever state/year looked convenient"): among
     subfolders named a 4-digit year inside `window_years`, the one with the largest year."""
     candidates = [
-        it for it in items
-        if it.get("type") == "folder" and str(it.get("name", "")).isdigit()
+        it
+        for it in items
+        if it.get("type") == "folder"
+        and str(it.get("name", "")).isdigit()
         and int(it["name"]) in window_years
     ]
     if not candidates:
@@ -657,12 +679,14 @@ def inspect_xlsx(content: bytes) -> dict:
         sheets = xlsx_sheet_names(workbook_xml)
         rels_xml = (
             zf.read("xl/_rels/workbook.xml.rels").decode("utf-8", "replace")
-            if "xl/_rels/workbook.xml.rels" in names else ""
+            if "xl/_rels/workbook.xml.rels" in names
+            else ""
         )
         first = xlsx_first_sheet_part(workbook_xml, rels_xml)
         shared = (
             xlsx_shared_strings(zf.read("xl/sharedStrings.xml").decode("utf-8", "replace"))
-            if "xl/sharedStrings.xml" in names else []
+            if "xl/sharedStrings.xml" in names
+            else []
         )
         unresolved = ""
         headers: list[str] = []
@@ -697,9 +721,9 @@ def classify_header_row(headers: list[str]) -> dict:
     inside the inference marker."""
     return {
         "county_identifier_headers": [
-            h for h in headers if COUNTY_IDENTIFIER_HEADER_PATTERN.search(h)],
-        "volume_measure_headers": [
-            h for h in headers if VOLUME_MEASURE_HEADER_PATTERN.search(h)],
+            h for h in headers if COUNTY_IDENTIFIER_HEADER_PATTERN.search(h)
+        ],
+        "volume_measure_headers": [h for h in headers if VOLUME_MEASURE_HEADER_PATTERN.search(h)],
     }
 
 
@@ -800,18 +824,28 @@ def compose_fia_access(
     non-numeric token."""
     if not (doc_params_parsed and real_probe_parsed):
         clauses = [
-            "the /fiadb-api/ documentation page's parameter table parsed"
-            if doc_params_parsed else
-            "the /fiadb-api/ documentation page's parameter table did not parse",
-            "the real-parameter /fullreport probe returned a report with both estimates and "
-            "metadata" if real_probe_parsed else
-            "the real-parameter /fullreport probe did not return a report with both estimates "
-            "and metadata",
+            (
+                "the /fiadb-api/ documentation page's parameter table parsed"
+                if doc_params_parsed
+                else "the /fiadb-api/ documentation page's parameter table did not parse"
+            ),
+            (
+                "the real-parameter /fullreport probe returned a report with both estimates and "
+                "metadata"
+                if real_probe_parsed
+                else "the real-parameter /fullreport probe did not return a report with both estimates "
+                "and metadata"
+            ),
         ]
-        return {"route": route, "status": "documented", "reason": (
-            "Not verified this run: " + "; ".join(clauses)
-            + ". See findings.doc_parameters and findings.probe."
-        )}
+        return {
+            "route": route,
+            "status": "documented",
+            "reason": (
+                "Not verified this run: "
+                + "; ".join(clauses)
+                + ". See findings.doc_parameters and findings.probe."
+            ),
+        }
 
     numbered = measure_proved is not None and bool(measure_proved["attribute_nbr"])
     if numbered:
@@ -836,22 +870,30 @@ def compose_fia_access(
     harvest_count = snum_index["harvest_removals_attribute_count"]
 
     if row_count == 0:
-        return {"route": route, "status": "documented", "reason": (
-            f"The /fullreport route answered with real machine-readable data this run "
-            f"({measured}), but the /fullreport/parameters/snum attribute catalog could not be "
-            "read this run, so whether FIA publishes a harvest-origin (removals) estimate "
-            "attribute at all is unestablished here. See findings.probe and "
-            "findings.snum_estimate_attributes."
-        )}
+        return {
+            "route": route,
+            "status": "documented",
+            "reason": (
+                f"The /fullreport route answered with real machine-readable data this run "
+                f"({measured}), but the /fullreport/parameters/snum attribute catalog could not be "
+                "read this run, so whether FIA publishes a harvest-origin (removals) estimate "
+                "attribute at all is unestablished here. See findings.probe and "
+                "findings.snum_estimate_attributes."
+            ),
+        }
     if harvest_count == 0:
-        return {"route": route, "status": "documented", "reason": (
-            f"The /fullreport route answered with real machine-readable data this run "
-            f"({measured}), but the /fullreport/parameters/snum catalog fetched this run "
-            f"enumerates {row_count} estimate attributes and none of them is a harvest-removals "
-            "attribute, so the harvest-origin measure SS2.2 asks for is not obtainable from "
-            "this endpoint on the evidence gathered here. See "
-            "findings.snum_estimate_attributes."
-        )}
+        return {
+            "route": route,
+            "status": "documented",
+            "reason": (
+                f"The /fullreport route answered with real machine-readable data this run "
+                f"({measured}), but the /fullreport/parameters/snum catalog fetched this run "
+                f"enumerates {row_count} estimate attributes and none of them is a harvest-removals "
+                "attribute, so the harvest-origin measure SS2.2 asks for is not obtainable from "
+                "this endpoint on the evidence gathered here. See "
+                "findings.snum_estimate_attributes."
+            ),
+        }
 
     groups = "; ".join(
         f"{g['estimate_group']} ({g['attribute_count']} attribute(s), lowest attribute number "
@@ -883,13 +925,17 @@ def compose_fia_access(
             "harvest-removals capability rests on the fetched catalog listing those attributes "
             "and not on a harvest-removals report having been requested and returned."
         )
-    return {"route": route, "status": "verified", "reason": (
-        f"Verified for retrieval of one report from this endpoint: {measured}. The "
-        f"/fullreport/parameters/snum catalog fetched this run enumerates {row_count} estimate "
-        f"attributes, of which {harvest_count} sit in harvest-removals estimate groups -- "
-        f"{groups} -- which that same catalog keeps distinct from its non-harvest removals "
-        f"groups ({non_harvest}). {gap} See findings.snum_estimate_attributes."
-    )}
+    return {
+        "route": route,
+        "status": "verified",
+        "reason": (
+            f"Verified for retrieval of one report from this endpoint: {measured}. The "
+            f"/fullreport/parameters/snum catalog fetched this run enumerates {row_count} estimate "
+            f"attributes, of which {harvest_count} sit in harvest-removals estimate groups -- "
+            f"{groups} -- which that same catalog keeps distinct from its non-harvest removals "
+            f"groups ({non_harvest}). {gap} See findings.snum_estimate_attributes."
+        ),
+    }
 
 
 def compose_fia_uncovered(
@@ -940,8 +986,8 @@ def compose_fia_uncovered(
             "reading -- that an industry concept exists elsewhere in the API and merely goes "
             "unmentioned on the pages this script happens to fetch -- is not excluded by a "
             "zero count over those pages."
-            if industry_total == 0 else
-            f"{industry_total} industry-term hit(s) across those pages leaves the no-industry-"
+            if industry_total == 0
+            else f"{industry_total} industry-term hit(s) across those pages leaves the no-industry-"
             "concept reading this scan was written to test unavailable: a nonzero hit count is "
             "not itself an industry concept a Logging (113310) slice could be selected on, and "
             "which of those hits (if any) name a classification FIA could be joined on is not "
@@ -1109,8 +1155,11 @@ def compose_tpo_access(
         if not headers:
             header_clause = (
                 "No header row was read from that workbook's first sheet this run"
-                + (f" ({box_navigation['sample_file_first_sheet_unresolved']})"
-                   if box_navigation.get("sample_file_first_sheet_unresolved") else "")
+                + (
+                    f" ({box_navigation['sample_file_first_sheet_unresolved']})"
+                    if box_navigation.get("sample_file_first_sheet_unresolved")
+                    else ""
+                )
                 + ", so nothing here rests on its column names."
             )
         else:
@@ -1129,31 +1178,35 @@ def compose_tpo_access(
                     "identifiers name -- the county a harvest came from, or the county a mill "
                     "sits in -- is not settled by a column name."
                 )
-        return {"route": route, "status": "verified", "reason": (
-            "Reachable and machine-readable, but only via an undocumented Box legacy-download "
-            "redirect rather than the modern share URL; per-state coverage per year is not "
-            "exhaustively verified (see coverage_span). Measured in the one workbook fetched "
-            f"this run ({box_navigation.get('sample_file')}, from the "
-            f"{box_navigation.get('probed_year')} subfolder): its {len(sheets)} sheet names are "
-            f"{sheets}, of which {origin} match this script's harvest-origin sheet-name pattern "
-            f"and {receipts} match its mill-receipt pattern. {header_clause} "
-            "INFERENCE MARKER, OPENING: what follows to the closing marker is a reading of "
-            "those sheet names, not a further measurement; it is supplied by hand, carries no "
-            "extract hash and is re-checked by no later run. Sheets named that way are read "
-            "here as meaning the workbook holds harvest volumes attributed to the county of "
-            "harvest in fields distinct from its mill-receipt fields, which is what "
-            "SRC-FOR-001 requires. No data-row cells were read or compared across sheets, so "
-            "the origin/receipt split rests on the sheet names alone; and only this one "
-            "state-year workbook was inspected, so whether every state-year workbook in the "
-            "share shares this sheet structure was not checked either. INFERENCE MARKER, "
-            "CLOSING. INFERENCE MARKER, OPENING: how this route was found comes from the "
-            "investigation that shaped this script rather than from this run -- the "
-            "legacy-download redirect was found by reading the share page's own JS bundle, and "
-            "the share page's embedded authenticated_download_url was observed there to answer "
-            "401 without a browser session. No probe in this run requested that URL, so both "
-            "statements carry no extract hash and are re-checked by no later run. INFERENCE "
-            "MARKER, CLOSING."
-        )}
+        return {
+            "route": route,
+            "status": "verified",
+            "reason": (
+                "Reachable and machine-readable, but only via an undocumented Box legacy-download "
+                "redirect rather than the modern share URL; per-state coverage per year is not "
+                "exhaustively verified (see coverage_span). Measured in the one workbook fetched "
+                f"this run ({box_navigation.get('sample_file')}, from the "
+                f"{box_navigation.get('probed_year')} subfolder): its {len(sheets)} sheet names are "
+                f"{sheets}, of which {origin} match this script's harvest-origin sheet-name pattern "
+                f"and {receipts} match its mill-receipt pattern. {header_clause} "
+                "INFERENCE MARKER, OPENING: what follows to the closing marker is a reading of "
+                "those sheet names, not a further measurement; it is supplied by hand, carries no "
+                "extract hash and is re-checked by no later run. Sheets named that way are read "
+                "here as meaning the workbook holds harvest volumes attributed to the county of "
+                "harvest in fields distinct from its mill-receipt fields, which is what "
+                "SRC-FOR-001 requires. No data-row cells were read or compared across sheets, so "
+                "the origin/receipt split rests on the sheet names alone; and only this one "
+                "state-year workbook was inspected, so whether every state-year workbook in the "
+                "share shares this sheet structure was not checked either. INFERENCE MARKER, "
+                "CLOSING. INFERENCE MARKER, OPENING: how this route was found comes from the "
+                "investigation that shaped this script rather than from this run -- the "
+                "legacy-download redirect was found by reading the share page's own JS bundle, and "
+                "the share page's embedded authenticated_download_url was observed there to answer "
+                "401 without a browser session. No probe in this run requested that URL, so both "
+                "statements carry no extract hash and are re-checked by no later run. INFERENCE "
+                "MARKER, CLOSING."
+            ),
+        }
 
     share_url = box_navigation.get("share_url_discovered")
     share_page_answered = "year_subfolders_found" in box_navigation
@@ -1211,10 +1264,15 @@ def compose_tpo_access(
             "the weakest basis this script records for not_obtainable, and one a re-run could "
             "overturn without anything at the source having changed"
         )
-    return {"route": route, "status": "not_obtainable", "reason": (
-        "Not obtained this run: " + "; ".join(clauses)
-        + ". See findings.route_probes and findings.box_navigation."
-    )}
+    return {
+        "route": route,
+        "status": "not_obtainable",
+        "reason": (
+            "Not obtained this run: "
+            + "; ".join(clauses)
+            + ". See findings.route_probes and findings.box_navigation."
+        ),
+    }
 
 
 # --- main -------------------------------------------------------------------------------------
@@ -1260,14 +1318,12 @@ def run_fia(client: httpx.Client) -> None:
         snum_index = parse_snum_estimate_attributes(snum_text)
 
     naive_probe = probe_url(client, FIA_FULLREPORT, params=FIA_NAIVE_PARAMS)
-    naive_is_error_page = (
-        naive_probe["http_status"] == 200
-        and b"Error Type" in naive_probe["body"]
-    )
+    naive_is_error_page = naive_probe["http_status"] == 200 and b"Error Type" in naive_probe["body"]
     retain_body(extracts, SOURCE_FIA, naive_probe, "fullreport_naive_probe.html")
     if scannable_text_page(naive_probe):
         scanned_pages["fullreport_naive_probe.html"] = naive_probe["body"].decode(
-            "utf-8", "replace")
+            "utf-8", "replace"
+        )
 
     real_probe = probe_url(client, FIA_FULLREPORT, params=FIA_REAL_PARAMS)
     estimates: list[dict] = []
@@ -1275,8 +1331,7 @@ def run_fia(client: httpx.Client) -> None:
     real_probe_parsed = False
     retain_body(extracts, SOURCE_FIA, real_probe, "fullreport_real_probe.json")
     if scannable_text_page(real_probe):
-        scanned_pages["fullreport_real_probe.json"] = real_probe["body"].decode(
-            "utf-8", "replace")
+        scanned_pages["fullreport_real_probe.json"] = real_probe["body"].decode("utf-8", "replace")
         try:
             parsed = json.loads(real_probe["body"])
             estimates = parsed.get("estimates", [])
@@ -1301,8 +1356,11 @@ def run_fia(client: httpx.Client) -> None:
     # because these routes usually do not answer at all.
     datamart_probes = [
         probe_with_retries(
-            lambda u=url: c.probe(client, u), url=url, attempts=FIA_DATAMART_ATTEMPTS,
-            wait_seconds=FIA_DATAMART_WAIT_SECONDS)
+            lambda u=url: c.probe(client, u),
+            url=url,
+            attempts=FIA_DATAMART_ATTEMPTS,
+            wait_seconds=FIA_DATAMART_WAIT_SECONDS,
+        )
         for url in FIA_DATAMART_CANDIDATES
     ]
     # `probe_url`, not `_common.probe`: every one of these routes that answers with a body has
@@ -1322,7 +1380,8 @@ def run_fia(client: httpx.Client) -> None:
         "pages_scanned": sorted(scanned_pages),
         "bytes_scanned": sum(len(t) for t in scanned_pages.values()),
         "industry_classification_terms": count_term_hits(
-            scanned_pages, INDUSTRY_CLASSIFICATION_TERMS),
+            scanned_pages, INDUSTRY_CLASSIFICATION_TERMS
+        ),
         "fia_taxonomy_terms": count_term_hits(scanned_pages, FIA_TAXONOMY_TERMS),
     }
     # Derived from this run's own fetched evaluation index, not transcribed from the dispatch
@@ -1340,7 +1399,8 @@ def run_fia(client: httpx.Client) -> None:
             # findings.industry_concept_scan measures.
             "published_start": str(wc_index["year_min"]) if wc_index["year_min"] else "",
             "published_end": str(wc_index["year_max"]) if wc_index["year_max"] else "",
-            "window_start": c.WINDOW_START, "window_end": c.WINDOW_END,
+            "window_start": c.WINDOW_START,
+            "window_end": c.WINDOW_END,
             "covered": (
                 "inventory evaluation cycles overlapping D1's reference years, not calendar "
                 "months or a Logging-specific series"
@@ -1432,8 +1492,9 @@ def run_tpo(client: httpx.Client) -> None:
     if box_share_url is not None:
         box_base = probe_url(client, box_share_url)
         retain_body(extracts, SOURCE_TPO, box_base, "box_nrum_data_folder.html")
-        probes.append(probe_record(
-            box_base, "discovered (linked from the NRUM data-downloads page)"))
+        probes.append(
+            probe_record(box_base, "discovered (linked from the NRUM data-downloads page)")
+        )
     if box_base["http_status"] == 200 and box_base["body"]:
         try:
             root_folder = box_shared_folder_items(box_base["body"].decode("utf-8", "replace"))
@@ -1444,8 +1505,11 @@ def run_tpo(client: httpx.Client) -> None:
             # only readable if the reason it did not parse reaches the artifact.
             box_navigation["shared_folder_parse_error"] = str(exc)
         year_folders = sorted(
-            (it.get("name") for it in root_folder.get("items", [])
-             if it.get("type") == "folder" and str(it.get("name", "")).isdigit()),
+            (
+                it.get("name")
+                for it in root_folder.get("items", [])
+                if it.get("type") == "folder" and str(it.get("name", "")).isdigit()
+            ),
             key=int,
         )
         box_navigation["nrum_data_folder_id"] = root_folder.get("currentFolderID")
@@ -1458,20 +1522,22 @@ def run_tpo(client: httpx.Client) -> None:
         if target is not None:
             year_folder_url = f"{box_share_url}/folder/{target['id']}"
             year_resp = probe_url(client, year_folder_url)
-            retain_body(
-                extracts, SOURCE_TPO, year_resp, f"box_{target['name']}_folder.html")
-            probes.append(probe_record(
-                year_resp, f"discovered (Box subfolder for {target['name']})"))
+            retain_body(extracts, SOURCE_TPO, year_resp, f"box_{target['name']}_folder.html")
+            probes.append(
+                probe_record(year_resp, f"discovered (Box subfolder for {target['name']})")
+            )
             box_navigation["probed_year"] = target["name"]
             if year_resp["http_status"] == 200 and year_resp["body"]:
                 try:
                     year_folder = box_shared_folder_items(
-                        year_resp["body"].decode("utf-8", "replace"))
+                        year_resp["body"].decode("utf-8", "replace")
+                    )
                 except (ValueError, json.JSONDecodeError):
                     year_folder = {"items": []}
                 items = year_folder.get("items", [])
                 box_navigation["files_listed_this_page"] = len(
-                    [it for it in items if it.get("type") == "file"])
+                    [it for it in items if it.get("type") == "file"]
+                )
                 box_navigation["filescount_per_box_metadata"] = target.get("filesCount")
                 chosen_file = select_first_file(items)
                 if chosen_file is not None:
@@ -1479,30 +1545,40 @@ def run_tpo(client: httpx.Client) -> None:
                     file_url = box_legacy_download_url(shared_name, chosen_file["id"])
                     file_resp = probe_url(client, file_url)
                     retain_body(
-                        extracts, SOURCE_TPO, file_resp,
-                        f"tpo_sample_{target['name']}_{chosen_file['name']}")
-                    probes.append(probe_record(
+                        extracts,
+                        SOURCE_TPO,
                         file_resp,
-                        f"discovered (Box legacy download of {chosen_file['name']})"))
+                        f"tpo_sample_{target['name']}_{chosen_file['name']}",
+                    )
+                    probes.append(
+                        probe_record(
+                            file_resp, f"discovered (Box legacy download of {chosen_file['name']})"
+                        )
+                    )
                     if answered_with_body(file_resp) and is_machine_readable(
-                            file_resp["content_type"]):
+                        file_resp["content_type"]
+                    ):
                         try:
                             inspected = inspect_xlsx(file_resp["body"])
                             harvest_origin_available = (
                                 distinguishes_harvest_origin_from_mill_receipts(
-                                    inspected["sheet_names"]))
+                                    inspected["sheet_names"]
+                                )
+                            )
                             box_navigation["sample_file"] = chosen_file["name"]
-                            box_navigation["sample_file_sheet_names"] = (
-                                inspected["sheet_names"])
-                            box_navigation["sample_file_first_sheet_name"] = (
-                                inspected["first_sheet_name"])
-                            box_navigation["sample_file_first_sheet_headers"] = (
-                                inspected["first_sheet_headers"])
+                            box_navigation["sample_file_sheet_names"] = inspected["sheet_names"]
+                            box_navigation["sample_file_first_sheet_name"] = inspected[
+                                "first_sheet_name"
+                            ]
+                            box_navigation["sample_file_first_sheet_headers"] = inspected[
+                                "first_sheet_headers"
+                            ]
                             # Empty on every workbook this run has seen. Persisted anyway so an
                             # absent header row shows up as a named gap in the artifact rather
                             # than as a clause the access reason silently omits.
-                            box_navigation["sample_file_first_sheet_unresolved"] = (
-                                inspected["first_sheet_unresolved"])
+                            box_navigation["sample_file_first_sheet_unresolved"] = inspected[
+                                "first_sheet_unresolved"
+                            ]
                             if chosen is None:
                                 chosen = file_url
                         except (zipfile.BadZipFile, KeyError) as exc:
@@ -1517,7 +1593,8 @@ def run_tpo(client: httpx.Client) -> None:
     # checked. Composing them out of line is also what makes each branch directly testable.
     year_folders_int = sorted(int(y) for y in box_navigation.get("year_subfolders_found", []))
     cadence_claim = compose_cadence_claim(
-        box_navigation, window_years=WINDOW_YEARS, window_start_year=int(c.WINDOW_START[:4]))
+        box_navigation, window_years=WINDOW_YEARS, window_start_year=int(c.WINDOW_START[:4])
+    )
     pagination_note = compose_pagination_note(box_navigation)
 
     c.write_summary(
@@ -1525,7 +1602,8 @@ def run_tpo(client: httpx.Client) -> None:
         coverage_span={
             "published_start": str(year_folders_int[0]) if year_folders_int else "",
             "published_end": str(year_folders_int[-1]) if year_folders_int else "",
-            "window_start": c.WINDOW_START, "window_end": c.WINDOW_END,
+            "window_start": c.WINDOW_START,
+            "window_end": c.WINDOW_END,
             "covered": cadence_claim,
             "uncovered": (
                 "no monthly resolution: SRC-FOR-004 forbids interpolating to months; "
@@ -1565,18 +1643,26 @@ def main() -> None:
     snum = fia_summary["findings"]["snum_estimate_attributes"]
     measure = fia_summary["findings"]["measure_proved_by_probe"] or {}
     print(
-        "FIA:", fia_summary["access"]["status"],
-        "| sampling error field:", fia_summary["findings"]["sampling_error_field"],
-        "| evaluation vintage field:", fia_summary["findings"]["evaluation_vintage_field"],
+        "FIA:",
+        fia_summary["access"]["status"],
+        "| sampling error field:",
+        fia_summary["findings"]["sampling_error_field"],
+        "| evaluation vintage field:",
+        fia_summary["findings"]["evaluation_vintage_field"],
     )
     print(
-        "FIA measure proved:", measure.get("num_est_desc"),
-        "| snum attributes catalogued:", snum["row_count"],
-        "| of them harvest-removals:", snum["harvest_removals_attribute_count"],
+        "FIA measure proved:",
+        measure.get("num_est_desc"),
+        "| snum attributes catalogued:",
+        snum["row_count"],
+        "| of them harvest-removals:",
+        snum["harvest_removals_attribute_count"],
     )
     print(
-        "TPO:", tpo_summary["access"]["status"],
-        "| chosen route:", tpo_summary["findings"]["chosen_route"],
+        "TPO:",
+        tpo_summary["access"]["status"],
+        "| chosen route:",
+        tpo_summary["findings"]["chosen_route"],
     )
 
 

@@ -11,10 +11,9 @@ import io
 import re
 import zipfile
 
+import _common as c
 import httpx
 import polars as pl
-
-import _common as c
 
 SOURCE = "qcew_size"
 SIZE_URL = "https://data.bls.gov/cew/data/files/{year}/csv/{year}_q1_by_size.zip"
@@ -51,11 +50,14 @@ def has_simultaneous_state_industry_size(
     class at once. `all_sizes` is the aggregate code -- it carries no size breakdown, so it
     never counts. Pass the code `all_sizes_code` derived from the fetched titles file; the
     caller supplies it rather than this function assuming a literal."""
-    return df.filter(
-        pl.col("area_fips").is_in(sorted(state_areas))
-        & (pl.col("industry_code") == industry)
-        & (pl.col("size_code") != all_sizes)
-    ).height > 0
+    return (
+        df.filter(
+            pl.col("area_fips").is_in(sorted(state_areas))
+            & (pl.col("industry_code") == industry)
+            & (pl.col("size_code") != all_sizes)
+        ).height
+        > 0
+    )
 
 
 def area_pattern(areas: list[str]) -> str:
@@ -111,32 +113,37 @@ def main() -> None:
 
     # The titles file is loaded BEFORE the verdict because the verdict depends on it: the
     # aggregate size_code the predicate excludes is derived from it, not assumed.
-    tpath = next(e["path"] for e in c.load_summary("qcew_codes")["extracts"]
-                 if e["path"].endswith("titles/size_code.csv"))
+    tpath = next(
+        e["path"]
+        for e in c.load_summary("qcew_codes")["extracts"]
+        if e["path"].endswith("titles/size_code.csv")
+    )
     tdf = pl.read_csv(tpath, infer_schema_length=0)
-    titles = dict(zip(tdf[tdf.columns[0]].to_list(), tdf[tdf.columns[1]].to_list(),
-                      strict=True))
+    titles = dict(zip(tdf[tdf.columns[0]].to_list(), tdf[tdf.columns[1]].to_list(), strict=True))
     all_sizes = all_sizes_code(titles)
 
     verdict = has_simultaneous_state_industry_size(
-        df, industry=c.INDUSTRY_CODE, state_areas=c.STATE_AREAS, all_sizes=all_sizes)
+        df, industry=c.INDUSTRY_CODE, state_areas=c.STATE_AREAS, all_sizes=all_sizes
+    )
 
     inventory = []
     for (agglvl,), grp in df.group_by(["agglvl_code"], maintain_order=True):
-        inventory.append({
-            "agglvl_code": agglvl,
-            "row_count": grp.height,
-            "has_113310": bool((grp["industry_code"] == c.INDUSTRY_CODE).any()),
-            "area_pattern": area_pattern(grp["area_fips"].unique().to_list()),
-            "size_codes": sorted(grp["size_code"].unique().to_list()),
-        })
+        inventory.append(
+            {
+                "agglvl_code": agglvl,
+                "row_count": grp.height,
+                "has_113310": bool((grp["industry_code"] == c.INDUSTRY_CODE).any()),
+                "area_pattern": area_pattern(grp["area_fips"].unique().to_list()),
+                "size_codes": sorted(grp["size_code"].unique().to_list()),
+            }
+        )
     inventory.sort(key=lambda r: r["agglvl_code"])
 
     logging_rows = df.filter(pl.col("industry_code") == c.INDUSTRY_CODE)
     finest = (
         "state x 113310 x establishment size IS published simultaneously"
-        if verdict else
-        "the finest simultaneous combination observed for 113310 is "
+        if verdict
+        else "the finest simultaneous combination observed for 113310 is "
         f"{area_pattern(logging_rows['area_fips'].unique().to_list())} geography x 113310 x "
         f"size codes {sorted(logging_rows['size_code'].unique().to_list())}"
     )
@@ -146,13 +153,14 @@ def main() -> None:
         coverage_span={
             "published_start": f"{min(c.WINDOW_YEARS)}-Q1",
             "published_end": f"{max(c.WINDOW_YEARS)}-Q1",
-            "window_start": c.WINDOW_START, "window_end": c.WINDOW_END,
+            "window_start": c.WINDOW_START,
+            "window_end": c.WINDOW_END,
             "covered": "first quarter of each window year only",
             "uncovered": (
                 f"Q2-Q4 of every window year: probed ({len(quarter_probe)} requests) and none "
                 "returned a by-size file, so the product is Q1-only for every year checked"
-                if not other_quarters_served else
-                "Q2-Q4 of every window year: NOT purely Q1-only -- at least one non-Q1 by-size "
+                if not other_quarters_served
+                else "Q2-Q4 of every window year: NOT purely Q1-only -- at least one non-Q1 by-size "
                 "file was found this run; see findings.quarter_probe for which year/quarter"
             ),
         },

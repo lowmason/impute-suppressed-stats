@@ -23,8 +23,9 @@ BULK_HEADER = [*SHARED, "qtrly_estabs_count", "area_title"]
 
 
 def test_identical_is_true_when_one_bulk_year_and_one_slice_header_agree():
-    parity = m.column_parity({"2017q1.csv": list(SHARED)}, {2017: list(SHARED)},
-                             reference_bulk_year=2017)
+    parity = m.column_parity(
+        {"2017q1.csv": list(SHARED)}, {2017: list(SHARED)}, reference_bulk_year=2017
+    )
     assert parity["identical"] is True
     assert parity["bulk_header_disagreement"] == {}
     assert parity["slice_only"] == [] and parity["bulk_only"] == []
@@ -33,8 +34,9 @@ def test_identical_is_true_when_one_bulk_year_and_one_slice_header_agree():
 def test_identical_is_false_when_the_two_routes_carry_different_columns():
     """The real finding: the slice route names `qtrly_estabs` where bulk names
     `qtrly_estabs_count`, and bulk carries title columns the slice omits."""
-    parity = m.column_parity({"2017q1.csv": SLICE_HEADER}, {2017: BULK_HEADER},
-                             reference_bulk_year=2017)
+    parity = m.column_parity(
+        {"2017q1.csv": SLICE_HEADER}, {2017: BULK_HEADER}, reference_bulk_year=2017
+    )
     assert parity["identical"] is False
     assert parity["slice_only"] == ["lq_qtrly_estabs", "qtrly_estabs"]
     assert parity["bulk_only"] == ["area_title", "qtrly_estabs_count"]
@@ -50,7 +52,8 @@ def test_identical_is_false_when_the_bulk_years_disagree_with_each_other():
     parity = m.column_parity(
         {"2017q1.csv": list(SHARED)},
         {2017: list(SHARED), 2018: [*SHARED, "month2_emplvl"]},
-        reference_bulk_year=2017)
+        reference_bulk_year=2017,
+    )
     assert parity["identical"] is False
     assert set(parity["bulk_header_disagreement"]) == {"2017", "2018"}
 
@@ -61,7 +64,8 @@ def test_a_bulk_disagreement_is_recorded_rather_than_picked_around():
     parity = m.column_parity(
         {"2017q1.csv": list(SHARED)},
         {2017: list(SHARED), 2018: [*SHARED, "month2_emplvl"]},
-        reference_bulk_year=2017)
+        reference_bulk_year=2017,
+    )
     assert parity["bulk_header_disagreement"]["2018"][-1] == "month2_emplvl"
 
 
@@ -77,9 +81,13 @@ def test_identical_is_false_when_the_slice_quarters_disagree_with_each_other():
     reproduces `findings.column_parity` field for field either way, because that run has both
     disagreement dicts empty."""
     parity = m.column_parity(
-        {"/abs/slices/2017q1.csv": list(SHARED),
-         "/abs/slices/2021q1.csv": [*SHARED, "new_bls_column"]},
-        {2017: list(SHARED)}, reference_bulk_year=2017)
+        {
+            "/abs/slices/2017q1.csv": list(SHARED),
+            "/abs/slices/2021q1.csv": [*SHARED, "new_bls_column"],
+        },
+        {2017: list(SHARED)},
+        reference_bulk_year=2017,
+    )
     assert set(parity["slice_header_disagreement"]) == {"2017q1.csv", "2021q1.csv"}
     assert parity["identical"] is False
 

@@ -25,9 +25,8 @@ from collections.abc import Sequence
 from itertools import pairwise
 from typing import Any
 
-import polars as pl
-
 import _common as c
+import polars as pl
 
 SOURCE = "qcew_panel"
 
@@ -67,8 +66,11 @@ PANEL_SCHEMA: dict[str, pl.DataType] = {
 
 
 def area_titles() -> dict[str, str]:
-    path = next(e["path"] for e in c.load_summary("qcew_codes")["extracts"]
-                if e["path"].endswith("titles/area_fips.csv"))
+    path = next(
+        e["path"]
+        for e in c.load_summary("qcew_codes")["extracts"]
+        if e["path"].endswith("titles/area_fips.csv")
+    )
     df = pl.read_csv(path, infer_schema_length=0)
     return dict(zip(df[df.columns[0]].to_list(), df[df.columns[1]].to_list(), strict=True))
 
@@ -77,8 +79,9 @@ def slice_paths() -> list[str]:
     """Task 2 recorded 32 quarterly slice CSVs and, alongside them, a bulk ZIP it fetched to
     compare headers. Only the CSVs are panel input; the ZIP is a different file format and a
     different column vocabulary (`qtrly_estabs_count`, not `qtrly_estabs`)."""
-    return [e["path"] for e in c.load_summary("qcew_routes")["extracts"]
-            if e["path"].endswith(".csv")]
+    return [
+        e["path"] for e in c.load_summary("qcew_routes")["extracts"] if e["path"].endswith(".csv")
+    ]
 
 
 def predicate_exprs(own_code: str) -> list[tuple[str, pl.Expr]]:
@@ -89,12 +92,15 @@ def predicate_exprs(own_code: str) -> list[tuple[str, pl.Expr]]:
     recorded predicate and the applied predicate the same object.
     """
     return [
-        (f"industry_code == '{c.INDUSTRY_CODE}'",
-         pl.col("industry_code") == c.INDUSTRY_CODE),
-        (f"own_code == '{own_code}' (qcew_codes.findings.private_own_code)",
-         pl.col("own_code") == own_code),
-        (f"area_fips.str.ends_with('{AREA_SUFFIX}')",
-         pl.col("area_fips").str.ends_with(AREA_SUFFIX)),
+        (f"industry_code == '{c.INDUSTRY_CODE}'", pl.col("industry_code") == c.INDUSTRY_CODE),
+        (
+            f"own_code == '{own_code}' (qcew_codes.findings.private_own_code)",
+            pl.col("own_code") == own_code,
+        ),
+        (
+            f"area_fips.str.ends_with('{AREA_SUFFIX}')",
+            pl.col("area_fips").str.ends_with(AREA_SUFFIX),
+        ),
     ]
 
 
@@ -138,8 +144,7 @@ def build_long(own_code: str) -> tuple[pl.DataFrame, list[str]]:
     before INV-003 nulls it out on a suppressed row — exists only here, and
     `disclosure_code_values` has to measure it to report it.
     """
-    raw = pl.concat([pl.read_csv(p, infer_schema_length=0) for p in slice_paths()],
-                    how="vertical")
+    raw = pl.concat([pl.read_csv(p, infer_schema_length=0) for p in slice_paths()], how="vertical")
     titles = area_titles()
     df, recorded = apply_predicates(raw, own_code)
 
@@ -147,7 +152,8 @@ def build_long(own_code: str) -> tuple[pl.DataFrame, list[str]]:
         df.unpivot(
             index=["area_fips", "year", "qtr", "disclosure_code", "qtrly_estabs"],
             on=["month1_emplvl", "month2_emplvl", "month3_emplvl"],
-            variable_name="month_col", value_name="emplvl_raw",
+            variable_name="month_col",
+            value_name="emplvl_raw",
         )
         .with_columns(
             year=pl.col("year").cast(pl.Int32),
@@ -162,10 +168,13 @@ def build_long(own_code: str) -> tuple[pl.DataFrame, list[str]]:
         .with_columns(month=(pl.col("qtr") - 1) * 3 + pl.col("month_in_qtr"))
         .with_columns(
             # INV-003: a value paired with a suppression code is never a true zero.
-            emplvl=pl.when(pl.col("suppressed")).then(None)
+            emplvl=pl.when(pl.col("suppressed"))
+            .then(None)
             .otherwise(pl.col("emplvl_raw").cast(pl.Int64)),
-            area_class=pl.when(pl.col("area_fips") == c.NATIONAL_AREA).then(pl.lit("national"))
-            .when(pl.col("area_fips").is_in(sorted(c.STATE_AREAS))).then(pl.lit("states_dc"))
+            area_class=pl.when(pl.col("area_fips") == c.NATIONAL_AREA)
+            .then(pl.lit("national"))
+            .when(pl.col("area_fips").is_in(sorted(c.STATE_AREAS)))
+            .then(pl.lit("states_dc"))
             .otherwise(pl.lit("other_state_level")),
             area_title=pl.col("area_fips").replace_strict(titles, default=""),
         )
@@ -286,11 +295,17 @@ def cell_coverage(states: pl.DataFrame, interior_month_gaps: int) -> dict[str, A
     window_months = len(c.WINDOW_YEARS) * 12
     # Distinct months, not row count: an area's absent-month arithmetic must not depend on
     # `_conform`'s key check having run, even though it makes the two the same.
-    present = dict(states.group_by("area_fips")
-                   .agg(pl.struct("year", "month").n_unique())
-                   .sort("area_fips").iter_rows())
-    absent = {area: window_months - present.get(area, 0)
-              for area in sorted(c.STATE_AREAS) if present.get(area, 0) < window_months}
+    present = dict(
+        states.group_by("area_fips")
+        .agg(pl.struct("year", "month").n_unique())
+        .sort("area_fips")
+        .iter_rows()
+    )
+    absent = {
+        area: window_months - present.get(area, 0)
+        for area in sorted(c.STATE_AREAS)
+        if present.get(area, 0) < window_months
+    }
     return {
         # The share's actual denominator, so a row count by construction.
         "cells_present": states.height,
@@ -356,9 +371,7 @@ def notes(
         f"published into the panel)"
         for row in codes
     )
-    other_desc = ", ".join(
-        f"{row['area_fips']} ({row['area_title']})" for row in others
-    ) or "none"
+    other_desc = ", ".join(f"{row['area_fips']} ({row['area_title']})" for row in others) or "none"
     missing = coverage["areas_with_no_rows"]
     partial = {a: n for a, n in coverage["absent_months_by_area"].items() if a not in missing}
     return (
@@ -414,20 +427,28 @@ def main() -> None:
     n_cells = states.height
     n_suppressed = int(states["suppressed"].sum())
 
-    by_state = (states.group_by("area_fips")
-                .agg(share=pl.col("suppressed").mean()).sort("area_fips"))
-    by_month = (states.with_columns(
-                    ym=pl.format("{}-{}", pl.col("year"),
-                                 pl.col("month").cast(pl.Utf8).str.zfill(2)))
-                .group_by("ym").agg(share=pl.col("suppressed").mean()).sort("ym"))
+    by_state = states.group_by("area_fips").agg(share=pl.col("suppressed").mean()).sort("area_fips")
+    by_month = (
+        states.with_columns(
+            ym=pl.format("{}-{}", pl.col("year"), pl.col("month").cast(pl.Utf8).str.zfill(2))
+        )
+        .group_by("ym")
+        .agg(share=pl.col("suppressed").mean())
+        .sort("ym")
+    )
 
     hist, interior_gaps = _state_runs(states)
 
     supp_rows = states.filter(pl.col("suppressed"))
     estabs_survive = estabs_survival(supp_rows)
 
-    others = (panel.filter(pl.col("area_class") == "other_state_level")
-              .select("area_fips", "area_title").unique().sort("area_fips").to_dicts())
+    others = (
+        panel.filter(pl.col("area_class") == "other_state_level")
+        .select("area_fips", "area_title")
+        .unique()
+        .sort("area_fips")
+        .to_dicts()
+    )
     codes = disclosure_code_values(long)
     coverage = cell_coverage(states, interior_gaps)
 
@@ -448,19 +469,26 @@ def main() -> None:
     # "no response at all" sentinel, so a reader could not tell a derived file from a transport
     # failure. `_common.validate_summary` requires the key's presence, not its type, so `None`
     # validates and the exit gate carries it through as an empty manifest field.
-    rec = c.record_extract(SOURCE, "derived://qcew_routes/slices", "panel.parquet",
-                           buf.getvalue(), http_status=None)
+    rec = c.record_extract(
+        SOURCE, "derived://qcew_routes/slices", "panel.parquet", buf.getvalue(), http_status=None
+    )
 
     span_start, span_end = (f"{y}-{m:02d}" for y, m in (first_month, last_month))
     c.write_summary(
         SOURCE,
         coverage_span={
-            "published_start": span_start, "published_end": span_end,
-            "window_start": c.WINDOW_START, "window_end": c.WINDOW_END,
-            "covered": f"{span_start}..{span_end}", "uncovered": uncovered,
+            "published_start": span_start,
+            "published_end": span_end,
+            "window_start": c.WINDOW_START,
+            "window_end": c.WINDOW_END,
+            "covered": f"{span_start}..{span_end}",
+            "uncovered": uncovered,
         },
-        access={"route": "derived from qcew_routes slice extracts", "status": "verified",
-                "reason": None},
+        access={
+            "route": "derived from qcew_routes slice extracts",
+            "status": "verified",
+            "reason": None,
+        },
         extracts=[rec],
         findings={
             "filter_predicates": predicates,
@@ -470,22 +498,30 @@ def main() -> None:
             "other_state_level_areas": others,
             "suppression_share_overall": n_suppressed / n_cells if n_cells else None,
             "suppression_share_by_state": dict(
-                zip(by_state["area_fips"].to_list(), by_state["share"].to_list(), strict=True)),
+                zip(by_state["area_fips"].to_list(), by_state["share"].to_list(), strict=True)
+            ),
             "suppression_share_by_month": dict(
-                zip(by_month["ym"].to_list(), by_month["share"].to_list(), strict=True)),
+                zip(by_month["ym"].to_list(), by_month["share"].to_list(), strict=True)
+            ),
             "suppressed_run_lengths": {str(k): v for k, v in sorted(hist.items())},
             "estabs_survive_suppression_share": estabs_survive,
             "disclosure_code_values": codes,
             "state_month_cell_coverage": coverage,
             "notes": notes(
-                panel=panel, states=states, supp_rows=supp_rows, codes=codes,
-                coverage=coverage, others=others,
+                panel=panel,
+                states=states,
+                supp_rows=supp_rows,
+                codes=codes,
+                coverage=coverage,
+                others=others,
                 titles_available=c.load_summary("qcew_codes")["findings"]["titles_available"],
             ),
         },
     )
-    print(f"panel rows={panel.height}; states={states['area_fips'].n_unique()}; "
-          f"suppressed share={n_suppressed / n_cells if n_cells else 'n/a'}")
+    print(
+        f"panel rows={panel.height}; states={states['area_fips'].n_unique()}; "
+        f"suppressed share={n_suppressed / n_cells if n_cells else 'n/a'}"
+    )
 
 
 if __name__ == "__main__":

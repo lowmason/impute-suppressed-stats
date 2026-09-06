@@ -50,15 +50,13 @@ import json
 import os
 import re
 
-import httpx
-
 import _common as c
+import httpx
 
 SOURCE = "bds"
 BASE = "https://api.census.gov/data/timeseries/bds"
 CANDIDATES = ("11", "113", "1133", "11331", "113310")
-WANTED_VARS = ("ESTAB", "FIRM", "JOB_CREATION", "JOB_DESTRUCTION", "ESTABS_ENTRY",
-               "ESTABS_EXIT")
+WANTED_VARS = ("ESTAB", "FIRM", "JOB_CREATION", "JOB_DESTRUCTION", "ESTABS_ENTRY", "ESTABS_EXIT")
 
 _TITLE_RE = re.compile(rb"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
 
@@ -154,8 +152,11 @@ def probe_result(naics: str, status: int, outcome: str, payload: list | None) ->
             years_returned = sorted({int(r[yidx]) for r in rows})
         row_count = len(rows)
     return {
-        "naics": naics, "digits": len(naics), "http_status": status,
-        "row_count": row_count, "years_returned": years_returned,
+        "naics": naics,
+        "digits": len(naics),
+        "http_status": status,
+        "row_count": row_count,
+        "years_returned": years_returned,
     }
 
 
@@ -263,8 +264,11 @@ def fetch_naics_probe(client: httpx.Client, params: dict) -> tuple[int, str, byt
         resp = c.request(client, BASE, params=params)
         return resp.status_code, resp.headers.get("content-type", ""), resp.content
     except httpx.HTTPStatusError as exc:
-        return (exc.response.status_code, exc.response.headers.get("content-type", ""),
-                exc.response.content)
+        return (
+            exc.response.status_code,
+            exc.response.headers.get("content-type", ""),
+            exc.response.content,
+        )
     except httpx.TransportError:
         return 0, "", b""
 
@@ -282,9 +286,15 @@ def main() -> None:
     # recorded as a fabricated 200 -- the same defect class the probe loop below avoids by
     # passing its measured status. `compose_retention_rule` derives its counters from these
     # records, so this is what keeps its 200/204 split a measurement across every extract.
-    extracts.append(c.record_extract(
-        SOURCE, f"{BASE}/variables.json", "variables.json", vresp.content,
-        http_status=vresp.status_code))
+    extracts.append(
+        c.record_extract(
+            SOURCE,
+            f"{BASE}/variables.json",
+            "variables.json",
+            vresp.content,
+            http_status=vresp.status_code,
+        )
+    )
     names = set(vresp.json()["variables"].keys())
     present = [v for v in WANTED_VARS if v in names]
 
@@ -310,8 +320,9 @@ def main() -> None:
         # absence. Only between the two 200 outcomes is the retained body itself the evidence.
         # Only a transport failure (status 0, no body) registers nothing.
         if status != 0:
-            extracts.append(c.record_extract(
-                SOURCE, BASE, f"naics_{naics}.json", body, http_status=status))
+            extracts.append(
+                c.record_extract(SOURCE, BASE, f"naics_{naics}.json", body, http_status=status)
+            )
 
         row = probe_result(naics, status, outcome, payload)
         probe_rows.append(row)
@@ -337,8 +348,10 @@ def main() -> None:
         coverage_span={
             "published_start": str(min(years)) if years else "",
             "published_end": str(max(years)) if years else "",
-            "window_start": c.WINDOW_START, "window_end": c.WINDOW_END,
-            "covered": covered, "uncovered": uncovered,
+            "window_start": c.WINDOW_START,
+            "window_end": c.WINDOW_END,
+            "covered": covered,
+            "uncovered": uncovered,
         },
         access={"route": BASE, "status": access_status, "reason": access_reason},
         extracts=extracts,

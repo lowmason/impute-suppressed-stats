@@ -73,9 +73,8 @@ import shutil
 from collections import Counter
 from pathlib import Path
 
-import httpx
-
 import _common as c
+import httpx
 
 SOURCE = "cbp_regime"
 
@@ -92,20 +91,30 @@ LAYOUT_2017_URL = (
 # would for the two "state_layout.txt"-named files under different parent directories.
 DOC_URLS = [
     {"url": METHOD_URL, "rel_path": "docs/methodology.html"},
-    {"url": "https://www.census.gov/programs-surveys/cbp/technical-documentation.html",
-     "rel_path": "docs/technical-documentation.html"},
+    {
+        "url": "https://www.census.gov/programs-surveys/cbp/technical-documentation.html",
+        "rel_path": "docs/technical-documentation.html",
+    },
     # The brief's illustrative URL, verbatim -- kept and fetched for real so its 404 is a
     # measured fact this run (module docstring point 2), not a silently corrected typo.
-    {"url": "https://www.census.gov/programs-surveys/cbp/technical-documentation/"
-            "records-layouts.html", "rel_path": "docs/records-layouts.html"},
+    {
+        "url": "https://www.census.gov/programs-surveys/cbp/technical-documentation/"
+        "records-layouts.html",
+        "rel_path": "docs/records-layouts.html",
+    },
     # The real page (singular "record") -- what record-layouts navigation and this task's
     # discovery of the per-year layout files actually rests on.
-    {"url": "https://www.census.gov/programs-surveys/cbp/technical-documentation/"
-            "record-layouts.html", "rel_path": "docs/record-layouts.html"},
+    {
+        "url": "https://www.census.gov/programs-surveys/cbp/technical-documentation/"
+        "record-layouts.html",
+        "rel_path": "docs/record-layouts.html",
+    },
     {"url": LAYOUT_2017_URL, "rel_path": "docs/2017_state_layout_2017.txt"},
-    {"url": "https://www2.census.gov/programs-surveys/cbp/technical-documentation/"
-            "records-layouts/noise-layout/state_x_lfo_layout.txt",
-     "rel_path": "docs/noise_state_x_lfo_layout.txt"},
+    {
+        "url": "https://www2.census.gov/programs-surveys/cbp/technical-documentation/"
+        "records-layouts/noise-layout/state_x_lfo_layout.txt",
+        "rel_path": "docs/noise_state_x_lfo_layout.txt",
+    },
 ]
 assert len({spec["rel_path"] for spec in DOC_URLS}) == len(DOC_URLS), (
     "DOC_URLS rel_paths must be pairwise distinct -- two URLs writing the same file would let "
@@ -145,7 +154,8 @@ def flag_evidence(header: list[str], body: list[list]) -> dict:
             out[col] = dict(Counter(flag_value_key(row[idx[col]]) for row in body))
     suppressed = sum(1 for row in body if "EMP_F" in idx and row[idx["EMP_F"]] is not None)
     emp_n_present_and_nonzero = sum(
-        1 for row in body if "EMP_N" in idx and row[idx["EMP_N"]] not in (None, "0"))
+        1 for row in body if "EMP_N" in idx and row[idx["EMP_N"]] not in (None, "0")
+    )
     out["suppressed_share"] = suppressed / total if total else 0.0
     out["emp_n_present_and_nonzero_share"] = emp_n_present_and_nonzero / total if total else 0.0
     out["emp_n_f_in_response"] = "EMP_N_F" in idx
@@ -178,7 +188,7 @@ def validate_regime_entry(year: str, entry: dict, fetched_ok_urls: set[str]) -> 
 
 
 def _and_join(years: "list[int]") -> str:
-    """"2018 and 2020" / "2019, 2021, 2022 and 2023" -- an Oxford-comma-free English list, used
+    """ "2018 and 2020" / "2019, 2021, 2022 and 2023" -- an Oxford-comma-free English list, used
     only so the two year-sets below can be rendered into prose without a hand-typed string that
     could drift from the sets themselves."""
     items = [str(y) for y in years]
@@ -242,7 +252,8 @@ def _year_set_problems(
 
 
 _year_set_problems_found = _year_set_problems(
-    YEARS_WITH_WRONG_PRODUCT_RECORD_LAYOUT, YEARS_WITH_NO_RECORD_LAYOUT_AT_ALL)
+    YEARS_WITH_WRONG_PRODUCT_RECORD_LAYOUT, YEARS_WITH_NO_RECORD_LAYOUT_AT_ALL
+)
 assert not _year_set_problems_found, "; ".join(_year_set_problems_found)
 
 
@@ -289,7 +300,8 @@ def _no_year_specific_doc_evidence(year: int) -> str:
     no_layout_years = _and_join(list(YEARS_WITH_NO_RECORD_LAYOUT_AT_ALL))
     if year in YEARS_WITH_WRONG_PRODUCT_RECORD_LAYOUT:
         other_wrong_product_years = _and_join(
-            [y for y in YEARS_WITH_WRONG_PRODUCT_RECORD_LAYOUT if y != year])
+            [y for y in YEARS_WITH_WRONG_PRODUCT_RECORD_LAYOUT if y != year]
+        )
         layout_clause = (
             f"a {year}-labeled record-layout file is archived at the Census record-layouts "
             "index, but it describes the state ALL-NAICS-totals product rather than the "
@@ -386,16 +398,31 @@ REGIME_BY_YEAR: dict[str, dict] = {
             "detail only, not as the basis for this label."
         ),
     },
-    "2019": {"regime": "noise_infusion", "citation": METHOD_CITATION,
-              "evidence": _no_year_specific_doc_evidence(2019)},
-    "2020": {"regime": "noise_infusion", "citation": METHOD_CITATION,
-              "evidence": _no_year_specific_doc_evidence(2020)},
-    "2021": {"regime": "noise_infusion", "citation": METHOD_CITATION,
-              "evidence": _no_year_specific_doc_evidence(2021)},
-    "2022": {"regime": "noise_infusion", "citation": METHOD_CITATION,
-              "evidence": _no_year_specific_doc_evidence(2022)},
-    "2023": {"regime": "noise_infusion", "citation": METHOD_CITATION,
-              "evidence": _no_year_specific_doc_evidence(2023)},
+    "2019": {
+        "regime": "noise_infusion",
+        "citation": METHOD_CITATION,
+        "evidence": _no_year_specific_doc_evidence(2019),
+    },
+    "2020": {
+        "regime": "noise_infusion",
+        "citation": METHOD_CITATION,
+        "evidence": _no_year_specific_doc_evidence(2020),
+    },
+    "2021": {
+        "regime": "noise_infusion",
+        "citation": METHOD_CITATION,
+        "evidence": _no_year_specific_doc_evidence(2021),
+    },
+    "2022": {
+        "regime": "noise_infusion",
+        "citation": METHOD_CITATION,
+        "evidence": _no_year_specific_doc_evidence(2022),
+    },
+    "2023": {
+        "regime": "noise_infusion",
+        "citation": METHOD_CITATION,
+        "evidence": _no_year_specific_doc_evidence(2023),
+    },
     "2024": {
         "regime": "unknown",
         "citation": "",
@@ -451,8 +478,9 @@ def emp_n_f_caveat(*, observed_any: bool, emp_n_f_label: str | None) -> str:
     fetched", never render as if the label itself were the string 'None'."""
     label_clause = (
         "which this run could not fetch (variables/EMP_N_F.json did not return 200 for the "
-        "representative year)" if emp_n_f_label is None else
-        f"labelled {emp_n_f_label!r} in this run's fetched variable metadata"
+        "representative year)"
+        if emp_n_f_label is None
+        else f"labelled {emp_n_f_label!r} in this run's fetched variable metadata"
     )
     if observed_any:
         return (
@@ -487,8 +515,9 @@ def fetch_variable_definition(
         resp = c.request(client, url)
     except httpx.HTTPStatusError:
         return None
-    extracts.append(c.record_extract(
-        SOURCE, url, f"variables/{year}_{variable}.json", resp.content))
+    extracts.append(
+        c.record_extract(SOURCE, url, f"variables/{year}_{variable}.json", resp.content)
+    )
     return resp.json()
 
 
@@ -534,8 +563,9 @@ def main() -> None:
     # control (module docstring point 2) and must not drag this down even though it 404s.
     access_status = "verified" if METHOD_URL in fetched_ok_urls else "not_obtainable"
     access_reason = (
-        None if access_status == "verified" else
-        f"{METHOD_URL} did not return 200 this run (see documentation_fetched); every "
+        None
+        if access_status == "verified"
+        else f"{METHOD_URL} did not return 200 this run (see documentation_fetched); every "
         "regime_by_year citation rests on it"
     )
     if access_status != "verified":
@@ -601,12 +631,14 @@ def main() -> None:
         coverage_span={
             "published_start": str(min(years_available)) if years_available else "",
             "published_end": str(max(years_available)) if years_available else "",
-            "window_start": c.WINDOW_START, "window_end": c.WINDOW_END,
+            "window_start": c.WINDOW_START,
+            "window_end": c.WINDOW_END,
             "covered": meta["coverage_span"]["covered"],
             "uncovered": meta["coverage_span"]["uncovered"],
         },
         access={
-            "route": "; ".join(spec["url"] for spec in DOC_URLS), "status": access_status,
+            "route": "; ".join(spec["url"] for spec in DOC_URLS),
+            "status": access_status,
             "reason": access_reason,
         },
         extracts=extracts,
@@ -623,10 +655,17 @@ def main() -> None:
         if ev is None:
             print(year, "no 113310 extract this run")
             continue
-        print(year, "suppressed", round(ev["suppressed_share"], 3),
-              "emp_n_present_and_nonzero", round(ev["emp_n_present_and_nonzero_share"], 3),
-              "EMP_F values", sorted(ev.get("EMP_F", {})),
-              "| regime:", REGIME_BY_YEAR[year]["regime"])
+        print(
+            year,
+            "suppressed",
+            round(ev["suppressed_share"], 3),
+            "emp_n_present_and_nonzero",
+            round(ev["emp_n_present_and_nonzero_share"], 3),
+            "EMP_F values",
+            sorted(ev.get("EMP_F", {})),
+            "| regime:",
+            REGIME_BY_YEAR[year]["regime"],
+        )
     print("unknown_years:", unknown_years)
 
 

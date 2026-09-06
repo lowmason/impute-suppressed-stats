@@ -101,50 +101,64 @@ FIELDS = ("source", "url", "path", "sha256", "bytes", "retrieved_utc", "http_sta
 # Twelve source keys from eleven scripts: `forest_sources.py` writes both `fia` and `tpo`, so a
 # one-script-per-source assumption drops a source. Declared here rather than scanned from disk
 # so that a missing source and an unexpected one are both errors (see `check_source_set`).
-EXPECTED_SOURCES = frozenset({
-    "bds", "cbp_metadata", "cbp_regime", "ces", "fia", "qcew_codes", "qcew_identity",
-    "qcew_panel", "qcew_routes", "qcew_size", "susb", "tpo",
-})
+EXPECTED_SOURCES = frozenset(
+    {
+        "bds",
+        "cbp_metadata",
+        "cbp_regime",
+        "ces",
+        "fia",
+        "qcew_codes",
+        "qcew_identity",
+        "qcew_panel",
+        "qcew_routes",
+        "qcew_size",
+        "susb",
+        "tpo",
+    }
+)
 
 # Findings keys whose empty value is a recorded finding, not a missing one. A gate that
 # rejected these would push someone to fabricate a value -- the exact failure this stage exists
 # to prevent. Keyed by (source, key), not by key alone: the allowance is granted to the script
 # that earned it. The first four are declared by the plan; the fifth is declared here so that
 # E1's pass names the field rather than passing it by accident of container shape.
-LEGITIMATELY_EMPTY_FINDINGS = frozenset({
-    ("qcew_routes", "bulk_years_required"),  # plan: "[] is a legitimate finding, not a failure"
-    ("cbp_regime", "unknown_years"),         # plan: list of years whose regime is `unknown`
-    ("fia", "sampling_error_field"),         # plan: the field name, or null
-    ("tpo", "chosen_route"),                 # plan: the URL, or `null`
-    # `null` for all eight window years, because LFO was only ever sent as a filter (`LFO=001`)
-    # and never selected as an output column, so no code list came back. The field is marked
-    # "not obtainable -- why" in two places, neither of them the value: `cbp_metadata.findings
-    # .notes` records the reason year by year, and the §1.2 table in
-    # `specs/findings/source-audit-notes.md` carries it as the row routing the fix to Stage 1
-    # with a dedicated `LFO,LFO_LABEL` query. Declared rather than left to `is_empty`'s shape
-    # test, which passed it before this entry existed.
-    ("cbp_metadata", "lfo_by_year"),
-})
+LEGITIMATELY_EMPTY_FINDINGS = frozenset(
+    {
+        ("qcew_routes", "bulk_years_required"),  # plan: "[] is a legitimate finding, not a failure"
+        ("cbp_regime", "unknown_years"),  # plan: list of years whose regime is `unknown`
+        ("fia", "sampling_error_field"),  # plan: the field name, or null
+        ("tpo", "chosen_route"),  # plan: the URL, or `null`
+        # `null` for all eight window years, because LFO was only ever sent as a filter (`LFO=001`)
+        # and never selected as an output column, so no code list came back. The field is marked
+        # "not obtainable -- why" in two places, neither of them the value: `cbp_metadata.findings
+        # .notes` records the reason year by year, and the §1.2 table in
+        # `specs/findings/source-audit-notes.md` carries it as the row routing the fix to Stage 1
+        # with a dedicated `LFO,LFO_LABEL` query. Declared rather than left to `is_empty`'s shape
+        # test, which passed it before this entry existed.
+        ("cbp_metadata", "lfo_by_year"),
+    }
+)
 
 # The roadmap's Stage 0 `Exit:` line, split into its five criteria and quoted from it. `main`
 # prints one PASS/FAIL line per entry, so the gate reports which criterion failed rather than
 # only that something did.
 CRITERIA: dict[str, str] = {
-    "E1": 'the finding file exists with every field above either filled or marked '
-          '"not obtainable - why"',
+    "E1": "the finding file exists with every field above either filled or marked "
+    '"not obtainable - why"',
     "E2": "the SRC-QCEW-006 branch verdict names exactly one of enforce, residual-cells, or "
-          "decline, in one sentence, citing the per-quarter comparison that produced it and "
-          "stating whether the geography universe accounts for any gap",
+    "decline, in one sentence, citing the per-quarter comparison that produced it and "
+    "stating whether the geography universe accounts for any gap",
     "E3": "the QCEW year boundary is stated as a reference year, not an approximation",
     "E4": "`git ls-files` shows no `.env`",
     "E5": "every extract's recorded sha256 matches the file on disk",
     # Not from the `Exit:` line: the plan's Task 13 `Closes:` line, which also names the §1.2
     # bullet and the three §21 rows this stage gives a verdict on.
     "C": "the stage deliverable also discharges §1.2's final required-plan bullet and gives a "
-         "verdict on the three §21 rows the stage cites",
+    "verdict on the three §21 rows the stage cites",
     # Not a roadmap criterion either: the artifact integrity E1 and E5 are read off.
     "S": "artifact integrity: the audited source set, the summary schema, and the extract "
-         "manifest in both directions",
+    "manifest in both directions",
 }
 
 # INFERENCE MARKER, OPENING: the mapping below, to the closing marker, is a reading of the
@@ -156,38 +170,72 @@ CRITERIA: dict[str, str] = {
 # accepted as dispatch-mandated, so checking against them would reject correct work. Each entry
 # is (roadmap phrase, source, findings key).
 ROADMAP_FIELDS: tuple[tuple[str, str, str], ...] = (
-    ("the earliest reference year the §5.4 slice endpoint serves",
-     "qcew_routes", "earliest_year_served"),
-    ("the bulk-file route covering the remainder of the D1 window",
-     "qcew_routes", "bulk_years_required"),
-    ("the bulk-file route covering the remainder of the D1 window",
-     "qcew_routes", "bulk_years_fetched"),
-    ("the code/title lists actually present for agglvl_code, own_code, size_code and "
-     "disclosure_code on 113310 rows", "qcew_codes", "codes_present"),
-    ("the own_code for private ownership, derived from the fetched titles file",
-     "qcew_codes", "private_own_code"),
-    ("whether any QCEW size file carries state x 113310 x size simultaneously",
-     "qcew_size", "simultaneous_state_industry_size"),
+    (
+        "the earliest reference year the §5.4 slice endpoint serves",
+        "qcew_routes",
+        "earliest_year_served",
+    ),
+    (
+        "the bulk-file route covering the remainder of the D1 window",
+        "qcew_routes",
+        "bulk_years_required",
+    ),
+    (
+        "the bulk-file route covering the remainder of the D1 window",
+        "qcew_routes",
+        "bulk_years_fetched",
+    ),
+    (
+        "the code/title lists actually present for agglvl_code, own_code, size_code and "
+        "disclosure_code on 113310 rows",
+        "qcew_codes",
+        "codes_present",
+    ),
+    (
+        "the own_code for private ownership, derived from the fetched titles file",
+        "qcew_codes",
+        "private_own_code",
+    ),
+    (
+        "whether any QCEW size file carries state x 113310 x size simultaneously",
+        "qcew_size",
+        "simultaneous_state_industry_size",
+    ),
     ("the CBP EMPSZES code list per vintage", "cbp_metadata", "empszes_by_year"),
     ("the CBP LFO code list per vintage", "cbp_metadata", "lfo_by_year"),
     ("the CBP NAICS predicate name per vintage", "cbp_metadata", "naics_predicate_by_year"),
     ("the CBP disclosure regime per reference year", "cbp_regime", "regime_by_year"),
-    ("the state x month suppression share for 113310 private ownership",
-     "qcew_panel", "suppression_share_overall"),
-    ("the state x month suppression share for 113310 private ownership",
-     "qcew_panel", "suppression_share_by_month"),
-    ("per-state CES publication level (1133, 113, or supersector)",
-     "ces", "publication_level_by_sm_state_code"),
+    (
+        "the state x month suppression share for 113310 private ownership",
+        "qcew_panel",
+        "suppression_share_overall",
+    ),
+    (
+        "the state x month suppression share for 113310 private ownership",
+        "qcew_panel",
+        "suppression_share_by_month",
+    ),
+    (
+        "per-state CES publication level (1133, 113, or supersector)",
+        "ces",
+        "publication_level_by_sm_state_code",
+    ),
     ("BDS finest industry detail", "bds", "finest_naics_available"),
     ("SUSB detailed-sizes file layout", "susb", "detailed_sizes_layout"),
     ("FIA /fullreport parameters", "fia", "doc_parameters"),
     ("the SRC-QCEW-006 branch verdict", "qcew_identity", "branch"),
-    ("the SRC-QCEW-006 branch verdict, in one sentence",
-     "qcew_identity", "verdict_sentence"),
-    ("quarter by quarter, whether national 113310 private employment equals the sum of state "
-     "rows", "qcew_identity", "quarter_table"),
-    ("the geography-universe explanation, tested before suppression is blamed",
-     "qcew_identity", "geography_universe_explains_gap"),
+    ("the SRC-QCEW-006 branch verdict, in one sentence", "qcew_identity", "verdict_sentence"),
+    (
+        "quarter by quarter, whether national 113310 private employment equals the sum of state "
+        "rows",
+        "qcew_identity",
+        "quarter_table",
+    ),
+    (
+        "the geography-universe explanation, tested before suppression is blamed",
+        "qcew_identity",
+        "geography_universe_explains_gap",
+    ),
 )
 # INFERENCE MARKER, CLOSING.
 
@@ -205,8 +253,10 @@ ROADMAP_FIELDS: tuple[tuple[str, str, str], ...] = (
 # honest fix; the verdicts themselves are what a reviewer reads, not this criterion's PASS
 # line. The shipped document says the same thing to a fresh-clone reader.
 REQUIRED_DOC_TEXT: tuple[tuple[str, str], ...] = (
-    ("the §1.2 table of requirements needing further source verification",
-     "cannot be implemented without"),
+    (
+        "the §1.2 table of requirements needing further source verification",
+        "cannot be implemented without",
+    ),
     ("the §21 geography-universe row", "Geography universe"),
     ("the §21 TPO/FIA coverage row", "TPO/FIA coverage"),
     ("the §21 optional-state-sources row", "Optional state sources"),
@@ -249,14 +299,22 @@ def enumerate_sources(audit_root: Path) -> list[str]:
     return sorted(p.name for p in audit_root.iterdir() if p.is_dir())
 
 
-def check_source_set(found: list[str],
-                     expected: frozenset[str] = EXPECTED_SOURCES) -> list[Failure]:
+def check_source_set(
+    found: list[str], expected: frozenset[str] = EXPECTED_SOURCES
+) -> list[Failure]:
     """Both directions: an expected source with no directory, and a directory nobody expects."""
-    failures = [Failure("S", f"expected source {name!r} has no directory under the audit root")
-                for name in sorted(expected - set(found))]
-    failures += [Failure("S", f"unexpected source directory {name!r} under the audit root; it "
-                              "is registered by no task in this plan")
-                 for name in sorted(set(found) - expected)]
+    failures = [
+        Failure("S", f"expected source {name!r} has no directory under the audit root")
+        for name in sorted(expected - set(found))
+    ]
+    failures += [
+        Failure(
+            "S",
+            f"unexpected source directory {name!r} under the audit root; it "
+            "is registered by no task in this plan",
+        )
+        for name in sorted(set(found) - expected)
+    ]
     return failures
 
 
@@ -267,8 +325,13 @@ def load_summaries(audit_root: Path, names: list[str]) -> tuple[dict[str, dict],
     for name in names:
         path = audit_root / name / "summary.json"
         if not path.exists():
-            failures.append(Failure("S", f"{name}: no summary.json (the source directory "
-                                         "exists, so a script wrote extracts but no summary)"))
+            failures.append(
+                Failure(
+                    "S",
+                    f"{name}: no summary.json (the source directory "
+                    "exists, so a script wrote extracts but no summary)",
+                )
+            )
             continue
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
@@ -281,8 +344,13 @@ def load_summaries(audit_root: Path, names: list[str]) -> tuple[dict[str, dict],
             failures.append(Failure("S", f"{name}: {exc}"))
             continue
         if payload["source"] != name:
-            failures.append(Failure("S", f"{name}: summary records source "
-                                         f"{payload['source']!r}, not its own directory name"))
+            failures.append(
+                Failure(
+                    "S",
+                    f"{name}: summary records source "
+                    f"{payload['source']!r}, not its own directory name",
+                )
+            )
         summaries[name] = payload
     return summaries, failures
 
@@ -310,18 +378,26 @@ def verify_recorded_extracts(
     for name, payload in summaries.items():
         for rec in payload["extracts"]:
             if rec["source"] != name:
-                failures.append(Failure("S", f"{name}: extract record claims source "
-                                             f"{rec['source']!r}"))
+                failures.append(
+                    Failure("S", f"{name}: extract record claims source " f"{rec['source']!r}")
+                )
             target = Path(rec["path"])
             if not target.exists():
-                failures.append(Failure("E5", f"{name}: dangling manifest entry -- no file at "
-                                              f"{rec['path']}"))
+                failures.append(
+                    Failure(
+                        "E5", f"{name}: dangling manifest entry -- no file at " f"{rec['path']}"
+                    )
+                )
                 continue
             actual = c.sha256_file(target)
             if actual != rec["sha256"]:
-                failures.append(Failure(
-                    "E5", f"{name}: sha256 mismatch for {rec['path']}\n"
-                          f"  recorded {rec['sha256']}\n  on disk  {actual}"))
+                failures.append(
+                    Failure(
+                        "E5",
+                        f"{name}: sha256 mismatch for {rec['path']}\n"
+                        f"  recorded {rec['sha256']}\n  on disk  {actual}",
+                    )
+                )
                 continue
             sidecar = target.parent / f"{target.name}.sha256"
             if not sidecar.exists():
@@ -329,8 +405,12 @@ def verify_recorded_extracts(
                 continue
             relative = manifest_relative_path(rec["path"], repo_root)
             if relative is None:
-                failures.append(Failure("S", f"{name}: recorded extract path {rec['path']} is "
-                                             "outside the repository"))
+                failures.append(
+                    Failure(
+                        "S",
+                        f"{name}: recorded extract path {rec['path']} is " "outside the repository",
+                    )
+                )
                 continue
             row = {k: rec[k] for k in FIELDS}
             row["path"] = relative
@@ -360,13 +440,16 @@ def check_env_untracked(repo_root: Path) -> list[Failure]:
     """E4. Anchored at the repository root, and matched on basename so a `.env` tracked at any
     depth counts; `.env.example` and friends do not."""
     try:
-        completed = subprocess.run(["git", "-C", str(repo_root), "ls-files"],
-                                   capture_output=True, text=True, check=True)
+        completed = subprocess.run(
+            ["git", "-C", str(repo_root), "ls-files"], capture_output=True, text=True, check=True
+        )
     except (OSError, subprocess.CalledProcessError) as exc:
         return [Failure("E4", f"could not list tracked files with git: {exc}")]
-    return [Failure("E4", f"git tracks {tracked}")
-            for tracked in completed.stdout.splitlines()
-            if PurePosixPath(tracked).name == ".env"]
+    return [
+        Failure("E4", f"git tracks {tracked}")
+        for tracked in completed.stdout.splitlines()
+        if PurePosixPath(tracked).name == ".env"
+    ]
 
 
 def check_gitignore(gitignore_text: str | None) -> list[Failure]:
@@ -405,8 +488,9 @@ def classification_block(spec_text: str) -> list[str]:
     lines = spec_text.splitlines()
     start = next((i for i, line in enumerate(lines) if re.match(r"###\s+3\.1(\s|$)", line)), None)
     if start is None:
-        raise ValueError("the spec has no §3.1 heading (`### 3.1 ...`) to anchor the "
-                         "classification block to")
+        raise ValueError(
+            "the spec has no §3.1 heading (`### 3.1 ...`) to anchor the " "classification block to"
+        )
     # One pass, and whichever comes first after the heading decides: a fence opens the block
     # and no later heading is consulted, while a heading reached before any fence ends the
     # section with no block in it. Scanning raw lines for the section end *before* locating the
@@ -422,11 +506,12 @@ def classification_block(spec_text: str) -> list[str]:
             break
     if opening is None:
         raise ValueError("the spec's §3.1 section carries no fenced classification block")
-    closing = next((i for i in range(opening + 1, len(lines))
-                    if lines[i].lstrip().startswith("```")), None)
+    closing = next(
+        (i for i in range(opening + 1, len(lines)) if lines[i].lstrip().startswith("```")), None
+    )
     if closing is None:
         raise ValueError("the spec's §3.1 fenced classification block is never closed")
-    return lines[opening + 1:closing]
+    return lines[opening + 1 : closing]
 
 
 def parse_classification_record(spec_text: str) -> dict[str, str]:
@@ -435,8 +520,12 @@ def parse_classification_record(spec_text: str) -> dict[str, str]:
     when the fence does not carry all four names, so a spec edit fails loudly here instead of
     quietly dropping the record from the finding document or reading it from somewhere else
     (see `classification_block`)."""
-    wanted = ("industry_code_supplied", "industry_code_used", "industry_title",
-              "classification_status")
+    wanted = (
+        "industry_code_supplied",
+        "industry_code_used",
+        "industry_title",
+        "classification_status",
+    )
     record: dict[str, str] = {}
     for line in classification_block(spec_text):
         stripped = line.strip()
@@ -467,7 +556,7 @@ def parse_appendix_a_sources(spec_text: str) -> dict[str, bool]:
         raise ValueError("the spec has no Appendix A `sources:` block") from None
     enabled: dict[str, bool] = {}
     current: str | None = None
-    for line in lines[start + 1:]:
+    for line in lines[start + 1 :]:
         if not line.strip():
             continue
         if not line.startswith("  "):
@@ -492,8 +581,13 @@ def check_findings_filled(summaries: dict[str, dict]) -> list[Failure]:
         for key, value in sorted(payload["findings"].items()):
             if (name, key) in LEGITIMATELY_EMPTY_FINDINGS or not is_empty(value):
                 continue
-            failures.append(Failure("E1", f"{name}: findings[{key!r}] is empty -- fill it or "
-                                          "mark it 'not obtainable -- why'"))
+            failures.append(
+                Failure(
+                    "E1",
+                    f"{name}: findings[{key!r}] is empty -- fill it or "
+                    "mark it 'not obtainable -- why'",
+                )
+            )
         access = payload["access"]
         if not access.get("route"):
             failures.append(Failure("E1", f"{name}: access.route is empty"))
@@ -516,8 +610,13 @@ def check_roadmap_fields(summaries: dict[str, dict], doc_text: str) -> list[Fail
         if is_empty(findings[key]) and (source, key) not in LEGITIMATELY_EMPTY_FINDINGS:
             failures.append(Failure("E1", f"{phrase}: {source}.findings[{key!r}] is empty"))
         if f'"{key}"' not in doc_text:
-            failures.append(Failure("E1", f"{phrase}: {source}.findings[{key!r}] does not "
-                                          "appear in the finding document"))
+            failures.append(
+                Failure(
+                    "E1",
+                    f"{phrase}: {source}.findings[{key!r}] does not "
+                    "appear in the finding document",
+                )
+            )
     return failures
 
 
@@ -533,8 +632,12 @@ def check_year_boundary(summaries: dict[str, dict]) -> list[Failure]:
         return [Failure("E3", "qcew_routes has no valid summary")]
     earliest = routes["findings"].get("earliest_year_served")
     if isinstance(earliest, bool) or not isinstance(earliest, int):
-        return [Failure("E3", "earliest_year_served must be an integer reference "
-                              f"year; it is {earliest!r}")]
+        return [
+            Failure(
+                "E3",
+                "earliest_year_served must be an integer reference " f"year; it is {earliest!r}",
+            )
+        ]
     return []
 
 
@@ -548,13 +651,15 @@ def check_verdict(summaries: dict[str, dict], doc_text: str) -> list[Failure]:
     else:
         findings = identity["findings"]
         if findings.get("branch") not in ("enforce", "residual_cells", "decline"):
-            failures.append(Failure("E2", "branch verdict is not one of "
-                                          "enforce/residual_cells/decline"))
+            failures.append(
+                Failure("E2", "branch verdict is not one of " "enforce/residual_cells/decline")
+            )
         sentence = str(findings.get("verdict_sentence", "")).strip()
         failures += check_verdict_sentence(sentence)
         if sentence and sentence not in doc_text:
-            failures.append(Failure("E2", "the verdict sentence is not present in the finding "
-                                          "document"))
+            failures.append(
+                Failure("E2", "the verdict sentence is not present in the finding " "document")
+            )
     return failures
 
 
@@ -584,8 +689,12 @@ def check_verdict_sentence(sentence: str) -> list[Failure]:
     if not re.search(r"\bquarters?\b", sentence):
         failures.append(Failure("E2", "the verdict must cite the per-quarter comparison"))
     if "non-state area" not in sentence:
-        failures.append(Failure("E2", "the verdict must state whether the geography universe "
-                                      "accounts for any gap"))
+        failures.append(
+            Failure(
+                "E2",
+                "the verdict must state whether the geography universe " "accounts for any gap",
+            )
+        )
     return failures
 
 
@@ -600,9 +709,11 @@ def check_document(
         # alone: `main` prints a PASS line per criterion, and a criterion whose checks never
         # ran must not appear there as passing.
         absent = f"{FINDING_DOC} does not exist (run assemble_finding.py), so the checks that "
-        return [Failure("E1", absent + "read it did not run"),
-                Failure("E2", absent + "look for the verdict sentence in it did not run"),
-                Failure("C", absent + "look for the §1.2 and §21 sections in it did not run")]
+        return [
+            Failure("E1", absent + "read it did not run"),
+            Failure("E2", absent + "look for the verdict sentence in it did not run"),
+            Failure("C", absent + "look for the §1.2 and §21 sections in it did not run"),
+        ]
     if not doc_text.strip():
         # Same criterion set as the absent branch above, but NOT the same reason, and the
         # details must not be copied from it. `read_optional` returns `""` for a file that
@@ -617,16 +728,30 @@ def check_document(
         # nothing about which checks ran. They stay specific to emptiness either way: an empty
         # file and a file missing four sections are different things to fix.
         empty = "the finding file is empty, so it carries no "
-        return [Failure("E1", empty + "§3.1 classification record"),
-                Failure("E2", empty + "verdict sentence"),
-                Failure("C", empty + "§1.2 or §21 section, and names no Appendix A source")]
-    failures = [Failure("E1", f"the §3.1 classification record is missing {key}={value!r} from "
-                              "the finding document")
-                for key, value in classification.items() if value not in doc_text]
-    failures += [Failure("C", f"the finding document is missing {label}")
-                 for label, needle in REQUIRED_DOC_TEXT if needle not in doc_text]
-    failures += [Failure("C", f"the finding document does not name Appendix A's {name!r} source")
-                 for name in appendix_a if f"`{name}`" not in doc_text]
+        return [
+            Failure("E1", empty + "§3.1 classification record"),
+            Failure("E2", empty + "verdict sentence"),
+            Failure("C", empty + "§1.2 or §21 section, and names no Appendix A source"),
+        ]
+    failures = [
+        Failure(
+            "E1",
+            f"the §3.1 classification record is missing {key}={value!r} from "
+            "the finding document",
+        )
+        for key, value in classification.items()
+        if value not in doc_text
+    ]
+    failures += [
+        Failure("C", f"the finding document is missing {label}")
+        for label, needle in REQUIRED_DOC_TEXT
+        if needle not in doc_text
+    ]
+    failures += [
+        Failure("C", f"the finding document does not name Appendix A's {name!r} source")
+        for name in appendix_a
+        if f"`{name}`" not in doc_text
+    ]
     return failures
 
 
@@ -657,8 +782,10 @@ def main() -> int:
     if not c.AUDIT_ROOT.is_dir():
         # A fresh clone has no data/ tree at all -- it is gitignored. A later stage re-running
         # this gate there should be told that, not handed a FileNotFoundError traceback.
-        print(f"FAIL [S] no audit root at {c.AUDIT_ROOT}; the raw tree is gitignored, so run "
-              "the eleven source scripts before re-checking the stage")
+        print(
+            f"FAIL [S] no audit root at {c.AUDIT_ROOT}; the raw tree is gitignored, so run "
+            "the eleven source scripts before re-checking the stage"
+        )
         return 1
 
     found = enumerate_sources(c.AUDIT_ROOT)
@@ -671,8 +798,10 @@ def main() -> int:
     rows, extract_failures = verify_recorded_extracts(summaries, REPO_ROOT)
     failures += extract_failures
     orphans = find_orphans(c.AUDIT_ROOT, summaries)
-    failures += [Failure("S", f"orphan file under the audit root, registered by no summary: "
-                              f"{path}") for path in orphans]
+    failures += [
+        Failure("S", f"orphan file under the audit root, registered by no summary: " f"{path}")
+        for path in orphans
+    ]
     failures += check_env_untracked(REPO_ROOT)
     failures += check_gitignore(read_optional(GITIGNORE))
     failures += check_findings_filled(summaries)
@@ -685,14 +814,22 @@ def main() -> int:
         failures += check_verdict(summaries, doc_text)
 
     registered = len(registered_paths(summaries))
-    print(f"sources: {len(EXPECTED_SOURCES)} expected, {len(found)} on disk, "
-          f"{len(summaries)} with a valid summary")
-    print(f"summaries validated: {len(summaries)}; extracts verified: {len(rows)} of "
-          f"{registered} registered")
-    print(f"manifest, dangling direction: {registered - len(rows)} recorded extract(s) not "
-          "verifiable on disk")
-    print(f"manifest, orphan direction: {len(orphans)} file(s) under the audit root that no "
-          "summary registers")
+    print(
+        f"sources: {len(EXPECTED_SOURCES)} expected, {len(found)} on disk, "
+        f"{len(summaries)} with a valid summary"
+    )
+    print(
+        f"summaries validated: {len(summaries)}; extracts verified: {len(rows)} of "
+        f"{registered} registered"
+    )
+    print(
+        f"manifest, dangling direction: {registered - len(rows)} recorded extract(s) not "
+        "verifiable on disk"
+    )
+    print(
+        f"manifest, orphan direction: {len(orphans)} file(s) under the audit root that no "
+        "summary registers"
+    )
     if failures:
         print(f"manifest NOT written (this run failed): {MANIFEST}")
     else:

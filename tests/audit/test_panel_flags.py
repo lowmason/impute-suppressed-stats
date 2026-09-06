@@ -19,12 +19,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import polars as pl
-
-import pytest
-
 import _common as c
-
+import polars as pl
+import pytest
 from qcew_panel import (
     PANEL_SCHEMA,
     _conform,
@@ -49,13 +46,15 @@ def write_fixture(tmp_path, monkeypatch, extra_rows=()):
     import _common as c
 
     monkeypatch.setattr(c, "AUDIT_ROOT", tmp_path)
-    header = ("area_fips,own_code,industry_code,agglvl_code,size_code,year,qtr,"
-              "disclosure_code,qtrly_estabs,month1_emplvl,month2_emplvl,month3_emplvl")
+    header = (
+        "area_fips,own_code,industry_code,agglvl_code,size_code,year,qtr,"
+        "disclosure_code,qtrly_estabs,month1_emplvl,month2_emplvl,month3_emplvl"
+    )
     rows = [
-        'US000,5,113310,18,0,2017,1,,100,1000,1000,1000',
-        '01000,5,113310,58,0,2017,1,,40,400,400,400',
-        '41000,5,113310,58,0,2017,1,N,50,0,0,0',
-        '01001,5,113310,78,0,2017,1,N,3,0,0,0',
+        "US000,5,113310,18,0,2017,1,,100,1000,1000,1000",
+        "01000,5,113310,58,0,2017,1,,40,400,400,400",
+        "41000,5,113310,58,0,2017,1,N,50,0,0,0",
+        "01001,5,113310,78,0,2017,1,N,3,0,0,0",
         *extra_rows,
     ]
     slice_csv = tmp_path / "qcew_routes" / "slices" / "2017q1.csv"
@@ -63,17 +62,28 @@ def write_fixture(tmp_path, monkeypatch, extra_rows=()):
     slice_csv.write_text(header + "\n" + "\n".join(rows) + "\n")
     titles = tmp_path / "qcew_codes" / "titles" / "area_fips.csv"
     titles.parent.mkdir(parents=True, exist_ok=True)
-    titles.write_text('area_fips,area_title\nUS000,U.S. TOTAL\n01000,Alabama\n'
-                      '41000,Oregon\n38000,North Dakota\n72000,Puerto Rico -- Statewide\n')
+    titles.write_text(
+        "area_fips,area_title\nUS000,U.S. TOTAL\n01000,Alabama\n"
+        "41000,Oregon\n38000,North Dakota\n72000,Puerto Rico -- Statewide\n"
+    )
 
     def summary(name, extract_path, findings):
         payload = {
-            "source": name, "generated_utc": "x",
+            "source": name,
+            "generated_utc": "x",
             "coverage_span": {k: "" for k in c.COVERAGE_KEYS},
             "access": {"route": "r", "status": "verified", "reason": None},
-            "extracts": [{"source": name, "url": "u", "path": str(extract_path),
-                          "sha256": "0", "bytes": 1, "retrieved_utc": "x",
-                          "http_status": 200}],
+            "extracts": [
+                {
+                    "source": name,
+                    "url": "u",
+                    "path": str(extract_path),
+                    "sha256": "0",
+                    "bytes": 1,
+                    "retrieved_utc": "x",
+                    "http_status": 200,
+                }
+            ],
             "findings": findings,
         }
         (tmp_path / name / "summary.json").write_text(json.dumps(payload))
@@ -81,15 +91,19 @@ def write_fixture(tmp_path, monkeypatch, extra_rows=()):
     summary("qcew_routes", slice_csv, {})
     # `titles_available` because `main` reads it directly (`notes` interpolates
     # `titles_provenance` from it); the pure-function tests below reach none of that.
-    summary("qcew_codes", titles,
-            {"private_own_code": "5", "titles_available": {"disclosure_code": None}})
+    summary(
+        "qcew_codes",
+        titles,
+        {"private_own_code": "5", "titles_available": {"disclosure_code": None}},
+    )
 
 
 def test_suppressed_is_boolean_never_null(tmp_path, monkeypatch):
     write_fixture(tmp_path, monkeypatch)
     panel = build_panel("5")
-    assert panel["suppressed"].null_count() == 0, \
-        "a null `suppressed` is dropped from every .mean() denominator"
+    assert (
+        panel["suppressed"].null_count() == 0
+    ), "a null `suppressed` is dropped from every .mean() denominator"
     assert panel["suppressed"].dtype == pl.Boolean
 
 
@@ -159,9 +173,9 @@ def test_estabs_survival_counts_a_null_establishment_count_as_not_surviving():
 # --- area_class and the disclosure codes that are not `N` --------------------------------
 
 # A state-level area (agglvl 58, area_fips ending '000') that is outside _common.STATE_AREAS.
-OTHER_STATE_LEVEL_ROW = '72000,5,113310,58,0,2017,1,N,7,0,0,0'
+OTHER_STATE_LEVEL_ROW = "72000,5,113310,58,0,2017,1,N,7,0,0,0"
 # A states_dc area publishing a disclosure_code that is neither empty nor the suppression code.
-NON_SUPPRESSION_CODE_ROW = '38000,5,113310,58,0,2017,1,-,0,0,0,0'
+NON_SUPPRESSION_CODE_ROW = "38000,5,113310,58,0,2017,1,-,0,0,0,0"
 
 
 def test_a_state_level_area_outside_states_dc_is_classed_other(tmp_path, monkeypatch):
@@ -175,9 +189,7 @@ def test_a_state_level_area_outside_states_dc_is_classed_other(tmp_path, monkeyp
     assert panel.filter(pl.col("area_class") == "states_dc").height == 6
 
 
-def test_a_disclosure_code_other_than_the_suppression_code_is_not_suppressed(
-    tmp_path, monkeypatch
-):
+def test_a_disclosure_code_other_than_the_suppression_code_is_not_suppressed(tmp_path, monkeypatch):
     """`suppressed` is the published code alone. A row carrying some other code keeps its
     published employment level rather than being nulled out as if it were suppressed."""
     write_fixture(tmp_path, monkeypatch, extra_rows=[NON_SUPPRESSION_CODE_ROW])
@@ -193,7 +205,7 @@ def test_a_duplicated_state_quarter_is_rejected(tmp_path, monkeypatch):
     """One row per (area_fips, year, month) is the panel's defining shape. A duplicate would
     inflate the suppression share's denominator with every derived sentence still reading as
     self-consistent, so it fails here instead."""
-    duplicate = '01000,5,113310,58,0,2017,1,,40,400,400,400'
+    duplicate = "01000,5,113310,58,0,2017,1,,40,400,400,400"
     write_fixture(tmp_path, monkeypatch, extra_rows=[duplicate])
     with pytest.raises(RuntimeError, match="not unique"):
         build_panel("5")
@@ -214,14 +226,13 @@ def test_conform_rejects_a_dtype_that_drifted():
 
 # A suppressed row that publishes a nonzero employment level -- the anomaly the source-column
 # count exists to surface. No real row in the current window looks like this.
-SUPPRESSED_WITH_EMPLOYMENT_ROW = '56000,5,113310,58,0,2017,1,N,9,5,5,5'
+SUPPRESSED_WITH_EMPLOYMENT_ROW = "56000,5,113310,58,0,2017,1,N,9,5,5,5"
 
 
-def test_disclosure_code_values_counts_source_employment_before_the_null_out(
-    tmp_path, monkeypatch
-):
-    write_fixture(tmp_path, monkeypatch,
-                  extra_rows=[NON_SUPPRESSION_CODE_ROW, SUPPRESSED_WITH_EMPLOYMENT_ROW])
+def test_disclosure_code_values_counts_source_employment_before_the_null_out(tmp_path, monkeypatch):
+    write_fixture(
+        tmp_path, monkeypatch, extra_rows=[NON_SUPPRESSION_CODE_ROW, SUPPRESSED_WITH_EMPLOYMENT_ROW]
+    )
     long, _predicates = build_long("5")
     by_code = {row["disclosure_code"]: row for row in disclosure_code_values(long)}
     assert set(by_code) == {"", "-", "N"}
@@ -295,10 +306,12 @@ def test_the_derived_parquet_records_no_http_status(tmp_path, monkeypatch):
     main()
 
     (record,) = c.load_summary("qcew_panel")["extracts"]
-    assert record["url"].startswith("derived://"), \
-        "guard: this assertion is only about an extract that was never fetched over HTTP"
-    assert record["http_status"] is None, \
-        "a file built from disk has no HTTP status; 200 here is a fabricated measurement"
+    assert record["url"].startswith(
+        "derived://"
+    ), "guard: this assertion is only about an extract that was never fetched over HTTP"
+    assert (
+        record["http_status"] is None
+    ), "a file built from disk has no HTTP status; 200 here is a fabricated measurement"
 
 
 def test_the_derived_parquet_is_the_only_extract_and_it_is_on_disk(tmp_path, monkeypatch):

@@ -9,9 +9,8 @@ from __future__ import annotations
 
 import io
 
-import polars as pl
-
 import _common as c
+import polars as pl
 
 SOURCE = "ces"
 BASE = "https://download.bls.gov/pub/time.series/sm/"
@@ -25,7 +24,8 @@ def sole_code(df: pl.DataFrame, code_col: str, text_col: str, pattern: str, what
     if hits.height != 1:
         raise RuntimeError(
             f"expected exactly one {what} row matching {pattern!r}, got "
-            f"{hits.select(code_col, text_col).to_dicts()}")
+            f"{hits.select(code_col, text_col).to_dicts()}"
+        )
     return hits[code_col][0]
 
 
@@ -36,8 +36,9 @@ def read_tsv(content: bytes) -> pl.DataFrame:
     fetched actually has a ragged row (every row in each carries the same field count as its
     header), but a parse that assumed that would stay true is exactly the kind of claim a
     future BLS layout change could falsify silently."""
-    df = pl.read_csv(io.BytesIO(content), separator="\t", infer_schema_length=0,
-                     truncate_ragged_lines=True)
+    df = pl.read_csv(
+        io.BytesIO(content), separator="\t", infer_schema_length=0, truncate_ragged_lines=True
+    )
     # Rename first, then strip values off the RENAMED frame — reusing the pre-rename
     # `df.columns` here looks up padded names that no longer exist.
     df = df.rename({col: col.strip() for col in df.columns})
@@ -94,9 +95,7 @@ def qualifying_series(
     )
 
 
-def excluded_broader_codes(
-    logging_named_rows: list[dict], candidate_codes: set[str]
-) -> list[dict]:
+def excluded_broader_codes(logging_named_rows: list[dict], candidate_codes: set[str]) -> list[dict]:
     """Every logging-named industry code this run's precise selector did not pick as a
     candidate — i.e. every code whose title happens to mention "logging" but which is neither
     embedded-NAICS-113-prefixed nor exactly titled 'Mining and Logging'. An unanchored
@@ -128,8 +127,11 @@ def near_miss_sm_state_codes(
     is not 'supersector' by assumption — `broader_code_note` derives it per excluded code."""
     return sorted(
         (
-            {"state_code": row["state_code"], "industry_code": row["industry_code"],
-             "series_id": row["series_id"]}
+            {
+                "state_code": row["state_code"],
+                "industry_code": row["industry_code"],
+                "series_id": row["series_id"],
+            }
             for row in excluded_series_rows
             if level_by_state.get(row["state_code"]) == "none"
         ),
@@ -183,7 +185,7 @@ def broader_code_note(excluded: list[dict], near_miss: list[dict]) -> str:
 
 
 def _month_grain(year: str, period: str) -> str:
-    """"2017", "M01" -> "2017-01" — the same "YYYY-MM" shape as c.WINDOW_START/c.WINDOW_END, so
+    """ "2017", "M01" -> "2017-01" — the same "YYYY-MM" shape as c.WINDOW_START/c.WINDOW_END, so
     the two compare lexicographically as chronologically. SAE periods observed on the live
     sm.series file are all "M01".."M12" (two digits after the "M"); a differently-shaped period
     would produce a string that still sorts sanely against "YYYY-MM" as long as it starts with
@@ -201,8 +203,9 @@ def window_coverage_note(series: pl.DataFrame) -> tuple[bool, str]:
     about how much it proves, wearing the same 'verified' framing as the parts that really are."""
     if series.height == 0:
         return False, "no qualifying series exist to check window coverage against"
-    rows = series.select("series_id", "begin_year", "begin_period", "end_year",
-                         "end_period").to_dicts()
+    rows = series.select(
+        "series_id", "begin_year", "begin_period", "end_year", "end_period"
+    ).to_dicts()
     for row in rows:
         row["start_month"] = _month_grain(row["begin_year"], row["begin_period"])
         row["end_month"] = _month_grain(row["end_year"], row["end_period"])
@@ -219,10 +222,13 @@ def window_coverage_note(series: pl.DataFrame) -> tuple[bool, str]:
             "verified at month grain, not merely at the year-level overlap qualifying_series "
             "filters on"
         )
-    names = ", ".join(sorted(
-        row["series_id"] for row in rows
-        if row["start_month"] > c.WINDOW_START or row["end_month"] < c.WINDOW_END
-    ))
+    names = ", ".join(
+        sorted(
+            row["series_id"]
+            for row in rows
+            if row["start_month"] > c.WINDOW_START or row["end_month"] < c.WINDOW_END
+        )
+    )
     return False, (
         f"at least one qualifying series only partially overlaps the D1 window "
         f"{c.WINDOW_START}-{c.WINDOW_END} at month grain (begin_year/begin_period, end_year/"
@@ -241,9 +247,7 @@ def select_candidates(industry: pl.DataFrame, supersector: str) -> pl.DataFrame:
     return industry.with_columns(
         embedded=pl.col("industry_code").map_elements(embedded_naics, return_dtype=pl.Utf8),
         level=pl.col("industry_code").map_elements(level_of, return_dtype=pl.Utf8),
-    ).filter(
-        pl.col("embedded").str.starts_with("113") | (pl.col("industry_code") == supersector)
-    )
+    ).filter(pl.col("embedded").str.starts_with("113") | (pl.col("industry_code") == supersector))
 
 
 def states_dc_level_tally(
@@ -261,8 +265,10 @@ def states_dc_level_tally(
             "fetched sm.state file this run) — refusing to silently under-count them out of "
             "states_dc_tally"
         )
-    tally = {lvl: sum(1 for st in states_dc_fips if level_by_state[st] == lvl)
-             for lvl in ("113310", "1133", "113", "supersector", "other", "none")}
+    tally = {
+        lvl: sum(1 for st in states_dc_fips if level_by_state[st] == lvl)
+        for lvl in ("113310", "1133", "113", "supersector", "other", "none")
+    }
     assert sum(tally.values()) == len(states_dc_fips), (
         f"states_dc_tally {tally} sums to {sum(tally.values())}, not "
         f"len(states_dc_fips)={len(states_dc_fips)}"
@@ -309,16 +315,27 @@ def main() -> None:
 
     # Anchored on the full published title: a looser "^all employees" also matches the
     # 3-month-average-change series.
-    all_employees = sole_code(frames["sm.data_type"], "data_type_code", "data_type_text",
-                              r"(?i)^all employees, in thousands$", "sm.data_type")
-    statewide_area = sole_code(frames["sm.area"], "area_code", "area_name",
-                               r"(?i)^statewide$", "sm.area")
+    all_employees = sole_code(
+        frames["sm.data_type"],
+        "data_type_code",
+        "data_type_text",
+        r"(?i)^all employees, in thousands$",
+        "sm.data_type",
+    )
+    statewide_area = sole_code(
+        frames["sm.area"], "area_code", "area_name", r"(?i)^statewide$", "sm.area"
+    )
     # Same anchored discipline for the industry title. A bare substring match on "logging"
     # also matches "15000000 Mining, Logging and Construction" — a real, broader CES
     # supersector, verified present in the live sm.industry/sm.series files fetched this run —
     # which is not the Mining-and-Logging supersector D6 and this task mean.
-    supersector = sole_code(frames["sm.industry"], "industry_code", "industry_name",
-                            r"(?i)^mining and logging$", "sm.industry")
+    supersector = sole_code(
+        frames["sm.industry"],
+        "industry_code",
+        "industry_name",
+        r"(?i)^mining and logging$",
+        "sm.industry",
+    )
 
     industry = frames["sm.industry"]
     logging_named = industry.filter(pl.col("industry_name").str.contains(LOGGING_NAME_PATTERN))
@@ -335,24 +352,33 @@ def main() -> None:
 
     by_state: dict[str, list[dict]] = {}
     for row in series.iter_rows(named=True):
-        by_state.setdefault(row["state_code"], []).append({
-            "series_id": row["series_id"], "industry_code": row["industry_code"],
-            "level": row["level"], "begin_year": int(row["begin_year"]),
-            "end_year": int(row["end_year"]),
-        })
+        by_state.setdefault(row["state_code"], []).append(
+            {
+                "series_id": row["series_id"],
+                "industry_code": row["industry_code"],
+                "level": row["level"],
+                "begin_year": int(row["begin_year"]),
+                "end_year": int(row["end_year"]),
+            }
+        )
 
     all_states = sorted(frames["sm.state"]["state_code"].to_list())
     level_by_state = {
-        st: min((s["level"] for s in by_state.get(st, [])), key=lambda x: FINEST[x],
-                default="none")
+        st: min((s["level"] for s in by_state.get(st, [])), key=lambda x: FINEST[x], default="none")
         for st in all_states
     }
-    tally = {lvl: sum(1 for v in level_by_state.values() if v == lvl)
-             for lvl in ("113310", "1133", "113", "supersector", "other", "none")}
+    tally = {
+        lvl: sum(1 for v in level_by_state.values() if v == lvl)
+        for lvl in ("113310", "1133", "113", "supersector", "other", "none")
+    }
 
-    excluded_series_rows = qualifying_series(
-        frames["sm.series"], excluded_codes, all_employees, statewide_area
-    ).to_dicts() if excluded_codes else []
+    excluded_series_rows = (
+        qualifying_series(
+            frames["sm.series"], excluded_codes, all_employees, statewide_area
+        ).to_dicts()
+        if excluded_codes
+        else []
+    )
     near_miss = near_miss_sm_state_codes(excluded_series_rows, level_by_state)
 
     # D1 Appendix A's own geography universe (50 states + DC, 51 codes) is a strict subset of
@@ -361,8 +387,13 @@ def main() -> None:
     # code list and the tally below are computed from the fetched sm.state file and
     # c.STATES_DC_FIPS, never typed, so a future change to either denominator shows up here.
     non_state_codes = sorted(set(all_states) - set(c.STATES_DC_FIPS))
-    state_names = dict(zip(frames["sm.state"]["state_code"].to_list(),
-                           frames["sm.state"]["state_name"].to_list(), strict=True))
+    state_names = dict(
+        zip(
+            frames["sm.state"]["state_code"].to_list(),
+            frames["sm.state"]["state_name"].to_list(),
+            strict=True,
+        )
+    )
     states_dc_tally = states_dc_level_tally(level_by_state, c.STATES_DC_FIPS)
 
     states_dc_summary = ", ".join(f"{lvl}: {n}" for lvl, n in states_dc_tally.items())
@@ -376,29 +407,36 @@ def main() -> None:
     )
 
     fully_covered, coverage_note = window_coverage_note(series)
-    candidate_rows = candidates.select(
-        "industry_code", "industry_name", "embedded", "level"
-    ).rename({"embedded": "embedded_naics"}).to_dicts()
+    candidate_rows = (
+        candidates.select("industry_code", "industry_name", "embedded", "level")
+        .rename({"embedded": "embedded_naics"})
+        .to_dicts()
+    )
 
     c.write_summary(
         SOURCE,
         coverage_span={
             "published_start": str(series["begin_year"].cast(pl.Int32).min() or ""),
             "published_end": str(series["end_year"].cast(pl.Int32).max() or ""),
-            "window_start": c.WINDOW_START, "window_end": c.WINDOW_END,
+            "window_start": c.WINDOW_START,
+            "window_end": c.WINDOW_END,
             "covered": (
-                f"{c.WINDOW_START}-{c.WINDOW_END} for states with a qualifying series — "
-                f"verified at month grain, not assumed, from every qualifying series' own "
-                f"begin_year/begin_period and end_year/end_period: {coverage_note}"
-            ) if fully_covered else (
-                f"partial only — {coverage_note}; do not read "
-                f"'{c.WINDOW_START}-{c.WINDOW_END} for states with a qualifying series' as "
-                "true without checking this run's coverage_note again"
+                (
+                    f"{c.WINDOW_START}-{c.WINDOW_END} for states with a qualifying series — "
+                    f"verified at month grain, not assumed, from every qualifying series' own "
+                    f"begin_year/begin_period and end_year/end_period: {coverage_note}"
+                )
+                if fully_covered
+                else (
+                    f"partial only — {coverage_note}; do not read "
+                    f"'{c.WINDOW_START}-{c.WINDOW_END} for states with a qualifying series' as "
+                    "true without checking this run's coverage_note again"
+                )
             ),
             "uncovered": f"{tally['none']} sm.state code(s) publish no Logging-related statewide "
-                         f"all-employees series overlapping the window, of which "
-                         f"{states_dc_tally['none']} are D1 'states_dc' jurisdictions (see "
-                         "states_dc_tally and non_state_codes for the rest of the denominator)",
+            f"all-employees series overlapping the window, of which "
+            f"{states_dc_tally['none']} are D1 'states_dc' jurisdictions (see "
+            "states_dc_tally and non_state_codes for the rest of the denominator)",
         },
         access={"route": BASE + "<file>", "status": "verified", "reason": None},
         extracts=extracts,
@@ -412,22 +450,34 @@ def main() -> None:
             "states_with_supersector_only": tally["supersector"],
             "states_with_other": tally["other"],
             "states_with_none": tally["none"],
-            "derived_codes": {"all_employees_data_type": all_employees,
-                              "statewide_area": statewide_area},
+            "derived_codes": {
+                "all_employees_data_type": all_employees,
+                "statewide_area": statewide_area,
+            },
             "excluded_broader_codes": excluded,
             "near_miss_sm_state_codes": near_miss,
             "states_dc_tally": states_dc_tally,
-            "non_state_codes": [{"code": code, "name": state_names.get(code)}
-                                for code in non_state_codes],
-            "notes": " ".join([
-                denominator_note, broader_code_note(excluded, near_miss),
-                granularity_note(candidate_rows),
-            ]),
+            "non_state_codes": [
+                {"code": code, "name": state_names.get(code)} for code in non_state_codes
+            ],
+            "notes": " ".join(
+                [
+                    denominator_note,
+                    broader_code_note(excluded, near_miss),
+                    granularity_note(candidate_rows),
+                ]
+            ),
         },
     )
     print("CES publication level tally:", tally)
-    print("derived codes — data_type:", all_employees, "| area:", statewide_area,
-          "| supersector:", supersector)
+    print(
+        "derived codes — data_type:",
+        all_employees,
+        "| area:",
+        statewide_area,
+        "| supersector:",
+        supersector,
+    )
 
 
 if __name__ == "__main__":

@@ -91,9 +91,8 @@ import os
 import re
 import shutil
 
-import httpx
-
 import _common as c
+import httpx
 
 SOURCE = "cbp_metadata"
 BASE = "https://api.census.gov/data/{year}/cbp"
@@ -263,8 +262,10 @@ def unavailable_year_reason(probe_status: int) -> str:
     non-200 status as "a confirmed absence" in general -- a 5xx would be a server error, not
     evidence the year isn't published; only the literal status is reported here."""
     if probe_status == 0:
-        return ("the keyless cbp.json probe returned no response at all this run (a transport "
-                "failure, not a confirmed absence) -- re-run this task to resolve it")
+        return (
+            "the keyless cbp.json probe returned no response at all this run (a transport "
+            "failure, not a confirmed absence) -- re-run this task to resolve it"
+        )
     return f"cbp.json returned HTTP {probe_status} for this year, not 200"
 
 
@@ -280,8 +281,7 @@ def fetch_variable_doc(client: httpx.Client, year: int, variable: str, extracts:
         resp = c.request(client, url)
     except httpx.HTTPStatusError:
         return None
-    extracts.append(c.record_extract(
-        SOURCE, url, f"{year}/{variable.lower()}.json", resp.content))
+    extracts.append(c.record_extract(SOURCE, url, f"{year}/{variable.lower()}.json", resp.content))
     return None
 
 
@@ -326,25 +326,35 @@ def probe_empszes_metadata_crosswalk(
     else checked ever has) -- or `None` if no candidate did this year."""
     ez_url = f"{BASE.format(year=year)}/variables/EMPSZES.json"
     ez_items = crosswalk_items_from_payload(empszes_doc, "EMPSZES")
-    probe = [{
-        "url": ez_url, "status": empszes_status,
-        "carries_values_crosswalk": ez_items is not None,
-    }]
+    probe = [
+        {
+            "url": ez_url,
+            "status": empszes_status,
+            "carries_values_crosswalk": ez_items is not None,
+        }
+    ]
     official = ez_items
 
     groups_url = f"{BASE.format(year=year)}/groups.json"
     groups_status, groups_payload = fetch_json_or_none(
-        client, SOURCE, groups_url, f"{year}/groups.json", extracts)
+        client, SOURCE, groups_url, f"{year}/groups.json", extracts
+    )
     groups_items = (
         crosswalk_items_from_payload(groups_payload, "EMPSZES")
-        if groups_payload is not None else None
+        if groups_payload is not None
+        else None
     )
-    probe.append({
-        "url": groups_url, "status": groups_status,
-        # None (not False) when the fetch itself failed -- "not measured" must not read as
-        # "measured absent" here any more than it does for empszes_by_year itself.
-        "carries_values_crosswalk": None if groups_payload is None else groups_items is not None,
-    })
+    probe.append(
+        {
+            "url": groups_url,
+            "status": groups_status,
+            # None (not False) when the fetch itself failed -- "not measured" must not read as
+            # "measured absent" here any more than it does for empszes_by_year itself.
+            "carries_values_crosswalk": (
+                None if groups_payload is None else groups_items is not None
+            ),
+        }
+    )
     official = official or groups_items
 
     # `group` can name more than one group, comma-separated -- confirmed live for 2018
@@ -354,15 +364,22 @@ def probe_empszes_metadata_crosswalk(
     for group in group_names_from_field(empszes_doc.get("group")):
         group_url = f"{BASE.format(year=year)}/groups/{group}.json"
         group_status, group_payload = fetch_json_or_none(
-            client, SOURCE, group_url, f"{year}/groups_{group}.json", extracts)
+            client, SOURCE, group_url, f"{year}/groups_{group}.json", extracts
+        )
         group_items = (
             crosswalk_items_from_payload(group_payload, "EMPSZES")
-            if group_payload is not None else None
+            if group_payload is not None
+            else None
         )
-        probe.append({
-            "url": group_url, "status": group_status,
-            "carries_values_crosswalk": None if group_payload is None else group_items is not None,
-        })
+        probe.append(
+            {
+                "url": group_url,
+                "status": group_status,
+                "carries_values_crosswalk": (
+                    None if group_payload is None else group_items is not None
+                ),
+            }
+        )
         official = official or group_items
     return probe, official
 
@@ -412,13 +429,21 @@ def main() -> None:
         years.append(year)
 
         meta = c.request(client, f"{BASE.format(year=year)}.json")
-        extracts.append(c.record_extract(
-            SOURCE, f"{BASE.format(year=year)}.json", f"{year}/dataset.json", meta.content))
+        extracts.append(
+            c.record_extract(
+                SOURCE, f"{BASE.format(year=year)}.json", f"{year}/dataset.json", meta.content
+            )
+        )
 
         vresp = c.request(client, f"{BASE.format(year=year)}/variables.json")
-        extracts.append(c.record_extract(
-            SOURCE, f"{BASE.format(year=year)}/variables.json", f"{year}/variables.json",
-            vresp.content))
+        extracts.append(
+            c.record_extract(
+                SOURCE,
+                f"{BASE.format(year=year)}/variables.json",
+                f"{year}/variables.json",
+                vresp.content,
+            )
+        )
         names = list(vresp.json()["variables"].keys())
         matches = naics_predicate_matches(names)
         predicates[str(year)] = matches[0] if len(matches) == 1 else matches
@@ -430,10 +455,12 @@ def main() -> None:
         if has_empszes:
             ez_url = f"{BASE.format(year=year)}/variables/EMPSZES.json"
             ez_status, ez_payload = fetch_json_or_none(
-                client, SOURCE, ez_url, f"{year}/empszes.json", extracts)
+                client, SOURCE, ez_url, f"{year}/empszes.json", extracts
+            )
             if ez_payload is not None:
                 crosswalk_records, official_crosswalk = probe_empszes_metadata_crosswalk(
-                    client, year, ez_payload, ez_status, extracts)
+                    client, year, ez_payload, ez_status, extracts
+                )
                 crosswalk_probe[str(year)] = crosswalk_records
             else:
                 crosswalk_probe[str(year)] = None
@@ -489,9 +516,14 @@ def main() -> None:
             notes.append(f"{year}: LFO is not a variable for this vintage")
 
         gresp = c.request(client, f"{BASE.format(year=year)}/geography.json")
-        extracts.append(c.record_extract(
-            SOURCE, f"{BASE.format(year=year)}/geography.json", f"{year}/geography.json",
-            gresp.content))
+        extracts.append(
+            c.record_extract(
+                SOURCE,
+                f"{BASE.format(year=year)}/geography.json",
+                f"{year}/geography.json",
+                gresp.content,
+            )
+        )
         levels = sorted({g["name"] for g in gresp.json().get("fips", []) if "name" in g})
         geo_levels[str(year)] = levels
 
@@ -510,8 +542,16 @@ def main() -> None:
             continue
         naics = matches[0]
 
-        get_cols = ["NAME", f"{naics}_LABEL", "EMPSZES", "EMPSZES_LABEL", "ESTAB", "EMP",
-                    "EMP_F", "EMP_N"]
+        get_cols = [
+            "NAME",
+            f"{naics}_LABEL",
+            "EMPSZES",
+            "EMPSZES_LABEL",
+            "ESTAB",
+            "EMP",
+            "EMP_F",
+            "EMP_N",
+        ]
         no_size = [col for col in get_cols if not col.startswith("EMPSZES")]
         # Attempt 3 drops EMPSZES entirely. If it succeeds where 1 and 2 fail, the size
         # crossing is genuinely unavailable for this vintage -- a finding. If none succeed,
@@ -537,11 +577,17 @@ def main() -> None:
             # extract records pointing at a file whose hash no longer matches what they
             # recorded (verbatim retention means recording once per distinct fetch, not
             # silently overwriting).
-            extracts.append(c.record_extract(
-                SOURCE, BASE.format(year=year), f"{year}/data_113310_attempt{attempt_no}.json",
-                dresp.content))
+            extracts.append(
+                c.record_extract(
+                    SOURCE,
+                    BASE.format(year=year),
+                    f"{year}/data_113310_attempt{attempt_no}.json",
+                    dresp.content,
+                )
+            )
             outcome, payload = classify_data_body(
-                dresp.headers.get("content-type", ""), dresp.content)
+                dresp.headers.get("content-type", ""), dresp.content
+            )
             attempt_statuses.append(outcome)
             if outcome != "ok":
                 continue
@@ -551,30 +597,36 @@ def main() -> None:
             idx = {name: i for i, name in enumerate(header)}
             flags[str(year)] = {
                 col: sorted({(r[idx[col]] or "") for r in body})
-                for col in ("EMP_F", "EMP_N") if col in idx
+                for col in ("EMP_F", "EMP_N")
+                if col in idx
             }
             if not official_crosswalk:
                 # Fallback only -- the official crosswalk (set above, if the probe found one)
                 # always wins. This branch only ever populates empszes_by_year for a vintage
                 # where metadata genuinely carries no enumeration (2018 onward, confirmed).
                 pairs = empszes_pairs_from_rows(header, body)
-                empszes[str(year)] = None if pairs is None else {
-                    "source": EMPSZES_SOURCE_OBSERVED,
-                    "note": (
-                        "NOT the official CBP metadata enumeration -- this vintage's metadata "
-                        "carries no EMPSZES values crosswalk (see "
-                        "empszes_metadata_crosswalk_probe_by_year). A size class with zero "
-                        "logging establishments in every state this year is silently absent "
-                        "from `pairs`."
-                    ),
-                    "pairs": pairs,
-                }
+                empszes[str(year)] = (
+                    None
+                    if pairs is None
+                    else {
+                        "source": EMPSZES_SOURCE_OBSERVED,
+                        "note": (
+                            "NOT the official CBP metadata enumeration -- this vintage's metadata "
+                            "carries no EMPSZES values crosswalk (see "
+                            "empszes_metadata_crosswalk_probe_by_year). A size class with zero "
+                            "logging establishments in every state this year is silently absent "
+                            "from `pairs`."
+                        ),
+                        "pairs": pairs,
+                    }
+                )
             winning_content = dresp.content
             any_keyed_success = True
             break
         else:
             cause = zero_pull_cause(
-                state_available="state" in levels, attempt_statuses=attempt_statuses)
+                state_available="state" in levels, attempt_statuses=attempt_statuses
+            )
             working[str(year)] = {"status": cause}
             rows[str(year)] = None
             flags[str(year)] = None
@@ -593,8 +645,9 @@ def main() -> None:
                 # contradicts the artifact" bug fix round 1 already found once in this note.
                 empszes_clause = (
                     "empszes_by_year already carries the official metadata crosswalk found "
-                    "above, unaffected by this" if official_crosswalk else
-                    "empszes_by_year is null for this year too, not measured as zero or empty"
+                    "above, unaffected by this"
+                    if official_crosswalk
+                    else "empszes_by_year is null for this year too, not measured as zero or empty"
                 )
                 notes.append(
                     f"{year}: every attempt's response matched Census's key-rejection page "
@@ -609,8 +662,11 @@ def main() -> None:
         # block names -- only on a real success, never an HTML error page recorded as if it
         # were data. Reuses the already-fetched bytes; no re-fetch.
         if winning_content is not None:
-            extracts.append(c.record_extract(
-                SOURCE, BASE.format(year=year), f"{year}/data_113310.json", winning_content))
+            extracts.append(
+                c.record_extract(
+                    SOURCE, BASE.format(year=year), f"{year}/data_113310.json", winning_content
+                )
+            )
 
     # Every window year gets an explicit entry in every by-year finding -- a year outside
     # years_available (confirmed non-200, or probe()'s (0,0) transport sentinel) is backfilled
@@ -643,37 +699,44 @@ def main() -> None:
     # Interpolated from what was actually recorded in working_query_by_year, not hardcoded --
     # the failure could be an auth rejection, but it could also be a geography or query problem
     # (or a mix across years), and the reason must say which was actually observed this run.
-    failure_causes = sorted({
-        v["status"] for v in working.values() if isinstance(v, dict) and "status" in v
-    })
+    failure_causes = sorted(
+        {v["status"] for v in working.values() if isinstance(v, dict) and "status" in v}
+    )
     # Derived from empszes, not typed -- access.status = "not_obtainable" would otherwise read
     # as "nothing usable came out of this run" when a reader only checks this one field, which
     # is false whenever a keyless official metadata crosswalk was found (2017, this run) even
     # though the keyed pull itself failed everywhere.
     official_crosswalk_years = sorted(
-        int(y) for y, v in empszes.items()
+        int(y)
+        for y, v in empszes.items()
         if isinstance(v, dict) and v.get("source") == EMPSZES_SOURCE_OFFICIAL
     )
     access_reason = (
-        None if access_status == "verified" else
-        (
-            "CBP metadata routes (dataset document, variables, EMPSZES/LFO variable docs, "
-            "groups, geography) returned real JSON for every year in years_available, but "
-            "the keyed 113310 data pull did not succeed for any window year this run -- "
-            f"causes recorded in working_query_by_year: {failure_causes}; see findings.notes "
-            "per year for detail. empszes_by_year is nonetheless populated from a keyless "
-            f"official metadata crosswalk (unaffected by the keyed-pull failure) for: "
-            f"{official_crosswalk_years or 'no years this run'}"
-        ) if years else
-        "no window year returned a CBP dataset document"
+        None
+        if access_status == "verified"
+        else (
+            (
+                "CBP metadata routes (dataset document, variables, EMPSZES/LFO variable docs, "
+                "groups, geography) returned real JSON for every year in years_available, but "
+                "the keyed 113310 data pull did not succeed for any window year this run -- "
+                f"causes recorded in working_query_by_year: {failure_causes}; see findings.notes "
+                "per year for detail. empszes_by_year is nonetheless populated from a keyless "
+                f"official metadata crosswalk (unaffected by the keyed-pull failure) for: "
+                f"{official_crosswalk_years or 'no years this run'}"
+            )
+            if years
+            else "no window year returned a CBP dataset document"
+        )
     )
     c.write_summary(
         SOURCE,
         coverage_span={
             "published_start": str(min(years)) if years else "",
             "published_end": str(max(years)) if years else "",
-            "window_start": c.WINDOW_START, "window_end": c.WINDOW_END,
-            "covered": covered, "uncovered": uncovered,
+            "window_start": c.WINDOW_START,
+            "window_end": c.WINDOW_END,
+            "covered": covered,
+            "uncovered": uncovered,
         },
         access={"route": BASE, "status": access_status, "reason": access_reason},
         extracts=extracts,

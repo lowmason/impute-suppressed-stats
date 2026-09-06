@@ -48,6 +48,11 @@ extend-immutable-calls = ["typer.Option", "typer.Argument"]
 
 [tool.black]
 line-length = 100
+# The PEP 723 scripts under scripts/audit/ declare `requires-python = ">=3.12"`, but this
+# project's is ">=3.14". Without an explicit target black infers the project's floor and
+# emits PEP 758 (`except A, B:`) into those scripts, which then fail to parse under the
+# 3.12 their own headers promise. py312 is the floor across everything black formats here.
+target-version = ["py312"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

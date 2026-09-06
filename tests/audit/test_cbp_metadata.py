@@ -122,7 +122,8 @@ def test_classify_html_with_unrelated_title_is_non_json_error_not_auth():
     """A maintenance page or rate-limit interstitial is non-JSON but is not evidence of a bad
     key -- must not collapse into the same bucket as invalid_key/missing_key."""
     status, payload = m.classify_data_body(
-        HTML_CONTENT_TYPE, b"<html><head><title>Service Unavailable</title></head></html>")
+        HTML_CONTENT_TYPE, b"<html><head><title>Service Unavailable</title></head></html>"
+    )
     assert status == "non_json_error"
     assert payload is None
 
@@ -177,9 +178,24 @@ def test_classify_malformed_json_with_json_content_type_is_bad_shape_not_a_crash
 # are real variable-naming conventions this dataset uses and must NOT match the anchored regex.
 
 REAL_2021_NAMES = [
-    "GEO_ID", "NAME", "NAICS2017", "NAICS2017_LABEL", "NAICS2017_F", "EMPSZES",
-    "EMPSZES_LABEL", "LFO", "LFO_LABEL", "ESTAB", "EMP", "EMP_F", "EMP_N", "PAYANN",
-    "PAYQTR1", "PAYQTR1_F", "for", "in",
+    "GEO_ID",
+    "NAME",
+    "NAICS2017",
+    "NAICS2017_LABEL",
+    "NAICS2017_F",
+    "EMPSZES",
+    "EMPSZES_LABEL",
+    "LFO",
+    "LFO_LABEL",
+    "ESTAB",
+    "EMP",
+    "EMP_F",
+    "EMP_N",
+    "PAYANN",
+    "PAYQTR1",
+    "PAYQTR1_F",
+    "for",
+    "in",
 ]
 
 
@@ -221,52 +237,67 @@ def test_naics_predicate_matches_rejects_wrong_digit_count():
 
 
 def test_zero_pull_cause_geography_unavailable_wins_regardless_of_attempts():
-    assert m.zero_pull_cause(
-        state_available=False, attempt_statuses=["invalid_key", "invalid_key"]
-    ) == "geography_unavailable"
+    assert (
+        m.zero_pull_cause(state_available=False, attempt_statuses=["invalid_key", "invalid_key"])
+        == "geography_unavailable"
+    )
 
 
 def test_zero_pull_cause_all_invalid_key_is_auth_error():
-    assert m.zero_pull_cause(
-        state_available=True, attempt_statuses=["invalid_key", "invalid_key", "invalid_key"]
-    ) == "auth_error"
+    assert (
+        m.zero_pull_cause(
+            state_available=True, attempt_statuses=["invalid_key", "invalid_key", "invalid_key"]
+        )
+        == "auth_error"
+    )
 
 
 def test_zero_pull_cause_all_missing_key_is_auth_error():
-    assert m.zero_pull_cause(
-        state_available=True, attempt_statuses=["missing_key", "missing_key"]
-    ) == "auth_error"
+    assert (
+        m.zero_pull_cause(state_available=True, attempt_statuses=["missing_key", "missing_key"])
+        == "auth_error"
+    )
 
 
 def test_zero_pull_cause_mix_of_invalid_and_missing_key_is_still_auth_error():
     """Both are the same credential family -- a run could plausibly see one attempt redirect
     before key validation and another after, though in practice a constant key within one run
     produces one title consistently."""
-    assert m.zero_pull_cause(
-        state_available=True, attempt_statuses=["invalid_key", "missing_key"]
-    ) == "auth_error"
+    assert (
+        m.zero_pull_cause(state_available=True, attempt_statuses=["invalid_key", "missing_key"])
+        == "auth_error"
+    )
 
 
 def test_zero_pull_cause_non_json_error_is_query_bug_not_auth_error():
     """This is the finding the fix-round review named directly: a maintenance page or
     rate-limit interstitial is non-JSON but must not be assumed to be a credential problem."""
-    assert m.zero_pull_cause(
-        state_available=True, attempt_statuses=["non_json_error", "non_json_error"]
-    ) == "query_bug"
+    assert (
+        m.zero_pull_cause(
+            state_available=True, attempt_statuses=["non_json_error", "non_json_error"]
+        )
+        == "query_bug"
+    )
 
 
 def test_zero_pull_cause_mixed_statuses_is_query_bug():
     """Not every attempt failed the same way -- a uniform credential failure would fail all
     three identically, so a mix means something about the query itself is wrong."""
-    assert m.zero_pull_cause(
-        state_available=True, attempt_statuses=["invalid_key", "bad_shape", "http_error"]
-    ) == "query_bug"
+    assert (
+        m.zero_pull_cause(
+            state_available=True, attempt_statuses=["invalid_key", "bad_shape", "http_error"]
+        )
+        == "query_bug"
+    )
 
 
 def test_zero_pull_cause_all_http_error_is_query_bug():
-    assert m.zero_pull_cause(
-        state_available=True, attempt_statuses=["http_error", "http_error", "http_error"]
-    ) == "query_bug"
+    assert (
+        m.zero_pull_cause(
+            state_available=True, attempt_statuses=["http_error", "http_error", "http_error"]
+        )
+        == "query_bug"
+    )
 
 
 def test_zero_pull_cause_empty_attempt_list_is_query_bug_not_vacuously_auth_error():
@@ -338,8 +369,8 @@ REAL_EMPSZES_DOC = {
     "name": "EMPSZES",
     "label": "Employment size of establishments code",
     "concept": "All Sectors: County Business Patterns, including ZIP Code Business Patterns, by "
-               "Legal Form of Organization and Employment Size Class for the U.S., States, and "
-               "Selected Geographies: 2021",
+    "Legal Form of Organization and Employment Size Class for the U.S., States, and "
+    "Selected Geographies: 2021",
     "required": "default displayed",
     "predicateType": "string",
     "group": "CB2100CBP",
@@ -350,13 +381,15 @@ REAL_EMPSZES_DOC = {
 # Real, captured live from /2021/cbp/groups.json -- a group index, no per-variable detail, no
 # "values" key anywhere.
 REAL_GROUPS_DOC = {
-    "groups": [{
-        "name": "CB2100CBP",
-        "description": "All Sectors: County Business Patterns, including ZIP Code Business "
-                        "Patterns, by Legal Form of Organization and Employment Size Class for "
-                        "the U.S., States, and Selected Geographies: 2021",
-        "variables": "http://api.census.gov/data/2021/cbp/groups/CB2100CBP.json",
-    }],
+    "groups": [
+        {
+            "name": "CB2100CBP",
+            "description": "All Sectors: County Business Patterns, including ZIP Code Business "
+            "Patterns, by Legal Form of Organization and Employment Size Class for "
+            "the U.S., States, and Selected Geographies: 2021",
+            "variables": "http://api.census.gov/data/2021/cbp/groups/CB2100CBP.json",
+        }
+    ],
 }
 
 # Real, captured live from /2021/cbp/groups/CB2100CBP.json, trimmed from ~28 variable entries to
@@ -365,16 +398,25 @@ REAL_GROUP_DETAIL_DOC_TRIMMED = {
     "variables": {
         "EMPSZES_LABEL": {
             "label": "Meaning of Employment size of establishments code",
-            "predicateType": "string", "group": "CB2100CBP", "limit": 0, "predicateOnly": True,
+            "predicateType": "string",
+            "group": "CB2100CBP",
+            "limit": 0,
+            "predicateOnly": True,
         },
         "ESTAB": {
             "label": "Number of establishments",
-            "predicateType": "int", "group": "CB2100CBP", "limit": 0, "predicateOnly": True,
+            "predicateType": "int",
+            "group": "CB2100CBP",
+            "limit": 0,
+            "predicateOnly": True,
         },
         "EMPSZES": {
             "label": "Employment size of establishments code",
-            "required": "default displayed", "predicateType": "string", "group": "CB2100CBP",
-            "limit": 0, "predicateOnly": True,
+            "required": "default displayed",
+            "predicateType": "string",
+            "group": "CB2100CBP",
+            "limit": 0,
+            "predicateOnly": True,
         },
     },
 }
@@ -387,13 +429,15 @@ REAL_2017_EMPSZES_DOC_TRIMMED = {
     "name": "EMPSZES",
     "label": "Employment size of establishments",
     "group": "CB1700CBP",
-    "values": {"item": {
-        "001": "All establishments",
-        "204": "Establishments with no paid employees",
-        "205": "Establishments with paid employees",
-        "207": "Establishments with less than 10 employees",
-        "209": "Establishments with less than 20 employees",
-    }},
+    "values": {
+        "item": {
+            "001": "All establishments",
+            "204": "Establishments with no paid employees",
+            "205": "Establishments with paid employees",
+            "207": "Establishments with less than 10 employees",
+            "209": "Establishments with less than 20 employees",
+        }
+    },
 }
 
 
@@ -455,10 +499,12 @@ def test_crosswalk_check_is_scoped_to_the_named_variable():
     """A different variable in the same group document carrying `values` must not make
     EMPSZES's check return True -- the crosswalk has to belong to the variable being asked
     about, not just exist anywhere in the payload."""
-    payload = {"variables": {
-        "OTHER_VAR": {"values": {"item": {"1": "something"}}},
-        "EMPSZES": {"label": "no values key here"},
-    }}
+    payload = {
+        "variables": {
+            "OTHER_VAR": {"values": {"item": {"1": "something"}}},
+            "EMPSZES": {"label": "no values key here"},
+        }
+    }
     assert m.crosswalk_present_in_payload(payload, "EMPSZES") is False
 
 
@@ -498,10 +544,12 @@ def test_crosswalk_items_from_payload_reads_the_nested_group_shape():
 
 
 def test_crosswalk_items_from_payload_scoped_to_the_named_variable():
-    payload = {"variables": {
-        "OTHER_VAR": {"values": {"item": {"1": "something"}}},
-        "EMPSZES": {"label": "no values key here"},
-    }}
+    payload = {
+        "variables": {
+            "OTHER_VAR": {"values": {"item": {"1": "something"}}},
+            "EMPSZES": {"label": "no values key here"},
+        }
+    }
     assert m.crosswalk_items_from_payload(payload, "EMPSZES") is None
 
 
@@ -572,8 +620,8 @@ def test_fetch_json_or_none_reports_a_404_without_registering_an_extract(tmp_pat
     client = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(404)))
     extracts: list = []
     status, payload = m.fetch_json_or_none(
-        client, "cbp_metadata", "https://example.invalid/groups.json", "2021/groups.json",
-        extracts)
+        client, "cbp_metadata", "https://example.invalid/groups.json", "2021/groups.json", extracts
+    )
     assert (status, payload) == (404, None)
     assert extracts == []
     assert list(tmp_path.rglob("*")) == [], "a route that did not answer must leave no file"
@@ -586,10 +634,12 @@ def test_fetch_json_or_none_registers_exactly_one_extract_on_a_real_answer(tmp_p
     monkeypatch.setattr(_common, "AUDIT_ROOT", tmp_path)
     body = {"variables": {"EMPSZES": {"label": "Employment size of establishments"}}}
     client = httpx.Client(
-        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=body)))
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=body))
+    )
     extracts: list = []
     status, payload = m.fetch_json_or_none(
-        client, "cbp_metadata", "https://example.invalid/v.json", "2021/variables.json", extracts)
+        client, "cbp_metadata", "https://example.invalid/v.json", "2021/variables.json", extracts
+    )
     assert status == 200
     assert payload == body
     assert [Path(e.path).name for e in extracts] == ["variables.json"]
@@ -620,8 +670,7 @@ def test_main_wipes_a_year_directory_before_the_probe_can_skip_it(tmp_path, monk
 
     assert not stale.exists(), "a previous run's canonical file survived a non-200 probe year"
     assert not stale.parent.exists()
-    written = json.loads(
-        (tmp_path / "cbp_metadata" / "summary.json").read_text(encoding="utf-8"))
+    written = json.loads((tmp_path / "cbp_metadata" / "summary.json").read_text(encoding="utf-8"))
     assert written["extracts"] == []
     assert written["findings"]["years_available"] == []
 
