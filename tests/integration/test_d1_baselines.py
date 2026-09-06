@@ -13,6 +13,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
+from logging_employment.baselines.interfaces import FALLBACK, OWN
 from logging_employment.baselines.runner import preferred_estimator, run_baselines
 from logging_employment.config import load_config
 from logging_employment.contracts import HarmonizedData
@@ -75,9 +76,79 @@ def test_a_preferred_transparent_baseline_is_named() -> None:
     assert preferred_estimator(results)
 
 
+def _status_by_estimator_month(frame: pl.DataFrame) -> dict[tuple[str, str], str]:
+    """The one `reconciliation_status` each estimator-month carries.
+
+    `run_baselines` writes decline rows for a month's whole missing set or reconciles all of it,
+    never a mix; the set arithmetic below reads one status per key, so that is checked here rather
+    than assumed.
+    """
+    grouped = frame.group_by(["estimator_id", "reference_month"]).agg(
+        pl.col("reconciliation_status").unique().alias("statuses")
+    )
+    out: dict[tuple[str, str], str] = {}
+    for row in grouped.iter_rows(named=True):
+        assert len(row["statuses"]) == 1, row
+        out[(row["estimator_id"], row["reference_month"])] = row["statuses"][0]
+    return out
+
+
 def test_the_composite_split_is_recorded_rather_than_hidden() -> None:
-    (results, _), _cfg, _data = _run()
-    ran = results.filter(pl.col("reconciliation_status") == "anchored_and_reconciled")
-    counts = ran.group_by(["estimator_id", "weight_basis"]).len()
-    assert counts.height > 0
-    assert "establishment_fallback" in ran["weight_basis"].unique().to_list()
+    """Declared composition, not a dated count: whatever composed, the output says which cells
+    came from the fallback arm.
+
+    The oracle is the run itself under the one flag that governs composition. With
+    `allow_declared_composite` false, `compose` refuses on the same `gaps` it would otherwise
+    label -- and refuses BEFORE labelling anything -- so an estimator-month that reconciles with
+    the flag on and declines with it off is exactly an estimator-month that composed. That set is
+    derived here, never typed: on a vintage where every estimator's own arm covers every cell,
+    both sides are empty and the claim still holds. The old `"establishment_fallback" in ...` was
+    the dated fact that six D1 states have no observed history and two have no CBP row.
+    """
+    (results, _), cfg, data = _run()
+    # The oracle is the difference the flag makes, so the run under test has to be the permissive
+    # one. Config, not data: nothing a QCEW vintage does moves this.
+    assert cfg.baselines.allow_declared_composite
+    strict = cfg.model_copy(
+        update={"baselines": cfg.baselines.model_copy(update={"allow_declared_composite": False})}
+    )
+    without_composite, _ = run_baselines(data, strict)
+
+    ran = _status_by_estimator_month(results)
+    refused = _status_by_estimator_month(without_composite)
+    # Both runs cover the same estimator-months, so a key the strict run DROPS rather than
+    # declines fails here instead of falling silently out of `composed`.
+    assert set(ran) == set(refused)
+    composed = {
+        key
+        for key, status in ran.items()
+        if status == "anchored_and_reconciled" and refused[key] == "declined"
+    }
+    reconciled = results.filter(pl.col("reconciliation_status") == "anchored_and_reconciled")
+    labelled = set(
+        reconciled.filter(pl.col("weight_basis") == FALLBACK)
+        .select(["estimator_id", "reference_month"])
+        .unique()
+        .iter_rows()
+    )
+    assert labelled == composed
+    # `none` is the declined rows' basis; a reconciled cell always names the arm it used.
+    assert set(reconciled["weight_basis"].unique().to_list()) <= {OWN, FALLBACK}
+
+    # Liveness, DERIVED from the panel rather than typed -- the anti-drift rule's own method
+    # applied to the premise the magic string rested on. A state with no observed employment month
+    # anywhere in the panel can carry no own weight under a share estimator, so a missing set
+    # containing one must compose. Computed at run time this is AK, DE, HI, NV, ND, VT today. On a
+    # vintage where every state has a history the set is empty and the demand lapses BY
+    # CONSTRUCTION: that is what separates "nothing needed the fallback arm" from "the fallback
+    # arm stopped working", and it is why this `assert composed` is not a dated literal.
+    states = data.qcew_monthly.filter(pl.col("area_type") == "state")
+    with_history = set(
+        states.filter(pl.col("observation_status") == "observed")["state_fips"].unique().to_list()
+    )
+    without_history = set(results["state_fips"].unique().to_list()) - with_history
+    if without_history:
+        assert composed, (
+            f"states {sorted(without_history)} have no observed month in the panel, so some "
+            "estimator-month must have composed; none did"
+        )
