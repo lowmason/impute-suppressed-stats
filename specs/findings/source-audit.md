@@ -1,6 +1,6 @@
 # Stage 0 source audit -- findings
 
-**Assembled** by `scripts/audit/assemble_finding.py` from the 12 source summaries under `data/raw/audit/`. **Newest `generated_utc` among them:** 2026-09-05T00:20:03+00:00.
+**Assembled** by `scripts/audit/assemble_finding.py` from the 12 source summaries under `data/raw/audit/`. **Newest `generated_utc` among them:** 2026-09-06T01:50:43+00:00.
 **Spec:** `specs/logging-employment-spec.md` · **Roadmap:** `specs/logging-employment-spec-roadmap.md`, Stage 0 · **Plan:** `specs/plans/1-stage0-logging-employment-spec.md`
 **Window (D1):** 2017-01 → 2024-12 · **Industry:** 113310 (Logging) · **Ownership:** private · **Geography:** states + D.C.
 
@@ -3168,7 +3168,7 @@ _Extracts: 5; summary `generated_utc` 2026-09-05T00:20:03+00:00._
 
 ```json
 {
-  "absent_state_months": "Absent states+DC area-months, measured: 84 of the 50 x 96 possible area-month cells carry no row at all, and each month carries between 48 and 50 of the 50 areas. The area(s) whose span is shorter than the panel's: Delaware -- Statewide (60 month(s)), North Dakota -- Statewide (48 month(s)). Also measured: the establishment gap after non-state areas is exactly zero in 32 of 32 evaluable quarter(s). INFERENCE MARKER, OPENING: what follows to the closing marker is a reading of those two measurements, not a third measurement, is supplied by hand, carries no extract hash and is re-checked by no later run. An area-month with no published row is read here as a true zero rather than as a hidden value, on the ground that an area adding zero establishments to a quarterly total that closes exactly can add no employment in that quarter's months; on that reading the varying per-month area count above does not undercut the state sum. INFERENCE MARKER, CLOSING.",
+  "absent_state_months": "Absent states+DC area-months, measured: 84 of the 50 x 96 possible area-month cells carry no row at all, and each month carries between 48 and 50 of the 50 areas. The area(s) whose span is shorter than the panel's: Delaware -- Statewide (60 month(s)), North Dakota -- Statewide (48 month(s)). Of the 51 configured states+DC area code(s), the one(s) carrying no row in any month, and so counted in neither figure above: 11000. Also measured: the establishment gap after non-state areas is exactly zero in 32 of 32 evaluable quarter(s). INFERENCE MARKER, OPENING: what follows to the closing marker is a reading of those two measurements, not a third measurement, is supplied by hand, carries no extract hash and is re-checked by no later run. An area-month with no published row is read here as a true zero rather than as a hidden value, on the ground that an area adding zero establishments to a quarterly total that closes exactly can add no employment in that quarter's months; on that reading the varying per-month area count above does not undercut the state sum. INFERENCE MARKER, CLOSING.",
   "branch": "decline",
   "clean_months": 0,
   "decision_thresholds": "Decision thresholds for SRC-QCEW-006. SCOPE MARKER, OPENING: every sentence in this findings key, from here to the closing scope marker, is hand-authored. It records where this script's two thresholds come from; it states nothing this run measured, it is the only wholly hand-authored key in this summary, and its scope does not extend past its own closing marker to any neighbouring key. This script fetches nothing, so none of the text here carries an extract hash and no later run re-checks any of it. Threshold one, tolerance: 'equals' means exact integer equality, tolerance 0, on the stated ground that QCEW monthly employment and quarterly establishment counts are integer counts of jobs and of establishments; classify_identity therefore compares gaps to 0 and never to a band, and no numerical confidentiality threshold is encoded anywhere in this script. Threshold two, branch assignment: a gap that closes only after subtracting non-state areas present in the national universe is classified residual_cells rather than enforce. That rests on one quotation, reproduced verbatim from specs/logging-employment-spec.md section 3.2: 'A national control MUST NOT be imposed on a state universe that omits components included in the national total.' The step from that quotation to the residual_cells branch is an inference and is hand-authored: the quotation forbids imposing a national control on a universe missing national components, and the reading applied here is that a states+DC universe which excludes a non-state area the national total includes is exactly such a universe, so the area must enter as an explicit residual cell instead of being controlled away. The quotation does not name the branch, and no measurement in this run carries that step. The same reading is what makes containment worth measuring rather than assuming: the quotation is conditioned on components 'included in the national total', so an area measured to sit outside that total is not what it governs. Both thresholds were set as defaults by the Stage 0 plan's Global Constraints and confirmed at handoff before classify_identity was written. SCOPE MARKER, CLOSING: end of the hand-authored text; every other findings key in this summary is computed from the panel this run read, and the one inference among them carries its own inline marker.",
@@ -4356,6 +4356,9 @@ _Extracts: 5; summary `generated_utc` 2026-09-05T00:20:03+00:00._
       "max": 50,
       "min": 48
     },
+    "states_dc_areas_with_no_rows": [
+      "11000"
+    ],
     "states_dc_short_span_areas": [
       {
         "area_fips": "10000",
@@ -4704,7 +4707,7 @@ _Extracts: 5; summary `generated_utc` 2026-09-05T00:20:03+00:00._
 }
 ```
 
-_Extracts: 0; summary `generated_utc` 2026-09-04T23:13:56+00:00._
+_Extracts: 0; summary `generated_utc` 2026-09-06T01:50:43+00:00._
 
 ### `qcew_panel`
 
