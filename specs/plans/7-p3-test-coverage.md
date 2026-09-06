@@ -172,9 +172,18 @@ claim is nonetheless exactly right and bitwise: `historical.py:223-224` is
 `RollingMedianShare._reduce`'s body at `:196`. Verified: at n=2 and n=3 both return
 `0x1.0000000000000p-1`, identical in `float.hex()`.
 
-**4. Item D's `<4` branch is not unreached — it is reached 504 times and undiscriminated.** A
-coverage tool shows `historical.py:223-224` at 100%. The gap is assertions, not reach. An
-implementer who "verifies" this item with `coverage` will close it without writing anything.
+**4. Item D's `<4` branch is not unreached — it is reached, by a passing test, and
+undiscriminated.** `tests/unit/test_baselines_historical.py:78` drives it at three shares and
+asserts only `> 0.0` and `== OWN`. The gap is assertions, not reach; an implementer who "verifies"
+this item with a coverage tool will close it without writing anything. **Reach counts are
+machine-local — quote none of them:** over `tests/unit` alone the arm is entered 9 times (len 1 ×8,
+len 3 ×1, never len 2); the several hundred further entries come from
+`tests/integration/test_d1_baselines.py`, whose five tests are `skipif`-guarded on `data/staged` and
+do not run in a clean clone.
+
+**Item D also mis-attributes itself.** It ends "(Whole-branch review, Minor.)", but the only source
+in the repo is `specs/findings/stage3-plan-audit.md:449-455`, tagged **[NIT]** against
+`plan:3187-3189` in the **pre-execution** plan audit. Do not carry the parenthetical forward.
 
 **5. Item E's premise holds, and the audit it asks for has now been run.** Task 18's twelve tests
 were mutation-audited (24 source mutations). Three real holes came back, all mutation-proven, and
@@ -205,13 +214,22 @@ mutation-proven un-witnessed: reverting `ces_levels.py:180` to `"States {states}
   `{"state_code", "industry_code", "series_id"}`.
 - Produces: no source. Three tests.
 
-**Why three and not one.** The clause is prose in a tracked deliverable, and this repo has a
-recorded trap for that: a test that asserts the sentence exists pins its letter, not its truth,
-and keeps passing after the sentence goes false. Plan 6's Task 1 set the standard — "one pins the
-sentence, one pins that it is true of the artifact." Test 1 is the sentence, Test 2 is the truth,
-and Test 3 pins the *warrant* (why "sm.state codes" rather than "States") as a property of the
-universe the clause selects from, so it still holds on a future run whose near-miss set happens to
-be all real states.
+**Why two and not one.** The clause is prose in a tracked deliverable, and this repo has a recorded
+trap for that: a test that asserts the sentence exists pins its letter, not its truth, and keeps
+passing after the sentence goes false. Plan 6's Task 1 set the standard — "one pins the sentence,
+one pins that it is true of the artifact." Test 1 is the sentence; Test 2 is the truth.
+
+**Why not three.** A third test pinning the *warrant* — that the codes the clause can name come
+from a universe wider than `states_dc` — was drafted and then dropped, because it re-hosts coverage
+that already exists. `test_publication_level_map_really_does_span_more_than_states_dc`
+(`tests/audit/test_ces_levels.py:544`) already asserts
+`non_state = coded - set(_common.STATES_DC_FIPS)` is non-empty **and** that it equals
+`{row["code"] for row in findings["non_state_codes"]}`; and
+`test_near_miss_rows_are_keyed_by_codes_the_publication_map_left_at_none` (`:556`) asserts the
+near-miss keying more strongly than a subset check would. Both read the **gitignored** summary via
+`_ces_summary()` and therefore skip in a clean clone — that is a real weakness, but it is
+skip-proofing, a separate concern from this item, and it belongs in its own deferred item rather
+than smuggled in here. **Do not add a third test.**
 
 **What "true" means here.** `sm.state` carries 55 codes; D1's `states_dc` is 51.
 `specs/findings/source-audit.md:1635` names `sm.state codes 10, 11, 15, 78`, and `78` is the
@@ -223,7 +241,6 @@ would be a **false sentence in a tracked deliverable**: it promotes a territory 
 ```bash
 rm -rf /tmp/p3t1 && mkdir -p /tmp/p3t1
 cp /Users/lowell/Projects/impute-suppressed-stats/scripts/audit/ces_levels.py /tmp/p3t1/
-cp /Users/lowell/Projects/impute-suppressed-stats/scripts/audit/_common.py /tmp/p3t1/
 python3 -c "
 import pathlib
 p = pathlib.Path('/tmp/p3t1/ces_levels.py'); s = p.read_text()
@@ -242,7 +259,7 @@ skip when it points at `/tmp`.) Untouched, the same file is **40 passed**.
 Name only this file, never the `tests/audit` directory — see the `assemble_finding.py` shadowing
 trap in the artifact rules above.
 
-- [ ] **Step 2: Write the three failing tests**
+- [ ] **Step 2: Write the two failing tests**
 
 Add `import re` to the imports at the top of `tests/audit/test_ces_levels.py`. The file already
 imports `json`, `pathlib`, `_common`, `ces_levels as m`, `polars as pl` and `pytest`. **Do not
@@ -290,31 +307,22 @@ def test_the_shipped_note_is_recomputable_from_the_findings_it_sits_beside():
         findings["excluded_broader_codes"], findings["near_miss_sm_state_codes"]
     )
     assert recomputed in findings["notes"]
-
-
-def test_the_codes_that_clause_can_name_are_drawn_from_a_universe_wider_than_states_dc():
-    """Why "sm.state codes" and not "States", pinned as a property of the universe the clause
-    selects from rather than of which codes today's run happens to name -- so it still holds if a
-    future run's near-miss set is all real states. Today's witness is 78 (Virgin Islands); the
-    assertion does not depend on it."""
-    findings = _ces_findings_from_the_shipped_document()
-    coded = set(findings["publication_level_by_sm_state_code"])
-    assert {r["state_code"] for r in findings["near_miss_sm_state_codes"]} <= coded
-    non_state = coded - set(_common.STATES_DC_FIPS)
-    assert non_state == {row["code"] for row in findings["non_state_codes"]}
-    assert non_state, "sm.state is states_dc-only this run; the clause's warrant is gone"
 ```
 
 `findings["notes"]` is a single joined string (`ces_levels.py:463` builds it with `" ".join(...)`),
-so `recomputed in findings["notes"]` is a substring test, not a membership test over a list. All
-three assertions were run against the shipped tree while this plan was written: `notes` is `str`,
-`recomputed in notes` is `True`, the near-miss codes are a subset of the coded universe, and
-`coded - STATES_DC_FIPS == {"00", "72", "78", "99"}` exactly.
+so `recomputed in findings["notes"]` is a substring test, not a membership test over a list. Both
+tests were run against the shipped tree while this plan was written: `notes` is a `str`,
+`recomputed in notes` is `True`, and Test 1's two assertions hold.
+
+Do **not** build the truth pin by regexing the clause back out of the notes string. That couples
+both tests to the same words, so a reword fails them for the same reason and the pair proves
+nothing the sentence pin did not already prove. Recompute the sentence from the findings instead,
+as above.
 
 - [ ] **Step 3: Run them against the shipped tree**
 
 Run: `uv run pytest tests/audit/test_ces_levels.py -q`
-Expected: **43 passed** (40 + 3).
+Expected: **42 passed** (40 + 2).
 
 - [ ] **Step 4: Mutation gate — confirm the new tests actually fail on the reword**
 
@@ -323,10 +331,14 @@ PYTHONPATH=/tmp/p3t1 uv run pytest tests/audit/test_ces_levels.py -q 2>&1 | tail
 ```
 
 Expected: **2 failed** — `test_broader_code_note_calls_them_sm_state_codes_not_states` and
-`test_the_shipped_note_is_recomputable_from_the_findings_it_sits_beside`. Test 3 passes against the
-mutant **by design**: it pins the warrant, not the wording. If Test 1 or Test 2 passes here, the
-mutant was shadowed — check that `/tmp/p3t1/ces_levels.py` is the module being loaded before you
-change anything.
+`test_the_shipped_note_is_recomputable_from_the_findings_it_sits_beside`. Both were run against
+this exact mutant while the plan was written and both go red.
+
+If either passes here, the mutant was shadowed rather than loaded. Note that `/tmp/p3t1` must hold
+`ces_levels.py` **alone** for the truth pin to be mutation-testable: `_common.FINDINGS_DIR` derives
+from `_common.__file__` (`_common.py:38-40`), so copying `_common.py` into the mutant directory
+points the pin at a findings directory that does not exist. Copy only `ces_levels.py` and let
+`_common` resolve to the real one via `tests/conftest.py`'s path append.
 
 - [ ] **Step 5: Commit**
 
@@ -336,8 +348,8 @@ git add tests/audit/test_ces_levels.py
 git commit -m "test(audit): hold the ces_levels sm.state-codes clause, and hold that it is true
 
 Reverting the clause to \"States {states} publish\" left all 40 tests in the file green.
-One test pins the sentence, one recomputes it from the findings it sits beside, and one
-pins the warrant -- that the codes it names come from a universe wider than states_dc.
+One test pins the sentence; one recomputes it from the findings it sits beside, so the
+pair fails when the clause goes false rather than only when it goes missing.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
@@ -445,12 +457,26 @@ def test_main_writes_empty_published_bounds_when_no_window_year_is_available(tmp
 words — that is an incidental prose pin on an unrelated sentence and would break on a reword that
 has nothing to do with this guard.
 
+**One test covers all three guard sites.** With `years_available == []`, `:617` raises first; a
+mutant that strips only `:632`/`:633` and leaves `:617` intact fails the same test with
+`ValueError: min() iterable argument is empty` at `:632`. Both were run separately — the
+all-three-stripped mutant alone does **not** establish the `:632`/`:633` case, because `:617`
+raises before the interpreter reaches it.
+
 **Why `years_available == []` and not a populated list.** The blanket "200 for everything"
 `MockTransport` is sufficient **only** for the empty case. With a non-empty `years_available`,
 `fetch_variable_definition` (`cbp_regime.py:506-522`) calls `resp.json()` and catches only
 `httpx.HTTPStatusError`, so a `200` carrying `b"<html/>"` raises `JSONDecodeError`. If you extend
 this test to a populated year list, the transport must return JSON on the variables URLs. Keep the
 test to the empty case; it is the case the guard exists for.
+
+**The two `setenv` lines, accurately.** `CENSUS_API_KEY` is load-bearing:
+`_common.assert_no_secrets_bytes` scans recorded bytes for the value of each `SECRET_ENV_VARS`
+entry, so a placeholder neutralises a developer's real exported key. `BLS_CONTACT_EMAIL` is **not**
+load-bearing here — `_common.contact_email()` is only reached through `build_client`, which this
+test replaces with a lambda. Verified: with both variables unset and both `setenv` lines deleted,
+the test still passes. Keep it anyway for symmetry with the `test_cbp_metadata.py:674` precedent,
+but do not repeat a rationale that is false for this test.
 
 **Two things this test must not trip.** `cbp_regime.py:531-538` raises `RuntimeError` outright if
 `2024 in years_available` **or** `probe_status.get("2024") == 200` — two trigger conditions, not
@@ -786,7 +812,14 @@ a design change, filed as a new deferred item in Task 5, not a test-coverage fix
 5. **`segment = shares[cut:] or shares` (`historical.py:227`) is unreachable by construction.** For
    n ≥ 4, `steps` has n−1 entries and `steps.index(max(...))` is in `[0, n-2]`, so `cut` is in
    `[1, n-1]` and `shares[cut:]` always has at least one element. **Budget no test for it** — a
-   branch-coverage chase will burn the task. It is filed as a new deferred item in Task 5.
+   branch-coverage chase will burn the task. It is filed as a new deferred item in Task 6.
+6. **Do not write a discrimination test over `baseline_results` or the tracked golden.** That is the
+   most natural reading of "nothing detects two variants computing the same number", and it cannot
+   be written as an inequality: in the golden's 138 reconciled cells all five share variants produce
+   the identical `estimate` on 105, because in a month where no missing cell has an own history
+   every §10.3 variant *is* §10.2's estimator, numerically and by design. The discrimination test
+   belongs at the `weights` level on a fixture where the missing cell carries an own history — which
+   is what Step 2 builds.
 
 - [ ] **Step 1: Confirm the collapse is bitwise, and that nothing detects it**
 
@@ -927,13 +960,23 @@ numbers, all on basis `OWN`.
 
 - [ ] **Step 3: Pin the `<4` collapse as intentional current behaviour**
 
+**Say "current", never "intentional".** Task 6 files a deferred item arguing the `<4` fallback is a
+design choice nobody chose; a test in this batch that ratifies it as intended would contradict that
+item and have to be undone when it is taken up. Pin the behaviour, describe the mechanism, and stop
+there.
+
+**Derive the counterfactual, do not narrate it.** A docstring sentence like "the post-break median
+would have been 90.0" is a number returned by no function — the exact prose-pin trap this batch
+exists to close. The third assertion gets 90.0 out of `LastObservedShare` instead.
+
 ```python
 def test_below_four_shares_the_break_adjusted_variant_is_the_rolling_median(
     make_monthly, appendix_a_config
 ) -> None:
-    """Documents the degeneracy rather than hiding it: with three shares there is no segment to
-    split, so the variant returns the whole-history median -- 11.0 here, where the post-break
-    median would have been 90.0. The deferred item that fixes the threshold must change this."""
+    """Documents the degeneracy rather than hiding it, and takes no position on whether it is
+    right: with three shares there is no segment to split, so the variant returns the whole-history
+    median and ignores a violent break at the most recent observation. The deferred item that
+    revisits the threshold must change this test."""
     monthly = make_monthly(*_share_rows(["2023-12", "2024-01", "2024-02"], [10, 11, 90]))
     context = _context(monthly, appendix_a_config)
     anchor = Anchor("2024-03", 50.0, ("01",), "declared_national_total")
@@ -942,6 +985,9 @@ def test_below_four_shares_the_break_adjusted_variant_is_the_rolling_median(
     median = RollingMedianShare().weights(context, anchor).values["01"]
     assert broken == median
     assert broken == pytest.approx(11.0)
+    # The break this variant exists to follow is derived, not asserted in prose: the most recent
+    # observation is 90, and a variant that segmented on it would return that instead of 11.
+    assert LastObservedShare().weights(context, anchor).values["01"] == pytest.approx(90.0)
 ```
 
 - [ ] **Step 4: Run steps 2-3**
@@ -1049,7 +1095,8 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Modify: `tests/unit/test_scaling.py:80` (add `match=`)
 - Modify: `tests/unit/test_reconcile_properties.py:117-131` (split the two anchors, add `match=`),
   `:188-189` (tighten property 5's tolerance)
-- Test: `tests/unit/test_reconcile_properties.py` (append two tests)
+- Test: `tests/unit/test_reconcile_properties.py` (append two tests),
+  `tests/unit/test_integerize.py` (append one)
 
 **Interfaces:**
 - Consumes: `scale_into_bounds`, `Bounds`, `kl_project`, `constraint_violation`,
@@ -1276,15 +1323,51 @@ Compare against the **looser** tolerance, never tighter than the looser solve ca
 drawn strictly inside `[Σ L, Σ U]`, so property 3's refusals never fire here; the bounds mirror
 property 2's generator (`:99-102`) for the same reason.
 
-- [ ] **Step 6: Run both files**
+- [ ] **Step 6: Close the integerize lower-bound gap the audit turned up**
+
+`tests/unit/test_integerize.py:39` is named `test_integer_lower_and_upper_bounds_are_respected` and
+**passes no `lower=` argument at all** — its body is
+`integerize({"01": 5.5, "02": 2.5, "04": 2.0}, total=10, upper={"01": 4, ...})` asserting only
+`sum == 10` and `out["01"] <= 4`. That is a name-vs-body mismatch, the same defect family the audit
+already fixed once (Task 11, "Test asserted the opposite of its own name", commit `3a9c0e2`).
+`test_every_feasible_bounded_input_places_all_its_units` (`:73`) passes only `upper=` too.
+
+The gap is real and mutation-proven: changing `integerize.py:67` from
+`seat = max(math.floor(value), lower.get(cell, 0))` to `seat = math.floor(value)` leaves
+`uv run pytest tests/unit -q` at **400 passed**. It is not an equivalent mutant — verified:
+
+| input | shipped | mutant |
+|---|---|---|
+| `integerize({"01": 0.4, "02": 9.6}, total=11, lower={"01": 2})` | `{"01": 2, "02": 9}` | `{"01": 1, "02": 10}` |
+
+Both sum to 11, so a totals-only assertion cannot see it, and `"01"` comes back **below the lower
+bound the caller declared**. Add beside it:
+
+```python
+def test_a_lower_bound_seats_a_cell_its_raw_value_would_round_below() -> None:
+    """test_integer_lower_and_upper_bounds_are_respected passes no `lower=` at all, so the seat
+    floor at integerize.py:67 was pinned by nothing: dropping it leaves all 400 unit tests green.
+    Both results here sum to 11, so a totals-only assertion cannot tell them apart -- the point is
+    WHICH cell holds the units, not how many were placed."""
+    out = integerize({"01": 0.4, "02": 9.6}, total=11, lower={"01": 2})
+    assert sum(out.values()) == 11
+    assert out["01"] == 2
+```
+
+Why this belongs here rather than in a new deferred item: it is a pure test addition, and it is the
+same shape as Step 2 — a test whose name claims a behaviour its body never exercises. Scoping this
+task to "the Task 18 file" would leave both.
+
+- [ ] **Step 7: Run all three files**
 
 ```bash
-uv run pytest tests/unit/test_reconcile_properties.py tests/unit/test_scaling.py -q
+uv run pytest tests/unit/test_reconcile_properties.py tests/unit/test_scaling.py tests/unit/test_integerize.py -q
 ```
-Expected: all pass. `test_reconcile_properties.py` goes 12 → 15 (properties 4-companion, 7-tolerance
-×2 parametrizations); `test_scaling.py` count is unchanged.
+Expected: all pass. `test_reconcile_properties.py` goes 12 → 15 (the property-4 companion plus the
+tolerance test's two parametrizations); `test_integerize.py` goes 12 → 13; `test_scaling.py` is
+unchanged in count.
 
-- [ ] **Step 7: Mutation gate — all three holes, against the same mutants that survived before**
+- [ ] **Step 8: Mutation gate — against the same mutants that survived before**
 
 ```bash
 PYTHONPATH=/tmp/p3t5 uv run pytest tests/unit/test_reconcile_properties.py tests/unit/test_scaling.py -q 2>&1 | tail -6
@@ -1327,7 +1410,7 @@ has edited it against this task's instruction.
 If the `re.sub` does not match `projection.py`'s actual loop header, read the file and patch the
 iteration count by hand; the mutant only has to make `kl_project` return its seed untouched.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 rm -rf /tmp/p3t5 /tmp/p3t5b
@@ -1356,8 +1439,9 @@ uv run ruff check .
 uv run --no-project scripts/audit/verify_extracts.py
 ```
 
-Expected: **1137 passed** — 1123 plus 14 new test items (Task 1: 3, Task 2: 1, Task 3: 4, Task 4:
-3, Task 5: 3 = the property-4 companion plus two parametrizations of the tolerance test). On a
+Expected: **1137 passed** — 1123 plus 14 new test items (Task 1: 2, Task 2: 1, Task 3: 4, Task 4:
+3, Task 5: 4 = the property-4 companion, two parametrizations of the tolerance test, and the
+integerize lower-bound test). On a
 machine without `data/raw/audit/qcew_routes/bulk/`, Task 3 Step 5 skips and it reads **1136 passed,
 1 skipped**. Both are green; only a *failure* is a gate breach.
 
@@ -1431,12 +1515,21 @@ line quoted at the head of Task 3.
   every probe outcome), *and* its "real bulk download" is on disk and was used.
 - Item D's "111 of 360" conflates two numbers from `stage3-plan-audit.md:451` — 108 take the
   branch, 111 agree — and neither reproduces against shipped code.
-- Item D's `<4` branch was never unreached; it runs 504 times in the existing suite. The gap was
-  assertions.
+- Item D's `<4` branch was never unreached — a passing test at
+  `tests/unit/test_baselines_historical.py:78` already drives it. The gap was assertions.
+- Item D's "(Whole-branch review, Minor.)" attribution is wrong: its source is the pre-execution
+  plan audit, `specs/findings/stage3-plan-audit.md:449-455`, tagged [NIT].
 
-**Four new deferred items to append** (none belongs in a test-coverage batch):
+**Five new deferred items to append** (none belongs in a test-coverage batch):
 
-1. **The bulk route has no build-side consumer, and its fetch arm is unreachable.** `fetch_source`
+1. **`tests/audit/test_ces_levels.py`'s three artifact tests skip in a clean clone.** `:534`,
+   `:544` and `:556` read `data/raw/audit/ces/summary.json` through `_ces_summary()`, and `data/` is
+   gitignored in its entirety, so none of them runs on a fresh checkout or in CI. Plan 7 Task 1
+   deliberately reads the **tracked** `specs/findings/source-audit.md` instead, which is why its
+   truth pin never skips; converting the three existing tests to the same source is the residual.
+   Check the sibling audit test files for the same pattern before fixing just this one.
+
+2. **The bulk route has no build-side consumer, and its fetch arm is unreachable.** `fetch_source`
    can acquire and store a bulk zip (`fetching.py:117-121`), but `build_harmonized` reads only
    `*.csv` through `read_slice_csv` (`build.py:174-183`) and `read_bulk_zip` has no caller in
    `src/`. The arm is unreachable for **any** probe outcome, not merely at today's boundary:
@@ -1450,7 +1543,7 @@ line quoted at the head of Task 3.
    times, producing four manifest rows against one content-addressed `raw_path` that
    `sorted(listed)` returns four times (INV-007 stacking). This is a delete-or-fix decision on
    dead code, not a condition to wait on.
-2. **`BreakAdjustedShare`'s `<4` fallback is a design choice nobody chose.** The audit's own two
+3. **`BreakAdjustedShare`'s `<4` fallback is a design choice nobody chose.** The audit's own two
    options (`stage3-plan-audit.md:451`): scope the docstring — done in plan 7 Task 4 — or return
    `None` below a minimum segment length so the cell takes the declared §10.2 fallback. Whoever
    takes it needs a new fixture: `tests/fixtures/baselines/` has only three cells with a history
@@ -1458,13 +1551,20 @@ line quoted at the head of Task 3.
    the change, while the shipped D1 run would move roughly 99 of 342 cells from `OWN` to
    `FALLBACK`. Plan 7's `test_below_four_shares_the_break_adjusted_variant_is_the_rolling_median`
    is the test that must change.
-3. **`historical.py:227`'s `segment = shares[cut:] or shares` — the `or shares` arm is
+4. **`historical.py:227`'s `segment = shares[cut:] or shares` — the `or shares` arm is
    unreachable.** For n ≥ 4, `cut ∈ [1, n-1]`, so the slice is never empty; below 4 the early
    return fires first. Delete the arm or state why it stays.
-4. **§12.4's zero-seed floor (`projection.py:98`) is killed by no test in the repo** — deleting
-   `np.maximum(seed, floor)` leaves 1123 passed. It is a real MUST-level hole but it is not one of
-   §17.3's seven properties, so plan 7 Task 5 did not owe it. Remedy: a `kl_project` case with a
-   zero in the seed whose margin is only reachable if the floor lifts it.
+5. **`projection.py:98`'s zero-seed floor is redundant with the clip at `:118`.** Deleting
+   `x = np.maximum(np.asarray(seed, dtype=float), floor)` leaves 1123 passed — but that is the
+   correct answer, **not** a hole. `:118` is `x = np.clip(x, np.maximum(lower, floor), upper)` and
+   runs on the full vector after every margin row, so §12.4's floor is re-imposed each iteration by
+   a second line. Verified directly: on an all-zero seed, a one-zero seed and a two-zero seed the
+   shipped and floor-deleted versions return **bitwise-comparable identical output**
+   (`[5.0, 5.0, 5.0, 5.0]`, `[0.0, 8.0, 5.142857143, 6.857142858]`, `[4.0, 4.0, 5.142857143,
+   6.857142857]`) with identical violations. No test can kill this mutant, and none should try —
+   the finding is a redundancy, not a missing test. Remedy: delete one of the two lines, or
+   document why both stand. **This was very nearly filed as "a real MUST-level hole"; it is not,
+   and filing it that way would have put an aged claim into the tracked record.**
 
 ---
 
@@ -1501,6 +1601,15 @@ in first drafts that would otherwise have shipped:
 | Task 5's five blocks | 5 passed |
 | Task 5 mutant 1 (§12.3 guard deleted) | **full suite 1123 passed**; new property 3 fails on `match=` |
 | Task 5 mutant 2 (identity `kl_project`) | new companion fails, property 5 fails via `matrix.py:71`, **property 4 still passes** |
+| Task 5 mutant 3 (integerize seat ignores `lower`) | `tests/unit` **400 passed**; shipped returns `{"01": 2, "02": 9}`, mutant `{"01": 1, "02": 10}` |
+| The zero-seed-floor "hole" | **disproved** — floor-deleted and shipped return identical output on all-zero, one-zero and two-zero seeds |
+
+**A claim this plan nearly shipped and did not.** The recon proposed filing §12.4's zero-seed floor
+as "a real MUST-level hole, killed by no test in the repo". The 1123-passed result was real; the
+inference was not. The clip at `projection.py:118` already folds `floor` into its lower argument and
+runs every iteration, so the mutant is behaviourally equivalent and no test could kill it. Filing it
+would have put an aged claim into the tracked deferred record — the failure mode this repo's
+whole-branch gate exists to catch. It is filed instead as a redundancy.
 
 No `python` code block in this plan exceeds the 100-character line limit.
 
