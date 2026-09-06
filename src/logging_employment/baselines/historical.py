@@ -213,7 +213,8 @@ class BreakAdjustedShare(_ShareBaseline):
 
     Uses the median of the most recent segment after the largest single-step change, so one
     reclassification or one plant closure does not drag the estimate toward a regime that ended.
-    A plain median over the whole lookback is what this variant exists NOT to be.
+    At four or more shares this is not a plain median over the whole lookback; below four it is
+    exactly that, because a segment split needs points on both sides.
     """
 
     estimator_id = "share_break_adjusted"

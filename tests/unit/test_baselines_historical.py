@@ -363,3 +363,140 @@ def test_a_published_zero_enters_the_history_as_a_zero_share(
     )
     assert history["reference_month"].to_list() == ["2024-01", "2024-02"]
     assert history["share"].to_list()[-1] == 0.0
+
+
+# --- do the five variants compute five numbers? ------------------------------------------------
+
+
+def _share_rows(months: list[str], employment: list[int]) -> list[dict]:
+    """A national row and one state-01 row per month, then the suppressed anchor month. Integer
+    employment over an integer national total, because on tenths the largest-step argmax is decided
+    by float noise: on [0.1, 0.2, 0.3, 0.4] the steps are 0.1, 0.09999999999999998 and
+    0.10000000000000003, so the cut lands last and the segment is one point."""
+    rows: list[dict] = []
+    for month, value in zip(months, employment, strict=True):
+        rows.append(
+            {
+                "area_type": "national",
+                "area_fips": "US000",
+                "state_fips": None,
+                "aggregation_level": "18",
+                "reference_month": month,
+                "employment_value": 1000,
+                "qtrly_establishments": 100,
+            }
+        )
+        rows.append(
+            {
+                "state_fips": "01",
+                "area_fips": "01000",
+                "reference_month": month,
+                "employment_value": value,
+                "qtrly_establishments": 4,
+                "observation_status": "observed",
+            }
+        )
+    rows.append(
+        {
+            "area_type": "national",
+            "area_fips": "US000",
+            "state_fips": None,
+            "aggregation_level": "18",
+            "reference_month": "2024-03",
+            "employment_value": 1000,
+            "qtrly_establishments": 100,
+        }
+    )
+    rows.append(
+        {
+            "state_fips": "01",
+            "area_fips": "01000",
+            "reference_month": "2024-03",
+            "employment_value": None,
+            "qtrly_establishments": 4,
+            "observation_status": "suppressed",
+        }
+    )
+    return rows
+
+
+def _breaking_history(make_monthly) -> pl.DataFrame:
+    """Twelve months of history plus the anchor month, with a level break between month 8 and
+    month 9. Twelve so SameMonthPreviousYearShare can resolve 2023-03; a break in the interior so
+    BreakAdjustedShare's segment has more than one point; state 02 disclosed at the anchor month so
+    the establishment fallback has an intensity if a variant declines."""
+    months = [f"2023-{m:02d}" for m in range(3, 13)] + ["2024-01", "2024-02"]
+    rows = _share_rows(months, [20, 10, 11, 9, 10, 11, 9, 10, 30, 31, 29, 34])
+    rows.append(
+        {
+            "state_fips": "02",
+            "area_fips": "02000",
+            "reference_month": "2024-03",
+            "employment_value": 800,
+            "qtrly_establishments": 80,
+            "observation_status": "observed",
+        }
+    )
+    return make_monthly(*rows)
+
+
+def test_the_five_variants_compute_five_different_numbers_on_one_history(
+    make_monthly, appendix_a_config
+) -> None:
+    """test_section_10_3_ships_exactly_five_variants checks that five estimator ids exist; nothing
+    checked that five estimators exist. Below four shares BreakAdjustedShare is bitwise identical
+    to RollingMedianShare, and the suite's only all-variants fixture is a three-month history on
+    which the five produce three distinct numbers -- so a duplicate variant was undetectable.
+
+    The values are stated as arithmetic over the fixture's own numbers rather than as a bare
+    distinctness assert: the twelve-month span exists so SameMonthPreviousYearShare can resolve
+    2023-03, and if historical_lookback_months ever drops below 12 a distinctness-only assert would
+    fail for a config reason wearing a collapse reason's clothes."""
+    monthly = _breaking_history(make_monthly)
+    context = _context(monthly, appendix_a_config)
+    anchor = Anchor("2024-03", 50.0, ("01",), "declared_national_total")
+
+    values = {}
+    for cls in ALL_FIVE:
+        out = cls().weights(context, anchor)
+        assert out.basis["01"] == OWN, f"{cls.__name__} fell back; fix the fixture, not this"
+        values[cls().estimator_id] = out.values["01"]
+
+    assert values["share_last_observed"] == pytest.approx(34.0)
+    assert values["share_same_month_prior_year"] == pytest.approx(20.0)
+    assert values["share_rolling_median"] == pytest.approx(11.0)
+    # The largest single step is 10 -> 30, so the segment is [30, 31, 29, 34], median (30 + 31) / 2.
+    assert values["share_break_adjusted"] == pytest.approx(30.5)
+    assert len(set(values.values())) == 5
+
+
+def test_below_four_shares_the_break_adjusted_variant_is_the_rolling_median(
+    make_monthly, appendix_a_config
+) -> None:
+    """Documents the degeneracy rather than hiding it, and takes no position on whether it is
+    right: with three shares there is no segment to split, so the variant returns the whole-history
+    median and ignores a violent break at the most recent observation. The deferred item that
+    revisits the threshold must change this test."""
+    monthly = make_monthly(*_share_rows(["2023-12", "2024-01", "2024-02"], [10, 11, 90]))
+    context = _context(monthly, appendix_a_config)
+    anchor = Anchor("2024-03", 50.0, ("01",), "declared_national_total")
+
+    broken = BreakAdjustedShare().weights(context, anchor).values["01"]
+    median = RollingMedianShare().weights(context, anchor).values["01"]
+    assert broken == median
+    assert broken == pytest.approx(11.0)
+    # The break this variant exists to follow is derived, not asserted in prose: the most recent
+    # observation is 90, and a variant that segmented on it would return that instead of 11.
+    assert LastObservedShare().weights(context, anchor).values["01"] == pytest.approx(90.0)
+
+
+def test_the_break_adjusted_docstring_scopes_its_own_claim() -> None:
+    """The sentence half of the pair: the two tests above hold that the claim is TRUE, this holds
+    that the claim is still MADE. Before this batch the docstring said a plain median "is what this
+    variant exists NOT to be", full stop, which is false on every history shorter than four.
+
+    Whitespace-normalized so that re-wrapping the docstring does not redden this: the claim is the
+    sentence, not the line breaks."""
+    doc = " ".join(BreakAdjustedShare.__doc__.split())
+    assert "At four or more shares this is not a plain median over the whole lookback" in doc
+    assert "below four it is exactly that" in doc
