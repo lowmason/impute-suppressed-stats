@@ -78,8 +78,21 @@ def kl_project(
     floor: float,
     tolerance: float,
     max_iterations: int,
-) -> np.ndarray:
-    """Project `seed` onto {x : margins @ x == targets, lower <= x <= upper} under I-divergence."""
+) -> tuple[np.ndarray, float]:
+    """Project `seed` onto {x : margins @ x == targets, lower <= x <= upper} under I-divergence.
+
+    Returns `(x, violation)`. The loop breaks on STEP SIZE, not on violation, so a fully-clipped
+    update exits on iteration one having moved nothing -- with `upper=[1,1]` against a target of
+    10 the result is 8.0 away from its margin. That is not a defect in the algorithm: §17.3's
+    acceptance criterion is that violation never increases, not that it reaches zero, and the
+    property tests feed jointly infeasible systems on purpose. It IS a defect to hand that vector
+    back as if it were converged, so the achieved violation is returned alongside it and a caller
+    that requires convergence checks it. Raising here instead would break §17.3's property test.
+
+    `targets` is the one argument never coerced through `np.asarray`; the returned violation
+    inherits that, which is correct for the ndarray callers this package has and worth knowing
+    before passing a list.
+    """
     margins = np.asarray(margins, dtype=float)
     _require_indicator_margins(margins)
     x = np.maximum(np.asarray(seed, dtype=float), floor)
@@ -105,4 +118,4 @@ def kl_project(
             x = np.clip(x, np.maximum(lower, floor), upper)
         if np.max(np.abs(x - previous)) <= tolerance:
             break
-    return x
+    return x, constraint_violation(x, margins, targets)

@@ -26,7 +26,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..errors import IncompatibleMarginError
-from .projection import constraint_violation, kl_project
+from .projection import kl_project
 
 
 def reconcile_matrix(
@@ -68,7 +68,7 @@ def reconcile_matrix(
 
     margin_matrix = np.vstack(margins)
     target_vector = np.array(targets)
-    flat = kl_project(
+    flat, violation = kl_project(
         seed.reshape(-1),
         margin_matrix,
         target_vector,
@@ -83,7 +83,7 @@ def reconcile_matrix(
     if not np.allclose(achieved, target_vector, rtol=1e-6, atol=max(tolerance, 1e-9)):
         raise IncompatibleMarginError(
             f"reconciliation did not converge to the requested margins: total absolute violation "
-            f"{constraint_violation(flat, margin_matrix, target_vector)} after {max_iterations} "
+            f"{violation} after {max_iterations} "
             f"iterations; requested {target_vector.tolist()} but achieved {achieved.tolist()}. "
             "The margins may be unreachable from this seed's zero pattern; §12.5 requires failing "
             "and diagnosing rather than forcing convergence"

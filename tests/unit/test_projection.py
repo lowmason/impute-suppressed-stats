@@ -19,7 +19,7 @@ ITERS = 1000
 def test_projection_reaches_a_single_sum_constraint_exactly() -> None:
     seed = np.array([1.0, 2.0, 1.0])
     margins = np.array([[1.0, 1.0, 1.0]])
-    out = kl_project(
+    out, _ = kl_project(
         seed,
         margins,
         np.array([100.0]),
@@ -41,7 +41,7 @@ def test_projection_never_increases_constraint_violation() -> None:
         margins = np.vstack([np.ones(n), rng.integers(0, 2, size=n).astype(float)])
         targets = np.array([seed.sum() * 1.3, seed.sum() * 0.4])
         before = constraint_violation(seed, margins, targets)
-        out = kl_project(
+        out, _ = kl_project(
             seed,
             margins,
             targets,
@@ -57,7 +57,7 @@ def test_projection_never_increases_constraint_violation() -> None:
 def test_a_zero_seed_is_floored_rather_than_making_the_objective_undefined() -> None:
     """§12.4: "with a small positive floor for zero raw seeds"."""
     seed = np.array([0.0, 1.0, 1.0])
-    out = kl_project(
+    out, _ = kl_project(
         seed,
         np.array([[1.0, 1.0, 1.0]]),
         np.array([30.0]),
@@ -75,7 +75,7 @@ def test_a_zero_seed_is_floored_rather_than_making_the_objective_undefined() -> 
 def test_projection_respects_finite_upper_bounds() -> None:
     seed = np.array([5.0, 1.0, 1.0])
     upper = np.array([2.0, np.inf, np.inf])
-    out = kl_project(
+    out, _ = kl_project(
         seed,
         np.array([[1.0, 1.0, 1.0]]),
         np.array([20.0]),
@@ -92,7 +92,7 @@ def test_projection_respects_finite_upper_bounds() -> None:
 def test_projection_output_is_strictly_positive() -> None:
     """A KL projection cannot leave the positive orthant; a zero would make a later log undefined."""
     seed = np.array([1.0, 1.0, 1.0])
-    out = kl_project(
+    out, _ = kl_project(
         seed,
         np.array([[1.0, 1.0, 1.0]]),
         np.array([3.0]),
@@ -155,3 +155,28 @@ def test_weighted_quadratic_is_refused_as_unimplemented() -> None:
     require_supported_method("kl_projection")
     with pytest.raises(NotImplementedError, match="reconciliation.general_method"):
         require_supported_method("weighted_quadratic")
+
+
+def test_an_infeasible_bounded_system_reports_its_violation() -> None:
+    """The bug this test pins: the loop breaks on step size, not on violation.
+
+    With `upper=[1,1]` and a target of 10, every update is fully clipped, so iteration one moves
+    nothing and the step-size break fires immediately. The old signature returned `[1., 1.]` --
+    a vector 8.0 away from its margin -- with no signal at all, and `kl_project` is exported, so
+    Stage 5 and Stage 6 can call it directly and get that answer.
+    """
+    out, violation = kl_project(
+        np.array([1.0, 1.0]),
+        np.array([[1.0, 1.0]]),
+        np.array([10.0]),
+        lower=np.zeros(2),
+        upper=np.ones(2),
+        floor=FLOOR,
+        tolerance=TOL,
+        max_iterations=ITERS,
+    )
+    assert out.tolist() == [1.0, 1.0]
+    assert violation == pytest.approx(8.0)
+    assert violation == pytest.approx(
+        constraint_violation(out, np.array([[1.0, 1.0]]), np.array([10.0]))
+    )

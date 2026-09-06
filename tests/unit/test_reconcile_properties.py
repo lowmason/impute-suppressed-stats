@@ -160,7 +160,7 @@ def test_property_4_projection_never_increases_constraint_violation() -> None:
             [float(seed.sum() * rng.uniform(0.5, 2.0)), float(seed.sum() * rng.uniform(0.1, 0.6))]
         )
         before = constraint_violation(seed, margins, targets)
-        out = kl_project(
+        out, _ = kl_project(
             seed,
             margins,
             targets,
