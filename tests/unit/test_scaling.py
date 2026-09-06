@@ -78,11 +78,15 @@ def test_a_residual_below_the_summed_lower_bounds_fails() -> None:
 
 
 def test_a_residual_above_the_summed_upper_bounds_fails() -> None:
+    """The `match=` is the test, not decoration: the bracket-exhaustion `for...else` below raises
+    the same InfeasibleResidualError type, so with §12.3's `sum U < R_t` refusal deleted the bare
+    form passed and the whole suite stayed green. The lower-bound sibling above already pins its
+    own message."""
     bounds = Bounds(
         lower={"01": 0.0, "02": 0.0, "04": 0.0},
         upper={"01": 10.0, "02": 10.0, "04": 10.0},
     )
-    with pytest.raises(InfeasibleResidualError):
+    with pytest.raises(InfeasibleResidualError, match="fall below residual"):
         scale_into_bounds(
             _anchor(100.0),
             _weights({"01": 1.0, "02": 1.0, "04": 1.0}),

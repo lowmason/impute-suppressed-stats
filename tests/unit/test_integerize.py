@@ -44,6 +44,17 @@ def test_integer_lower_and_upper_bounds_are_respected() -> None:
     assert out["01"] <= 4
 
 
+def test_a_lower_bound_seats_a_cell_its_raw_value_would_round_below() -> None:
+    """The test above is named for lower AND upper bounds and passes no `lower=` at all, so the
+    seat floor at integerize.py:67 was pinned by nothing: dropping it leaves every unit test green.
+    Both results here sum to 11, so a totals-only assertion cannot tell them apart -- the point is
+    WHICH cell holds the units, not how many were placed. Unfloored, "01" comes back at 1, below
+    the lower bound its caller declared."""
+    out = integerize({"01": 0.4, "02": 9.6}, total=11, lower={"01": 2})
+    assert sum(out.values()) == 11
+    assert out["01"] == 2
+
+
 def test_a_zero_total_yields_all_zeros() -> None:
     assert integerize({"01": 0.0, "02": 0.0}, total=0) == {"01": 0, "02": 0}
 
