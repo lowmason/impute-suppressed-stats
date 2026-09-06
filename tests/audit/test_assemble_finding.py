@@ -24,6 +24,10 @@ whose failure would put a false or missing value into it:
    naming only the first. E2 to E5 and S get no worth-statement there, and the test below
    asserts two clauses of criterion C's limit plus the absence of the phrase that closed the
    list, not one claim per criterion.
+8. the seam signpost's second exception holds of the artifact and is not merely stated in
+   it: every `Recorded access reason` blockquote in the shipped document is derived from the
+   `access` fence directly above it -- present exactly when that fence records a non-null
+   reason, and equal to it under `" ".join(...split())`.
 
 `assemble_finding` is imported bare, like `_common`, per `tests/conftest.py`. Importing it is
 inert: the module's only side effects sit behind `if __name__ == "__main__"`.
@@ -32,41 +36,61 @@ inert: the module's only side effects sit behind `if __name__ == "__main__"`.
 from __future__ import annotations
 
 import json
-
-import pytest
+import re
 
 import assemble_finding as m
+import pytest
 import verify_extracts as v
 
-CLASSIFICATION = {"industry_code_supplied": "1113310", "industry_code_used": "113310",
-                  "industry_title": "Logging",
-                  "classification_status": "corrected_invalid_supplied_code"}
+CLASSIFICATION = {
+    "industry_code_supplied": "1113310",
+    "industry_code_used": "113310",
+    "industry_title": "Logging",
+    "classification_status": "corrected_invalid_supplied_code",
+}
 APPENDIX_A = {"qcew": True, "tpo": False, "bea": False}
-VERDICT = ("decline: the national count equals the states+DC sum in 32 of 32 quarter(s), and "
-           "the panel carries 1 non-state area(s).")
+VERDICT = (
+    "decline: the national count equals the states+DC sum in 32 of 32 quarter(s), and "
+    "the panel carries 1 non-state area(s)."
+)
 
 
-def summary(source: str, *, findings=None, access=None, coverage=None, extracts=(),
-            generated="2026-09-04T00:00:00+00:00") -> dict:
+def summary(
+    source: str,
+    *,
+    findings=None,
+    access=None,
+    coverage=None,
+    extracts=(),
+    generated="2026-09-04T00:00:00+00:00",
+) -> dict:
     return {
         "source": source,
         "generated_utc": generated,
         "coverage_span": {
-            "published_start": "2017", "published_end": "2024",
-            "window_start": "2017-01", "window_end": "2024-12",
-            "covered": "2017-2024", "uncovered": "",
+            "published_start": "2017",
+            "published_end": "2024",
+            "window_start": "2017-01",
+            "window_end": "2024-12",
+            "covered": "2017-2024",
+            "uncovered": "",
             **(coverage or {}),
         },
-        "access": {"status": "verified", "route": "https://example.invalid/", "reason": None,
-                   **(access or {})},
+        "access": {
+            "status": "verified",
+            "route": "https://example.invalid/",
+            "reason": None,
+            **(access or {}),
+        },
         "extracts": list(extracts),
         "findings": {"measured": 1} if findings is None else findings,
     }
 
 
 def identity_summary(**kwargs) -> dict:
-    return summary("qcew_identity",
-                   findings={"branch": "decline", "verdict_sentence": VERDICT}, **kwargs)
+    return summary(
+        "qcew_identity", findings={"branch": "decline", "verdict_sentence": VERDICT}, **kwargs
+    )
 
 
 def render(summaries, notes="## notes\n", appendix_a=None) -> str:
@@ -131,8 +155,7 @@ def test_fence_renders_a_null_as_json_null_not_python_none():
 
 def test_machine_path_disclosure_names_the_source_whose_rendered_value_embeds_a_local_path():
     route = f"derived from a panel ({v.REPO_ROOT}/data/raw/audit/qcew_panel/panel.parquet)"
-    summaries = {"bds": summary("bds"),
-                 "qcew_identity": identity_summary(access={"route": route})}
+    summaries = {"bds": summary("bds"), "qcew_identity": identity_summary(access={"route": route})}
     disclosure = m.machine_path_disclosure(summaries)
     # The unit is the source, and the sentence must say so: `named` is built from
     # `summaries.items()`, so a source carrying three path-bearing values still counts 1.
@@ -144,12 +167,19 @@ def test_machine_path_disclosure_names_the_source_whose_rendered_value_embeds_a_
 def test_machine_path_disclosure_ignores_extract_paths(tmp_path):
     """Every `extracts[].path` is absolute by construction, since `_common.AUDIT_ROOT` is; they
     reach the document as a count, not as a value, so counting them would name all twelve."""
-    record = {"source": "bds", "url": "https://example.invalid/f",
-              "path": f"{v.REPO_ROOT}/data/raw/audit/bds/a.json", "sha256": "0" * 64,
-              "bytes": 1, "retrieved_utc": "2026-09-04T00:00:00+00:00", "http_status": 200}
+    record = {
+        "source": "bds",
+        "url": "https://example.invalid/f",
+        "path": f"{v.REPO_ROOT}/data/raw/audit/bds/a.json",
+        "sha256": "0" * 64,
+        "bytes": 1,
+        "retrieved_utc": "2026-09-04T00:00:00+00:00",
+        "http_status": 200,
+    }
     summaries = {"bds": summary("bds", extracts=[record])}
     assert m.machine_path_disclosure(summaries).startswith(
-        "No source has a rendered value embedding")
+        "No source has a rendered value embedding"
+    )
 
 
 # --- the Appendix A juxtaposition ---------------------------------------------------------------
@@ -175,8 +205,11 @@ def test_check_appendix_a_map_rejects_a_mapping_to_an_absent_appendix_entry():
 
 
 def test_appendix_a_rows_keep_the_specs_order_and_group_the_audit_keys():
-    summaries = {"qcew_codes": summary("qcew_codes"), "qcew_panel": summary("qcew_panel"),
-                 "tpo": summary("tpo")}
+    summaries = {
+        "qcew_codes": summary("qcew_codes"),
+        "qcew_panel": summary("qcew_panel"),
+        "tpo": summary("tpo"),
+    }
     rows = m.appendix_a_rows(summaries, {"qcew": True, "tpo": False, "bea": False})
     assert [row[0] for row in rows] == ["`qcew`", "`tpo`", "`bea`"]
     assert rows[0][1] == "true" and rows[1][1] == "false"
@@ -211,25 +244,31 @@ def test_a_verified_source_that_recorded_a_reason_still_has_it_rendered():
     """All twelve sources measured `verified`, and two of them (`fia`, `tpo`) recorded a reason
     anyway -- the two longest pieces of prose evidence in the audit."""
     reason = "Reachable, but only via an undocumented redirect."
-    document = render({"qcew_identity": identity_summary(),
-                       "tpo": summary("tpo", access={"reason": reason})})
+    document = render(
+        {"qcew_identity": identity_summary(), "tpo": summary("tpo", access={"reason": reason})}
+    )
     assert f"> **Recorded access reason:** {reason}" in document
 
 
 def test_a_long_coverage_value_is_summarised_in_the_table_and_rendered_whole_below():
     value = "INFERENCE MARKER, OPENING: " + "x" * 400 + " INFERENCE MARKER, CLOSING."
-    document = render({"qcew_identity": identity_summary(),
-                       "fia": summary("fia", coverage={"uncovered": value})})
+    document = render(
+        {"qcew_identity": identity_summary(), "fia": summary("fia", coverage={"uncovered": value})}
+    )
     assert f"recorded value ({len(value)} chars) -- see the per-source section" in document
     assert json.dumps(value)[1:-1] in document
     assert document.count("INFERENCE MARKER, OPENING") == document.count(
-        "INFERENCE MARKER, CLOSING")
+        "INFERENCE MARKER, CLOSING"
+    )
 
 
 def test_the_glance_row_escapes_a_pipe_in_a_recorded_route():
-    document = render({"qcew_identity": identity_summary(),
-                       "qcew_routes": summary("qcew_routes",
-                                              access={"route": "slice: a | bulk: b"})})
+    document = render(
+        {
+            "qcew_identity": identity_summary(),
+            "qcew_routes": summary("qcew_routes", access={"route": "slice: a | bulk: b"}),
+        }
+    )
     assert "| `qcew_routes` | verified | slice: a \\| bulk: b |" in document
 
 
@@ -245,8 +284,10 @@ def test_the_verdict_sentence_is_rendered_outside_the_json_fence():
 def test_the_header_reports_the_newest_summary_timestamp_not_a_run_date():
     """A wall-clock stamp made the tracked document change whenever it was regenerated, whether
     or not any evidence had."""
-    summaries = {"qcew_identity": identity_summary(generated="2026-09-03T00:00:00+00:00"),
-                 "susb": summary("susb", generated="2026-09-04T19:58:36+00:00")}
+    summaries = {
+        "qcew_identity": identity_summary(generated="2026-09-03T00:00:00+00:00"),
+        "susb": summary("susb", generated="2026-09-04T19:58:36+00:00"),
+    }
     document = render(summaries)
     assert "**Newest `generated_utc` among them:** 2026-09-04T19:58:36+00:00." in document
     assert "2026-09-03T00:00:00+00:00" in document  # still shown in its own per-source section
@@ -271,8 +312,12 @@ def test_the_classification_record_is_rendered_from_the_parsed_spec_values():
 def test_every_source_gets_its_coverage_span_and_access_rendered_in_full():
     """The illustrative per-source section fenced `findings` alone, so the full recorded value
     of every coverage and access field existed nowhere in the document."""
-    document = render({"qcew_identity": identity_summary(),
-                       "bds": summary("bds", coverage={"published_start": "1978"})})
+    document = render(
+        {
+            "qcew_identity": identity_summary(),
+            "bds": summary("bds", coverage={"published_start": "1978"}),
+        }
+    )
     assert '"published_start": "1978"' in document
     assert document.count("**coverage_span**:") == 2
     assert document.count("**access**:") == 2
@@ -287,9 +332,13 @@ def test_the_shipped_document_carries_every_appendix_a_source_and_the_required_s
     shipped = v.parse_appendix_a_sources(v.SPEC.read_text(encoding="utf-8"))
     for name in shipped:
         assert f"`{name}`" in document
-    for heading in ("## Sources audited", "## SRC-QCEW-006 branch verdict",
-                    "## Appendix A `enabled` defaults", "## Per-source findings",
-                    "## Auditor's notes"):
+    for heading in (
+        "## Sources audited",
+        "## SRC-QCEW-006 branch verdict",
+        "## Appendix A `enabled` defaults",
+        "## Per-source findings",
+        "## Auditor's notes",
+    ):
         assert heading in document
 
 
@@ -316,7 +365,34 @@ def test_the_shipped_document_names_the_two_fields_e1_passes_by_declared_exempti
     A reader of this document alone should be told which, rather than reading the PASS line as
     "every mapped field carries a value"."""
     document = m.OUT.read_text(encoding="utf-8")
-    for source, key in (("qcew_routes", "bulk_years_required"),
-                        ("cbp_metadata", "lfo_by_year")):
+    for source, key in (("qcew_routes", "bulk_years_required"), ("cbp_metadata", "lfo_by_year")):
         assert (source, key) in v.LEGITIMATELY_EMPTY_FINDINGS
         assert f"`{source}.{key}`" in document
+
+
+def test_the_shipped_blockquote_is_derived_from_the_access_fence_above_it():
+    """Rule 8. The seam signpost names the `Recorded access reason` blockquote as its second
+    exception; this checks the claim rather than the sentence. A prose pin alone would keep
+    passing on a sentence that had gone false, which is this document's standing failure mode."""
+    document = m.OUT.read_text(encoding="utf-8")
+    section = document[document.index("## Per-source findings") :]
+    seen = 0
+    for block in re.split(r"^### `", section, flags=re.M)[1:]:
+        fenced = block.split("**access**:\n\n```json\n", 1)[1].split("\n```", 1)[0]
+        reason = json.loads(fenced)["reason"]
+        quoted = [
+            line.removeprefix("> **Recorded access reason:** ")
+            for line in block.split("\n")
+            if line.startswith("> **Recorded access reason:** ")
+        ]
+        assert quoted == ([] if reason is None else [" ".join(reason.split())])
+        seen += reason is not None
+    assert seen, "no source recorded a reason, so this test proved nothing"
+
+
+def test_the_shipped_signpost_names_the_blockquote_as_its_second_exception():
+    """The extract count was named as the seam's one exception while the blockquote went
+    unnamed. Both are named now."""
+    document = m.OUT.read_text(encoding="utf-8")
+    assert "a second, weaker one qualifies `unabridged and unedited`" in document
+    assert "the one field this section lifts out of one of those three objects" in document

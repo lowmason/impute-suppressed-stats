@@ -135,15 +135,18 @@ def appendix_a_rows(
     the audit source keys that measured it, and what they measured."""
     rows = []
     for name, enabled in appendix_a.items():
-        audited = sorted(s for s, key in APPENDIX_A_KEY_BY_SOURCE.items()
-                         if key == name and s in summaries)
+        audited = sorted(
+            s for s, key in APPENDIX_A_KEY_BY_SOURCE.items() if key == name and s in summaries
+        )
         statuses = sorted({summaries[s]["access"]["status"] for s in audited})
-        rows.append((
-            f"`{name}`",
-            "true" if enabled else "false",
-            ", ".join(f"`{s}`" for s in audited) if audited else "not audited",
-            ", ".join(statuses) if statuses else "not measured",
-        ))
+        rows.append(
+            (
+                f"`{name}`",
+                "true" if enabled else "false",
+                ", ".join(f"`{s}`" for s in audited) if audited else "not audited",
+                ", ".join(statuses) if statuses else "not measured",
+            )
+        )
     return rows
 
 
@@ -160,16 +163,25 @@ def machine_path_disclosure(summaries: dict[str, dict]) -> str:
     happened to carry exactly one such value. Counting values instead would mean walking each
     rendered object, which the parenthesised source list would then no longer match."""
     root = str(v.REPO_ROOT)
-    named = sorted(name for name, payload in summaries.items()
-                   if any(root in json.dumps(payload[section], ensure_ascii=False)
-                          for section in ("coverage_span", "access", "findings")))
+    named = sorted(
+        name
+        for name, payload in summaries.items()
+        if any(
+            root in json.dumps(payload[section], ensure_ascii=False)
+            for section in ("coverage_span", "access", "findings")
+        )
+    )
     if not named:
-        return ("No source has a rendered value embedding an absolute path from the machine "
-                "this audit ran on.")
+        return (
+            "No source has a rendered value embedding an absolute path from the machine "
+            "this audit ran on."
+        )
     listed = ", ".join(f"`{name}`" for name in named)
     noun, verb = ("source", "has") if len(named) == 1 else ("sources", "have")
-    return (f"{len(named)} {noun} {verb} at least one rendered value embedding an absolute "
-            f"path from the machine this audit ran on ({listed}).")
+    return (
+        f"{len(named)} {noun} {verb} at least one rendered value embedding an absolute "
+        f"path from the machine this audit ran on ({listed})."
+    )
 
 
 def render_document(
@@ -236,7 +248,8 @@ def render_document(
         lines.append(
             f"| `{name}` | {cell(payload['access']['status'])} | "
             f"{cell(payload['access']['route'])} | {cell(coverage['covered'])} | "
-            f"{cell(coverage['uncovered'])} |")
+            f"{cell(coverage['uncovered'])} |"
+        )
 
     lines += [
         "",
@@ -275,7 +288,15 @@ def render_document(
         "section is summarised, ranked or interpreted by this assembler, besides each source's "
         "extract count in the italic line closing its block -- the one number below that this "
         "assembler computes rather than reproduces, and it is computed because the `extracts` "
-        "list is the one recorded object this section does not render at all. Where a recorded "
+        "list is the one recorded object this section does not render at all. That is the "
+        "exception to the disclaimer just made; a second, weaker one qualifies `unabridged "
+        "and unedited`: where a source recorded a non-empty `access.reason`, this assembler "
+        "renders that one field a second time, as a blockquote under the source's `access` "
+        "fence, with any run of whitespace in it collapsed to a single space -- the one field "
+        "this section lifts out of one of those three objects and renders on its own. It is "
+        "the weaker exception because it reproduces rather than computes, and because the "
+        "`access` fence directly above still carries the same value, so the blockquote "
+        "duplicates that rendering rather than standing in for it. Where a recorded "
         "value contains a reading rather than a measurement, it is the source script that says "
         "so, inside the value."
     )
@@ -285,10 +306,19 @@ def render_document(
         lines += [f"### `{name}`", "", "**access**:", "", fence(access), ""]
         if access.get("reason"):
             lines += ["> **Recorded access reason:** " + " ".join(access["reason"].split()), ""]
-        lines += ["**coverage_span**:", "", fence(payload["coverage_span"]), "",
-                  "**findings**:", "", fence(payload["findings"]), "",
-                  f"_Extracts: {len(payload['extracts'])}; summary `generated_utc` "
-                  f"{payload['generated_utc']}._", ""]
+        lines += [
+            "**coverage_span**:",
+            "",
+            fence(payload["coverage_span"]),
+            "",
+            "**findings**:",
+            "",
+            fence(payload["findings"]),
+            "",
+            f"_Extracts: {len(payload['extracts'])}; summary `generated_utc` "
+            f"{payload['generated_utc']}._",
+            "",
+        ]
     return "\n".join(lines) + "\n"
 
 
@@ -308,8 +338,7 @@ def main() -> None:
         raise SystemExit(f"{NOTES} is required; write it before assembling")
     check_appendix_a_map(found, appendix_a)
 
-    text = render_document(summaries, NOTES.read_text(encoding="utf-8"), classification,
-                           appendix_a)
+    text = render_document(summaries, NOTES.read_text(encoding="utf-8"), classification, appendix_a)
     # D3 §7.2: no key value may appear in any manifest. This document is tracked, and the scan
     # can only see a value that is in the environment -- source `.env` for it to mean anything.
     c.assert_no_secrets(text)
