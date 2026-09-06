@@ -290,13 +290,28 @@ def fetch_json_or_none(
     extracts have already been appended to the list and before `write_summary` is ever called
     -- exactly the unregistered-files problem Minor 1 and fix round 2's Finding 2 are about,
     from a third angle. This function is what the two request sites route through now, so a
-    metadata-route hiccup becomes a documented gap in the probe record instead of a crash."""
+    metadata-route hiccup becomes a documented gap in the probe record instead of a crash.
+
+    Covers a 200 whose body is not JSON as well as a non-200: neither records an extract, so the
+    manifest never gains an entry for a body this run could not use. NOT covered, and out of this
+    function's reach: `_common._retry` re-raises `httpx.TransportError` after three attempts, so
+    a DNS failure or connection reset still propagates out of `main()` mid-loop and leaves the
+    same unregistered-files state. Narrowing the orphan class is not closing it."""
     try:
         resp = c.request(client, url)
     except httpx.HTTPStatusError as exc:
         return exc.response.status_code, None
+    # Parse BEFORE recording. `record_extract` used to run first, so a 200 carrying an HTML error
+    # page -- which Census does serve -- was written to disk and appended to `extracts`, and only
+    # then did `resp.json()` raise. That is the dangling-manifest state this function exists to
+    # prevent, reached through the function itself. A body that is not JSON is not evidence, so
+    # it is not recorded and the caller is told the route produced nothing usable.
+    try:
+        payload = resp.json()
+    except ValueError:
+        return resp.status_code, None
     extracts.append(c.record_extract(source, url, rel_path, resp.content))
-    return resp.status_code, resp.json()
+    return resp.status_code, payload
 
 
 def probe_empszes_metadata_crosswalk(

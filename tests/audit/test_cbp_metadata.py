@@ -627,6 +627,31 @@ def test_fetch_json_or_none_reports_a_404_without_registering_an_extract(tmp_pat
     assert list(tmp_path.rglob("*")) == [], "a route that did not answer must leave no file"
 
 
+def test_a_200_with_a_non_json_body_records_nothing_and_does_not_raise(tmp_path, monkeypatch):
+    """The third direction, and the one the guard itself was reaching.
+
+    `record_extract` ran BEFORE `resp.json()`, and only `HTTPStatusError` was caught. Census
+    serves an HTML error page with status 200, so the file was written to disk and appended to
+    `extracts`, and only then did `resp.json()` raise -- leaving exactly the dangling-manifest
+    state this function exists to prevent, reached through the function itself. A body that is
+    not JSON is not evidence, so nothing is recorded and the caller is told the route produced
+    nothing usable.
+    """
+    monkeypatch.setattr(_common, "AUDIT_ROOT", tmp_path)
+    client = httpx.Client(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, content=b"<html><title>error</title></html>")
+        )
+    )
+    extracts: list = []
+    status, payload = m.fetch_json_or_none(
+        client, "cbp_metadata", "https://example.invalid/x.json", "2021/dataset.json", extracts
+    )
+    assert (status, payload) == (200, None)
+    assert extracts == []
+    assert list(tmp_path.rglob("*")) == [], "a body that could not be used must leave no file"
+
+
 def test_fetch_json_or_none_registers_exactly_one_extract_on_a_real_answer(tmp_path, monkeypatch):
     """The other direction of the same guard: the swallow is scoped to the failure. A route
     that does answer is still parsed and still recorded, or the fix would trade a crash for a
