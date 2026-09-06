@@ -129,7 +129,7 @@ def check_appendix_a_map(sources: list[str], appendix_a: dict[str, bool]) -> Non
 
 
 def appendix_a_rows(
-    summaries: dict[str, dict], appendix_a: dict[str, bool]
+    summaries: dict[str, dict], appendix_a: dict[str, bool | None]
 ) -> list[tuple[str, str, str, str]]:
     """One row per Appendix A source, in the spec's own order: its shipped `enabled` default,
     the audit source keys that measured it, and what they measured."""
@@ -142,7 +142,7 @@ def appendix_a_rows(
         rows.append(
             (
                 f"`{name}`",
-                "true" if enabled else "false",
+                "not declared" if enabled is None else ("true" if enabled else "false"),
                 ", ".join(f"`{s}`" for s in audited) if audited else "not audited",
                 ", ".join(statuses) if statuses else "not measured",
             )

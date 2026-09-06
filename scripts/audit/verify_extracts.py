@@ -541,8 +541,12 @@ def parse_classification_record(spec_text: str) -> dict[str, str]:
     return record
 
 
-def parse_appendix_a_sources(spec_text: str) -> dict[str, bool]:
+def parse_appendix_a_sources(spec_text: str) -> dict[str, bool | None]:
     """Appendix A's `sources:` block as {source key: enabled}, in the spec's own order.
+
+    `None` means the spec declares the source but gives it no `enabled:` line. That is not the
+    same fact as a spec-declared `enabled: false`, and typing `False` for it made the two
+    indistinguishable everywhere downstream.
 
     A five-line indentation reader, not a YAML parser: `sources:` at column 0, source keys at
     two spaces, their settings at four. Siblings of `enabled` (`release_status`, `api_key_env`,
@@ -554,7 +558,7 @@ def parse_appendix_a_sources(spec_text: str) -> dict[str, bool]:
         start = next(i for i, line in enumerate(lines) if line == "sources:")
     except StopIteration:
         raise ValueError("the spec has no Appendix A `sources:` block") from None
-    enabled: dict[str, bool] = {}
+    enabled: dict[str, bool | None] = {}
     current: str | None = None
     for line in lines[start + 1 :]:
         if not line.strip():
@@ -563,7 +567,7 @@ def parse_appendix_a_sources(spec_text: str) -> dict[str, bool]:
             break
         if not line.startswith("    "):
             current = line.strip().rstrip(":")
-            enabled.setdefault(current, False)
+            enabled.setdefault(current, None)
             continue
         key, _, value = line.strip().partition(":")
         if key == "enabled" and current is not None:

@@ -552,7 +552,12 @@ def test_parse_appendix_a_sources_reads_the_real_spec_block():
 
 def test_parse_appendix_a_sources_does_not_let_enabled_drift_onto_a_sibling_key():
     """`release_status`, `api_key_env` and `fail_on_unknown_disclosure_regime` sit at the same
-    indent as `enabled` in the real block; only an exact `enabled` match may set the flag."""
+    indent as `enabled` in the real block; only an exact `enabled` match may set the flag.
+
+    `mystery` declares no `enabled:` line and so parses to None, not False: a source the spec
+    never spoke about is not a source the spec disabled, and typing False for it made the two
+    indistinguishable in the shipped table -- with this test affirming the conflation.
+    """
     block = (
         "sources:\n"
         "  qcew:\n    enabled: true\n    release_status: 'final'\n"
@@ -561,7 +566,7 @@ def test_parse_appendix_a_sources_does_not_let_enabled_drift_onto_a_sibling_key(
         "  mystery:\n    release_status: 'final'\n"
         "\nconstraints:\n  enforce_integrality: true\n"
     )
-    assert m.parse_appendix_a_sources(block) == {"qcew": True, "cbp": False, "mystery": False}
+    assert m.parse_appendix_a_sources(block) == {"qcew": True, "cbp": False, "mystery": None}
 
 
 def test_parse_appendix_a_sources_raises_when_there_is_no_block():

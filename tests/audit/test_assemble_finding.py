@@ -396,3 +396,11 @@ def test_the_shipped_signpost_names_the_blockquote_as_its_second_exception():
     document = m.OUT.read_text(encoding="utf-8")
     assert "a second, weaker one qualifies `unabridged and unedited`" in document
     assert "the one field this section lifts out of one of those three objects" in document
+
+
+def test_a_source_with_no_enabled_line_renders_as_not_declared_rather_than_false():
+    """The three-way branch is dead on today's spec -- all ten Appendix A sources declare
+    `enabled:` -- so it is pinned here rather than left as reasoning. A source the spec never
+    spoke about must not render identically to one the spec disabled."""
+    rows = m.appendix_a_rows({}, {"qcew": True, "tpo": False, "mystery": None})
+    assert [r[1] for r in rows] == ["true", "false", "not declared"]
