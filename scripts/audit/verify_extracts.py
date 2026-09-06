@@ -484,6 +484,17 @@ def classification_block(spec_text: str) -> list[str]:
     fence closes the one it opens. That closing fence is the next fence line in the file rather
     than the next one inside the section, so an unclosed §3.1 fence is reported as unclosed
     only when no fence follows it anywhere.
+
+    When a fence DOES follow it anywhere, there is no raise and no error: the block returned
+    spans whatever lies between the unclosed opener and that later fence, which can include a
+    following section's heading and prose. That return departs from this function's summary line
+    -- the lines are not "inside the §3.1 fence" in any useful sense -- and it is what
+    `parse_classification_record` then parses, so a `key = value` line in §3.2 can be read as a
+    §3.1 value and reach the Classification paragraph of the finding document. Documented rather
+    than refused, for two reasons that are already pinned by tests in this module: stopping the
+    closing scan at the next heading reintroduces the `#`-inside-a-fence defect, and a raise here
+    would be an uncaught traceback rather than a `FAIL` line, because `main` calls
+    `parse_classification_record` before any check runs and outside any handler.
     """
     lines = spec_text.splitlines()
     start = next((i for i, line in enumerate(lines) if re.match(r"###\s+3\.1(\s|$)", line)), None)

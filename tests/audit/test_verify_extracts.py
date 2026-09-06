@@ -920,3 +920,28 @@ def test_the_shipped_manifest_has_the_declared_header_and_repo_relative_paths():
 
 def test_the_shipped_manifest_has_no_crlf():
     assert b"\r\n" not in m.MANIFEST.read_bytes()
+
+
+def test_an_unclosed_section_31_fence_returns_later_sections_rather_than_raising():
+    """Documented, not fixed -- and pinned so the docstring cannot go stale silently.
+
+    The closing fence is the next fence line in the FILE, not the next one inside the section,
+    so an unclosed §3.1 fence borrows a later section's opener and the block returned spans
+    §3.2's heading and prose. `..._raises_on_an_unclosed_31_fence` above covers the other half:
+    with no later fence anywhere, it does raise.
+
+    Refusing instead is ruled out twice over. Stopping the closing scan at the next heading
+    reintroduces the `#`-inside-a-fence defect pinned by
+    `test_classification_block_keeps_a_hash_prefixed_line_inside_the_fence`; and a new raise here
+    would be an uncaught traceback rather than a FAIL line, because `main` calls
+    `parse_classification_record` before any check runs and outside any handler.
+    """
+    spec = (
+        "### 3.1 Classification decision\n\n```text\n"
+        + CLASSIFICATION_ASSIGNMENTS
+        + "\n### 3.2 Core estimand\n\nProse in the next section.\n\n"
+        "```text\nan unrelated later block\n```\n"
+    )
+    lines = m.classification_block(spec)
+    assert any("3.2" in line for line in lines)
+    assert "Prose in the next section." in lines
