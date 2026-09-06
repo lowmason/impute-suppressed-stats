@@ -171,8 +171,14 @@ def test_a_nonzero_establishment_gap_halts_the_run(make_monthly) -> None:
 def test_the_gate_is_evaluated_for_every_month_not_only_failing_ones(make_monthly) -> None:
     """The audit is a diffable artifact: every month appears, passing or not.
 
-    Asserted on structure, never on the gap being zero -- the anti-drift rule. A revision that
-    moves a published establishment count must break this test for the right reason or not at all.
+    `anchored` IS the gap being zero (anchor.py: `establishment_gap == 0 and residual >= 0`), and
+    asserting it here is safe because the frame below is synthetic -- the gap is fixture-designed,
+    not measured, and no BLS revision can move it. The anti-drift rule binds assertions on live
+    data; see `tests/integration/test_d1_baselines.py` for the same claim made structurally.
+
+    2024-03 closes and 2024-04 does not, so `anchored` is asserted as the fixture's own designed
+    pattern -- the evidence that a failing month survives into the artifact rather than
+    disappearing before `assert_universe_closes` sees it.
     """
     monthly = make_monthly(
         {
@@ -198,7 +204,9 @@ def test_the_gate_is_evaluated_for_every_month_not_only_failing_ones(make_monthl
             "aggregation_level": "18",
             "reference_month": "2024-04",
             "employment_value": 90,
-            "qtrly_establishments": 6,
+            # One establishment the state table does not carry: the gate must fail this month,
+            # and employment is left alone so `residual >= 0` and the gap is the only cause.
+            "qtrly_establishments": 7,
         },
         {
             "state_fips": "01",
@@ -211,7 +219,8 @@ def test_the_gate_is_evaluated_for_every_month_not_only_failing_ones(make_monthl
     audit = closure_audit(monthly, observed_partition(monthly))
     assert audit.height == 2
     assert set(audit.columns) >= {"establishment_gap", "publishing_area_count", "anchored"}
-    assert audit["anchored"].all()
+    assert audit["reference_month"].to_list() == ["2024-03", "2024-04"]
+    assert audit["anchored"].to_list() == [True, False]
 
 
 def test_a_month_with_no_missing_cells_yields_no_anchor(make_monthly) -> None:
