@@ -377,7 +377,7 @@ def test_the_shipped_blockquote_is_derived_from_the_access_fence_above_it():
     document = m.OUT.read_text(encoding="utf-8")
     section = document[document.index("## Per-source findings") :]
     seen = 0
-    for block in re.split(r"^### `", section, flags=re.M)[1:]:
+    for block in re.split(r"^### `", section, flags=re.MULTILINE)[1:]:
         fenced = block.split("**access**:\n\n```json\n", 1)[1].split("\n```", 1)[0]
         reason = json.loads(fenced)["reason"]
         quoted = [
