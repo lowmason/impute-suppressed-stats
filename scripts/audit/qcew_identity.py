@@ -95,7 +95,14 @@ SUPPRESSION_CODE_MEANING = "suppressed"
 INSIDE = "inside_national_total"
 OUTSIDE = "outside_national_total"
 INDETERMINATE = "indeterminate"
-NO_OTHER_AREA = "no_non_state_area_present"
+# Not "no such area". `measure_containment` reaches this whenever no quarter can discriminate the
+# two readings, which is equally the case for a panel whose non-state area publishes 0 in every
+# quarter and for one whose non-state amount is withheld in every quarter it appears --
+# `_resolve_reference` maps an ABSENT group to 0 and a PRESENT-but-unpublished one to null, and
+# the filter discards both alike. `quarters_discriminating` and
+# `quarters_non_state_amount_unpublished`, returned in the same dict, are what say which a run is
+# in; the verdict string must not pre-empt them.
+NO_DISCRIMINATING_QUARTER = "no_discriminating_quarter"
 
 # Hand-authored, and labelled as such where it is persisted. Held as a module constant so the
 # marking travels with the text and cannot be separated from it by an edit to `main`.
@@ -400,7 +407,7 @@ def measure_containment(raw: pl.DataFrame) -> dict:
     n_outside = testable.filter(pl.col("estab_gap") == 0).height
 
     if testable.height == 0:
-        verdict = NO_OTHER_AREA
+        verdict = NO_DISCRIMINATING_QUARTER
     elif n_inside == testable.height:
         verdict = INSIDE
     elif n_outside == testable.height:

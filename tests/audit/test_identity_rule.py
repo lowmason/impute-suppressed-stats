@@ -28,7 +28,7 @@ import pytest
 from qcew_identity import (
     INDETERMINATE,
     INSIDE,
-    NO_OTHER_AREA,
+    NO_DISCRIMINATING_QUARTER,
     OUTSIDE,
     _clean_month_clause,
     assert_one_sentence,
@@ -288,7 +288,7 @@ def test_a_zero_contribution_quarter_cannot_discriminate():
     """`estab_gap == other == 0` satisfies both readings, so it must not be counted as evidence."""
     raw = raw_quarters([(2017, 1, 100, 100, 0, 0), (2017, 2, 100, 100, 0, 0)])
     out = measure_containment(raw)
-    assert out["verdict"] == NO_OTHER_AREA
+    assert out["verdict"] == NO_DISCRIMINATING_QUARTER
     assert out["quarters_discriminating"] == 0
     assert out["subtraction_applied"] is False
 
@@ -541,3 +541,17 @@ def test_the_sentence_says_after_subtracting_only_when_a_subtraction_was_applied
 def test_both_rendered_sentences_are_one_sentence():
     for build in (inside_containment_panel, outside_containment_panel):
         assert_one_sentence(render(build))
+
+
+def test_a_withheld_non_state_amount_is_not_reported_as_no_such_area():
+    """The old name said "no_non_state_area_present" for a panel that HAS one.
+
+    Every quarter here carries a non-state area whose establishment count was withheld, so no
+    quarter can discriminate the two readings -- but the area exists. The old verdict string
+    contradicted its own sibling counter inside one returned dict.
+    """
+    raw = raw_quarters([(2017, 1, 100, 100, None, 0), (2017, 2, 100, 100, None, 0)])
+    out = measure_containment(raw)
+    assert out["verdict"] == NO_DISCRIMINATING_QUARTER
+    assert out["quarters_non_state_amount_unpublished"] == 2
+    assert out["quarters_discriminating"] == 0
