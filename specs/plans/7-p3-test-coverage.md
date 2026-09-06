@@ -1114,16 +1114,41 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 **Every code block in this task was executed against the shipped tree while the plan was written
 (5 passed), and against both mutants below to confirm it reddens.**
 
-**The audit this item asks for has been run.** Twelve tests, 24 source mutations. Its scope, stated
-because a negative result without its scope overclaims: it **covered** the twelve shipped tests in
-`tests/unit/test_reconcile_properties.py` judged against `spec:1714-1716` and `spec:1737-1743`, a
-full `pytest tests` run for the two mutants that survived the unit suite, verification of the
-file's two derived docstring numbers against `runs/320caf9c8934` and
-`data/constraints/target_cell.parquet`, and a normalized diff of the plan's Step 1 block against
-the shipped file. It **did not cover**: the four cross-cutting units re-run by hand (and
-`stage3-plan-audit.md:69-80` records that one of those four hand-verdicts was later found wrong),
-the correctness of the reconcile implementations beyond what these twelve tests touch, any
-non-`reconcile/` module, `reconcile_draws`, the CLI, or the manifest.
+**The item names TWO obligations and both have now been discharged as machine audits.** Read this
+whole block before starting — it is the item's witness, and the tick note in Task 6 depends on it.
+
+**(a) Task 18's unit.** Run: twelve tests, 24 source mutations. Scope **covered** — the twelve
+shipped tests in `tests/unit/test_reconcile_properties.py` judged against `spec:1714-1716` and
+`spec:1737-1743`; a full `pytest tests` run for each mutant that survived the unit suite;
+verification of the file's two derived docstring numbers against `runs/320caf9c8934` and
+`data/constraints/target_cell.parquet`; and an AST-normalized diff of the plan's Step 1 block
+against the shipped file. Scope **not covered** — the correctness of the reconcile implementations
+beyond what these mutants probe, `reconcile_draws`, the CLI, and the manifest. **Result: three
+holes, all closed by Steps 2-6 below.**
+
+**(b) The remaining cross-cutting units.** Of the item's four, `§17.3 vacuity` is (a) above and
+`mask-signature` was settled by the whole-branch review and fixed in `65c4480`. The other two had
+only ever been hand-checked — by the same method whose one recorded failure is documented at
+`stage3-plan-audit.md:69-80`. Both have now been machine-run:
+
+- **call-site arity — CLEAN.** Scope: 943 call sites bound with `inspect.Signature.bind()` against
+  262 definitions across the **whole** package (not scoped to `reconcile/` — that narrowing is
+  exactly what made the mask-signature verdict wrong), plus 326 return-arity checks against
+  `tuple[...]` annotations, all 84 construction sites of the 7 plan-named dataclasses checked for
+  field-order divergence, 10/10 registry estimators checked against the `Estimator` Protocol, the
+  Typer command/flag surface, and 242 calls plus 315 plan-internal calls from the plan's 46 python
+  fences. A positive control caught 5/5 planted mismatches. Not covered: other plans' code blocks
+  and modules outside the package. **No task.**
+- **anti-drift in test blocks — 6 findings, none in this plan's path.** Four DEFECTs, all
+  data-derived counts asserted as bare literals against the gitignored `data/staged/` tree, and all
+  in `tests/integration/test_d1_acceptance.py` (`:67`/`:69`, `:84`, `:100-102`, and
+  `assert produced == EXPECTED_BOUNDS` at **`:81`**); plus two NITs. The plan's own 46 python
+  fences and 23 bash fences are **clean**. Scope not covered: `tests/audit/`'s ~136 numeric assert
+  sites were swept but not individually classified, and `src/` docstrings only by targeted regex.
+  **These are filed as a new deferred item in Task 6 and are NOT work for this plan** — they are
+  assertions that are too tight, which is the opposite problem from the one a test-coverage batch
+  closes, and deciding what "structural" means for each is an application of the anti-drift rule
+  rather than a mechanical test addition.
 
 **What came back clean, so that no one re-litigates it:** property 2 is **not** vacuous — its
 synthetic finite uppers bind in 140 of 200 trials (366 of 1,043 cells at cap), so the plan's
@@ -1521,7 +1546,7 @@ line quoted at the head of Task 3.
 - Item D's "(Whole-branch review, Minor.)" attribution is wrong: its source is the pre-execution
   plan audit, `specs/findings/stage3-plan-audit.md:449-455`, tagged [NIT].
 
-**Five new deferred items to append** (none belongs in a test-coverage batch):
+**Six new deferred items to append** (none belongs in a test-coverage batch):
 
 1. **`tests/audit/test_ces_levels.py`'s three artifact tests skip in a clean clone.** `:534`,
    `:544` and `:556` read `data/raw/audit/ces/summary.json` through `_ces_summary()`, and `data/` is
@@ -1555,7 +1580,26 @@ line quoted at the head of Task 3.
 4. **`historical.py:227`'s `segment = shares[cut:] or shares` — the `or shares` arm is
    unreachable.** For n ≥ 4, `cut ∈ [1, n-1]`, so the slice is never empty; below 4 the early
    return fires first. Delete the arm or state why it stays.
-5. **`projection.py:98`'s zero-seed floor is redundant with the clip at `:118`.** Deleting
+5. **Four anti-drift breaches in `tests/integration/test_d1_acceptance.py`.** Found by plan 7's
+   machine run of the `anti-drift in test blocks` cross-cutting unit. The Stage 3 plan's Global
+   Constraint says every count is a measurement dated 2026-09-05 — compute at run time, assert on
+   structure, never on the literal. These assert literals against the gitignored `data/staged/`
+   tree: `suppressed.height == 1227` and `joined.height == 1227` (`:67`, `:69`); a data-derived
+   tally encoded in a test's own NAME plus the identity of the single narrow cell (`:84`, `:91-93`);
+   `>= 4716`, `== 8` and `> 4000` on consecutive lines (`:100-102`); and
+   `assert produced == EXPECTED_BOUNDS` (`:81`) against 14 hand-typed pairs. The last is the
+   arguable one and should be argued rather than assumed: `EXPECTED_BOUNDS` is described in the file
+   as derived analytically from the published margin before this engine existed, which is an
+   independent oracle and the strongest form of golden — but a golden freezes its **input**, and
+   this one reads live gitignored data, so its cardinality-14 assertion still moves with a
+   revision. Two NITs alongside: `tests/unit/test_anchor.py:174` ships the plan-level NIT recorded
+   at `stage3-plan-audit.md:191-195` verbatim, and `src/logging_employment/reconcile/anchor.py:9`
+   types "1,227" into a docstring where it is load-bearing on nothing. **Not test-coverage work** —
+   these are over-tight assertions, and each needs a ruling on what its structural form is.
+   Related: `tests/integration/test_d1_baselines.py` is plan-authored (`038c3af`) and carries one
+   breach of the same family, so the fix is not confined to inherited Stage 2 code.
+
+6. **`projection.py:98`'s zero-seed floor is redundant with the clip at `:118`.** Deleting
    `x = np.maximum(np.asarray(seed, dtype=float), floor)` leaves 1123 passed — but that is the
    correct answer, **not** a hole. `:118` is `x = np.clip(x, np.maximum(lower, floor), upper)` and
    runs on the full vector after every margin row, so §12.4's floor is re-imposed each iteration by
