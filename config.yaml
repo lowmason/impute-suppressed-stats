@@ -1,6 +1,8 @@
-# Stage 1 configuration. The project/storage/sources blocks are copied byte-for-byte
-# from Appendix A of specs/logging-employment-spec.md (its lines 2022-2049), extracted
-# with sed rather than retyped. Appendix A's other source entries (tpo, fia, ces, susb,
+# Stage 1 configuration. The project and sources blocks are copied byte-for-byte from
+# Appendix A of specs/logging-employment-spec.md (its lines 2022-2032 and 2040-2049),
+# extracted with sed rather than retyped; `storage:` is Appendix A's four keys (its lines
+# 2034-2038) plus the originated `constraints_uri` (see StorageConfig).
+# Appendix A's other source entries (tpo, fia, ces, susb,
 # bds, nonemployer, bea) and its model/validation/promotion blocks are omitted: Config
 # forbids extra keys and those belong to Stages 4-8. The constraints/reconciliation/
 # disclosure blocks are present; `reconciliation:` additionally carries five numerical
@@ -22,6 +24,9 @@ storage:
   staged_uri: 'data/staged'
   output_uri: 'runs'
   immutable_raw: true
+  # Originated here, not by Appendix A, whose storage block has four keys. The value is
+  # §6.2's `data/constraints/` (see StorageConfig).
+  constraints_uri: 'data/constraints'
 
 sources:
   qcew:

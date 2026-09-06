@@ -93,8 +93,8 @@ def build_harmonized_command(
 
 
 def _constraints_dir(cfg: Config) -> Path:
-    """§6.2's `data/constraints/`, resolved beside the configured staged root."""
-    return Path(cfg.storage.staged_uri).parent / "constraints"
+    """§6.2's `data/constraints/`, read from `storage.constraints_uri`."""
+    return Path(cfg.storage.constraints_uri)
 
 
 def _input_digests(cfg: Config) -> dict[str, str]:

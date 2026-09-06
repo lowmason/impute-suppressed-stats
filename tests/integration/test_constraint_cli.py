@@ -29,6 +29,7 @@ def workspace(tmp_path: Path) -> Path:
     raw["storage"]["staged_uri"] = str(staged)
     raw["storage"]["raw_uri"] = str(tmp_path / "raw")
     raw["storage"]["output_uri"] = str(tmp_path / "runs")
+    raw["storage"]["constraints_uri"] = str(tmp_path / "constraints")
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump(raw))
     return path
@@ -46,7 +47,7 @@ def _digest(path: Path) -> str:
 def test_build_constraints_writes_all_three_tables_and_a_manifest(workspace: Path) -> None:
     _run(workspace, "build-constraints")
     cfg = load_config(workspace)
-    constraints = Path(cfg.storage.staged_uri).parent / "constraints"
+    constraints = Path(cfg.storage.constraints_uri)
     for name in ("target_cell", "constraint_row", "constraint_coefficient"):
         assert (constraints / f"{name}.parquet").exists()
     run_root = Path(cfg.storage.output_uri)

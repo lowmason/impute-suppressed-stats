@@ -47,12 +47,21 @@ class ProjectConfig(_Strict):
 
 
 class StorageConfig(_Strict):
-    """Where raw bytes, staged frames, and run outputs live."""
+    """Where raw bytes, staged frames, constraint tables, and run outputs live.
+
+    Appendix A's `storage:` block supplies four keys and no constraints location, so
+    `constraints_uri` is originated here; its VALUE is §6.2's `data/constraints/`. Defaulted
+    rather than required so a config written before the key existed stays valid under
+    `extra="forbid"`, and the default is the exact path the location was previously *derived*
+    to be. Configured rather than inferred: deriving it from `staged_uri`'s parent moved the
+    constraint tables whenever the staged root moved.
+    """
 
     raw_uri: str
     staged_uri: str
     output_uri: str
     immutable_raw: bool
+    constraints_uri: str = "data/constraints"
 
 
 class QcewSourceConfig(_Strict):

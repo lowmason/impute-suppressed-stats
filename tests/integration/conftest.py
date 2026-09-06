@@ -50,6 +50,7 @@ def staged_repo(tmp_path: Path) -> StagedRepo:
     raw["storage"]["staged_uri"] = str(staged)
     raw["storage"]["raw_uri"] = str(tmp_path / "raw")
     raw["storage"]["output_uri"] = str(tmp_path / "runs")
+    raw["storage"]["constraints_uri"] = str(tmp_path / "constraints")
     config_path = tmp_path / "config.yaml"
     config_path.write_text(yaml.safe_dump(raw, sort_keys=False))
 

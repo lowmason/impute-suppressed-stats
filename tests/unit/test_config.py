@@ -164,3 +164,14 @@ def test_a_nondeterministic_integerization_tiebreak_is_rejected(tmp_path: Path) 
     """§16.1 requires idempotence; a random tie-break would break it."""
     with pytest.raises(ValidationError):
         load_config(_write(tmp_path, APPENDIX_A.replace("largest_remainder", "random")))
+
+
+def test_the_constraints_location_is_a_config_key_with_a_default(tmp_path: Path) -> None:
+    """Appendix A's `storage:` block has four keys and no constraints location.
+
+    The default is §6.2's `data/constraints/` -- the exact path the old derivation resolved to
+    for the shipped `staged_uri`, so a config written before this key existed keeps writing
+    where it always wrote.
+    """
+    cfg = load_config(_write(tmp_path, APPENDIX_A))
+    assert cfg.storage.constraints_uri == "data/constraints"
