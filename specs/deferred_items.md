@@ -270,7 +270,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       form in `qcew_routes.py` and `forest_sources.py` — PEP 723 scripts whose own headers
       promise `>=3.12`, where the result does not parse. No test catches it: the suite runs on
       3.14. `[tool.black] target-version = ["py312"]` is now pinned in `pyproject.toml`.
-- [ ] **The bulk-route branch is exercised only under a synthetic boundary.**
+- [x] **The bulk-route branch is exercised only under a synthetic boundary.**
       Stage 0 measured `bulk_years_required = []`, so with the boundary where it
       sits today no window year routes to bulk and no live run will ever take that
       path. `route_for_year` is tested by passing `earliest_slice_year=2020`, and
@@ -530,7 +530,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       4,000 bounded inputs they differ in 118, all from the ordering fix, with no bound violation and
       no sum error. Every pre-existing test passes unchanged.
 
-- [ ] **`BreakAdjustedShare` collapses to `RollingMedianShare` below four shares.**
+- [x] **`BreakAdjustedShare` collapses to `RollingMedianShare` below four shares.**
       The pre-execution audit measured 111 of 360 cells taking that branch, and
       `test_section_10_3_ships_exactly_five_variants` only checks that five distinct estimator ids
       exist — nothing detects two variants computing the same number. (Whole-branch review, Minor.)
@@ -558,7 +558,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       eight bullets carry no missing-harvest-factor condition, so it names Stage 7 as owning
       the halt-vs-decline decision instead.
 
-- [ ] **Task 18's property tests and four of the five cross-cutting audit units never ran.**
+- [x] **Task 18's property tests and four of the five cross-cutting audit units never ran.**
       The plan audit was stopped early after its subagents wrote into the working tree (see
       specs/findings/stage3-plan-audit.md). The four cross-cutting checks were re-run inline by
       hand and came back clean — mask-signature, call-site arity, anti-drift in test blocks, and
