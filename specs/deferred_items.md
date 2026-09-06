@@ -433,12 +433,27 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       *absolute* singular-value threshold, which is equally fine at +/-1 and equally brittle if
       magnitudes grow.
 
-- [ ] **`solve_bounds` rescans the frames once per component and once per row.**
+- [x] **`solve_bounds` rescans the frames once per component and once per row.**
       `constraints/bounds.py` runs a full `built.rows.filter(...)` per component and a full
       `built.coefficients.filter(...)` per row, and `column_specs` is computed twice per component
       (once in `solve_bounds`, again inside `solve_component`) -- roughly 28,000 full scans for
       the 15.7s D1 run. Fine at 4,775 cells; name it before Stage 3 adds cells and soft rows.
       Pre-grouping the coefficients into a dict keyed by `constraint_id` once would collapse it.
+      → done 2026-09-06 (commit `4e08f2d`): triaged by `/deferred` as a quick fix, then
+      re-scoped to plan breadth once measurement disproved the item's own prescription, and
+      executed directly in-session under confirmed scope rather than through `writing-plans` —
+      so no plan file exists and no completion protocol ticked this; the disposition it was
+      finally done under is not the one it was ticked by. One frozen `SystemIndex` built per
+      solve, threaded through `column_specs`, `matrix_rows`, `equality_matrix` and
+      `solve_component`. Measured 59,389 scans → 2 and 11.833s → 0.354s on `data/constraints`
+      (median of five warm reps). Two corrections to this item, both measured rather than
+      argued: the count was 59,389, not ~28,000, and the prescribed coefficient dict alone
+      removes 36% of the calls but only 17% of the scan time — 14,172 of the scans are in
+      `rank.py`'s `equality_matrix`, reached from `solve_bounds` via `rank_table`, so the fix
+      covers that file too. Gated on an old-vs-new differential over `data/constraints`,
+      `data/staged` and both tracked fixtures (9,856 records, list-order comparisons plus
+      parquet hashes, zero differing), with the dormant integer re-solve forced and diffed
+      separately, because the test suite provably cannot see a permuted coefficient order.
 
 - [ ] **`exactly_identified` and `integer_exactly_identified` never disagree.**
       `classify_bound_status` assigns both the same value on the integer branch, so two columns of
