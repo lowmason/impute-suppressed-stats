@@ -253,8 +253,17 @@ def disclosure_code_values(long: pl.DataFrame) -> list[dict[str, Any]]:
         .agg(
             panel_rows=pl.len(),
             states_dc_rows=(pl.col("area_class") == "states_dc").sum(),
+            # Three cases, and the old chain collapsed two of them. An unparseable token casts
+            # to null under strict=False; `fill_null(0)` BEFORE the comparison then made it
+            # compare equal to a published zero, so the one case this counter exists to catch --
+            # a value that does not parse on a suppressed row -- was the one case it reported as
+            # absent. Filling True AFTER the comparison fixes that, but on its own it
+            # over-corrects: a row that published NOTHING is also null and would be counted as
+            # nonzero. The explicit `is_not_null()` keeps the three apart -- nothing published is
+            # not counted, an unparseable token is, and a published 0 is not.
             emplvl_raw_nonzero_rows=(
-                pl.col("emplvl_raw").cast(pl.Int64, strict=False).fill_null(0) != 0
+                pl.col("emplvl_raw").is_not_null()
+                & (pl.col("emplvl_raw").cast(pl.Int64, strict=False) != 0).fill_null(True)
             ).sum(),
             emplvl_published_rows=pl.col("emplvl").is_not_null().sum(),
             emplvl_published_nonzero_rows=(pl.col("emplvl") > 0).sum(),

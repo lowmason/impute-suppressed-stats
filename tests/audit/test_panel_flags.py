@@ -326,3 +326,29 @@ def test_the_derived_parquet_is_the_only_extract_and_it_is_on_disk(tmp_path, mon
     assert written.is_relative_to(tmp_path), "guard: never write into the real audit root"
     assert written.read_bytes() and record["bytes"] == written.stat().st_size
     assert record["sha256"] == c.sha256_file(written)
+
+
+def test_an_unparseable_raw_value_on_a_suppressed_row_is_not_counted_as_a_published_zero():
+    """The one case the counter exists to catch was the one case it missed.
+
+    `cast(strict=False)` turns an unparseable token into null and `fill_null(0)` then makes it
+    indistinguishable from a published zero, so `!= 0` reports False. An unsuppressed row with
+    the same token raises in `build_long` instead, so the suppressed row is the only silent
+    path -- and it is the one the docstring says the counter is for.
+
+    The fourth row guards the over-correction: filling True after the comparison fixes the
+    unparseable case but, on its own, also counts a row that published NOTHING as nonzero.
+    """
+    long = pl.DataFrame(
+        {
+            "disclosure_code": ["N"] * 4,
+            "area_class": ["states_dc"] * 4,
+            "emplvl_raw": ["-", "0", "5", None],
+            "emplvl": [None] * 4,
+            "qtrly_estabs": [1] * 4,
+        }
+    )
+    by_code = {row["disclosure_code"]: row for row in disclosure_code_values(long)}
+    # The unparseable "-" and the genuine "5". NOT the published "0", and NOT the row that
+    # published nothing.
+    assert by_code["N"]["emplvl_raw_nonzero_rows"] == 2
