@@ -1,8 +1,9 @@
 # P3 Test-Coverage Batch — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: implement this plan task-by-task via
-> **subagent-driven-development** (the default) — or **executing-plans** when your human partner
-> chose inline execution at the handoff. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: **executing-plans** — inline execution was chosen at
+> the handoff on 2026-09-05, so run the tasks yourself in plan order rather than dispatching
+> subagents. Its stop-and-ask rules and completion chain apply. Steps use checkbox (`- [ ]`) syntax
+> for tracking.
 
 > Branch: `p3-test-coverage`, off `main` at `78d933f` (which is level with `origin/main`).
 > Do not work on `main`.
