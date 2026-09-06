@@ -635,12 +635,34 @@ which is why none was folded into the batch. See specs/plans/completed/7-p3-test
       `test_below_four_shares_the_break_adjusted_variant_is_the_rolling_median` is deliberately
       silent on intent and is the test that must change.
 
-- [ ] **`historical.py:227`'s `segment = shares[cut:] or shares` — the `or shares` arm is
+- [x] **`historical.py:227`'s `segment = shares[cut:] or shares` — the `or shares` arm is
       unreachable.** For n ≥ 4, `steps` has n−1 entries so `cut ∈ [1, n-1]` and the slice always has
       at least one element; below 4 the early return fires first. Verified exhaustively for
       n = 4..40. Delete the arm or record why it stands. Do not budget a test for it.
+      **→ done 2026-09-06 (/deferred quick fix): arm deleted.** The conclusion was right; four of
+      its supporting claims were not, and the line is 228, not 227.
+      *The bound is stronger and cheaper than the item states.* It holds for every n ≥ 2, not just
+      n ≥ 4, and is value-independent: `steps` has exactly n−1 entries, so `cut ∈ [1, n-1]` and
+      `len(shares[cut:]) ≥ 1`; `list` defines no `__bool__` (`"__bool__" in vars(list)` is False),
+      so list truthiness routes through `__len__` alone and a length-≥1 slice is always truthy.
+      That is a proof, which makes "verified exhaustively for n = 4..40" both a misdescription —
+      no sweep over float-valued lists is exhaustive — and unnecessary. It also means the arm is
+      dead independently of the `<4` guard, so this closure does **not** constrain the open item
+      above it, which proposes changing that guard.
+      *"Unreachable" is exact only for `list`.* A `numpy` array fires the arm (a single-zero array
+      is falsy) or raises on a multi-element one; `polars.Series` raises. Unreachable here because
+      the sole call site feeds `history["share"].to_list()`, which is `list` for Float64,
+      null-bearing and empty columns alike.
+      *"Or record why it stands" was not a live option.* The arm contradicts its own class
+      docstring — "At four or more shares this is not a plain median over the whole lookback" — and
+      firing at n ≥ 4 would return exactly that plain median. It arrived verbatim from the Stage 3
+      plan code block with no rationale recorded anywhere.
+      *Why green means equivalence here, not absent coverage:* the control mutant `segment = shares`
+      fails `test_the_five_variants_compute_five_different_numbers_on_one_history` and
+      `test_the_baseline_output_matches_its_golden_fixture`, so the expression is discriminated.
+      The item's one instruction that was exactly right: no test was added.
 
-- [ ] **`projection.py:98`'s zero-seed floor is redundant with the clip at `:118`.** Deleting
+- [x] **`projection.py:98`'s zero-seed floor is redundant with the clip at `:118`.** Deleting
       `x = np.maximum(np.asarray(seed, dtype=float), floor)` leaves all 1123 tests passing — and
       that is the correct answer, **not** a hole. `:118` is
       `x = np.clip(x, np.maximum(lower, floor), upper)` and runs on the full vector after every
@@ -650,6 +672,33 @@ which is why none was folded into the batch. See specs/plans/completed/7-p3-test
       Remedy: delete one of the two lines, or document why both stand. Recorded because plan 7's
       recon proposed filing it as "a real MUST-level hole", which the adversarial pass disproved —
       the aged-claim pattern this file exists to prevent.
+      **→ done 2026-09-06 (/deferred quick fix): both lines documented and pinned. The item is
+      wrong — the recon was right and the adversarial pass that overturned it was the aged claim.**
+      Deleting `:98` is not behaviour-preserving. Measured on an ordinary feasible system with no
+      degeneracy — seed `[0, 2]`, margins `[[1,1],[0,1]]`, targets `[50, 1]`, config defaults:
+      shipped returns `[49., 1.]` at violation 3.2e-12, floor-deleted returns `[5e-11, 1.]` at
+      violation **49.0**.
+      *Mechanism:* `current = float(row @ x)` is read BEFORE the clip, so `:98` sets the scale
+      factor the first margin row applies to every cell and no later clip undoes an applied one.
+      The two lines are also different quantities — the clip bounds the ITERATE to
+      `np.maximum(lower, floor)`, `:98` floors the SEED to `floor` — and "runs on the full vector
+      after every margin row" is false three ways: the `touched.any()` guard `continue`s past it
+      for an all-zero row, and it never runs at all for empty margins or `max_iterations=0`.
+      *`:98` is also the function's only copy of `seed`.* `np.asarray` hands a float64 caller its
+      own array straight back, so under the deletion the in-place scaling rewrites the caller's
+      array: `[0., 1., 1.]` comes back `[0., 15., 15.]`.
+      *"No test can kill this mutant and none should try" is false, and inverts the finding.*
+      `tests/unit/test_projection.py` already fed a distinguishing input — `out[0]/FLOOR` is 15.0
+      shipped against 1.0 deleted — and passed both only because `assert out[0] > 0.0` admits
+      either. That is a coverage hole, not a redundancy. It is now closed by a pin whose expected
+      value is derived from the test's own inputs rather than frozen.
+      *The obvious form of that pin does not work,* and this is the part worth carrying: reading
+      `seed.sum()` AFTER the call derives the expectation from the very corruption it exists to
+      catch, so it passes under the mutant at relative error 0.0. Hoisting it above the call is
+      what makes it discriminate. Both mutants now die: the item's deletion and the
+      copy-preserving `np.array` rewrite.
+      *"All 1123 tests" is stale* — 1137 today, and they pass with the deletion in place, which is
+      exactly why the item read as settled.
 
 - [ ] **Four anti-drift breaches in `tests/integration/test_d1_acceptance.py`.** Found by plan 7's
       machine run of the `anti-drift in test blocks` cross-cutting unit. The Stage 3 plan's Global

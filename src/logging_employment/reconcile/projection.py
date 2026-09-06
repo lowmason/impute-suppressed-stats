@@ -95,6 +95,15 @@ def kl_project(
     """
     margins = np.asarray(margins, dtype=float)
     _require_indicator_margins(margins)
+    # Not redundant with the clip that ends the margin loop below, and neither line may go.
+    # `current` is read before that clip runs, so this line sets the scale factor the first row
+    # applies to every cell, and no later clip undoes an applied one: seed [0, 2] against margins
+    # [[1, 1], [0, 1]] and targets [50, 1] converges to [49., 1.] here and returns violation 49.0
+    # without it. The clip also bounds to `np.maximum(lower, floor)` rather than to `floor`, and
+    # is skipped outright by the `touched.any()` guard, by empty margins, and by
+    # `max_iterations=0`. This is additionally the only copy of `seed` the function makes --
+    # `np.asarray` hands a float64 caller its own array straight back, which the in-place scaling
+    # at the foot of the loop would then write through.
     x = np.maximum(np.asarray(seed, dtype=float), floor)
     lower = np.asarray(lower, dtype=float)
     upper = np.asarray(upper, dtype=float)

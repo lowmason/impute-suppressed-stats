@@ -57,10 +57,15 @@ def test_projection_never_increases_constraint_violation() -> None:
 def test_a_zero_seed_is_floored_rather_than_making_the_objective_undefined() -> None:
     """§12.4: "with a small positive floor for zero raw seeds"."""
     seed = np.array([0.0, 1.0, 1.0])
+    targets = np.array([30.0])
+    # Read BEFORE the call on purpose. Dropping the seed floor aliases `x` to `seed`, so the
+    # in-place scaling rewrites the caller's array; an expectation derived after the call would
+    # then be derived from the very corruption it is meant to catch, and would pass either way.
+    expected_scale = targets[0] / seed.sum()
     out, _ = kl_project(
         seed,
         np.array([[1.0, 1.0, 1.0]]),
-        np.array([30.0]),
+        targets,
         lower=np.zeros(3),
         upper=np.full(3, np.inf),
         floor=FLOOR,
@@ -69,7 +74,11 @@ def test_a_zero_seed_is_floored_rather_than_making_the_objective_undefined() -> 
     )
     assert np.all(np.isfinite(out))
     assert out[0] > 0.0
-    assert out.sum() == pytest.approx(30.0, abs=1e-6)
+    assert out.sum() == pytest.approx(targets[0], abs=1e-6)
+    # The floored cell must ride the SAME scale factor as every other cell. The clip at the foot
+    # of the margin loop cannot supply that, because `current` is read before it runs, so a floor
+    # imposed only there leaves this ratio at exactly 1.0.
+    assert out[0] / FLOOR == pytest.approx(expected_scale, rel=1e-6)
 
 
 def test_projection_respects_finite_upper_bounds() -> None:
