@@ -20,6 +20,7 @@ import numpy as np
 import polars as pl
 
 from .bounds import INFINITY, BoundConfig, column_specs, matrix_rows
+from .index import SystemIndex
 from .system import BuiltSystem
 
 MAX_REPORTED_SLACK_ROWS = 5
@@ -55,11 +56,16 @@ def _candidate_conflicts(rows: pl.DataFrame) -> tuple[str, ...]:
 
 
 def diagnose(
-    built: BuiltSystem, component_id: str, membership: pl.DataFrame, config: BoundConfig
+    built: BuiltSystem,
+    component_id: str,
+    membership: pl.DataFrame,
+    config: BoundConfig,
+    *,
+    index: SystemIndex | None = None,
 ) -> InfeasibilityDiagnostic:
     """Build both accounts of one component's infeasibility."""
-    specs = column_specs(built, component_id, membership)
-    coupling = matrix_rows(built, component_id)
+    specs = column_specs(built, component_id, membership, index=index)
+    coupling = matrix_rows(built, component_id, index=index)
     rows = built.rows.filter(pl.col("component_id") == component_id)
     order = list(specs)
     at = {cell: i for i, cell in enumerate(order)}

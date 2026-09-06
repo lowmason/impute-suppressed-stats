@@ -30,6 +30,7 @@ from ..config import ConstraintsConfig
 from ..contracts import DETERMINISTIC_BOUNDS_SCHEMA
 from ..errors import InfeasibleComponentError, SolverError
 from .graph import assign_components, component_membership
+from .index import SystemIndex, build_index
 from .rank import rank_table
 from .system import BuiltSystem
 
@@ -49,32 +50,76 @@ class ColumnSpec:
     is_integer: bool
 
 
-def _single_cell(entries: pl.DataFrame) -> bool:
+def _single_cell(cells: list[str], values: list[float]) -> bool:
     """True when a row touches exactly one cell with coefficient 1.0."""
-    return entries.height == 1 and entries["coefficient"][0] == 1.0
+    return len(cells) == 1 and values[0] == 1.0
+
+
+def _component_cells(
+    component_id: str, membership: pl.DataFrame, index: SystemIndex | None
+) -> list[str]:
+    """One component's cells, sorted -- the order that becomes the model's column indices."""
+    if index is not None:
+        return index.cells_by_component[component_id]
+    return sorted(membership.filter(pl.col("component_id") == component_id)["cell_id"].to_list())
+
+
+def _hard_rows(
+    built: BuiltSystem, component_id: str, index: SystemIndex | None
+) -> list[dict[str, object]]:
+    """One component's hard rows, in frame order.
+
+    INV-005: only public accounting facts and valid definitional restrictions enter the
+    deterministic feasible set, and `is_hard` is exactly that predicate (§7.8 restricts it to
+    those two classes). A soft row stays in the graph and in the persisted table -- it is part of
+    the recorded system -- but it must not move a bound. Stage 3 adds CBP as
+    `empirical_measurement`, which is when this filter starts doing visible work.
+
+    Both `column_specs` and `matrix_rows` come through here, so the predicate is written once and
+    the two cannot disagree about which rows they are dividing between them.
+    """
+    if index is not None:
+        return index.hard_rows_by_component.get(component_id, [])
+    return built.rows.filter(
+        (pl.col("component_id") == component_id) & pl.col("is_hard")
+    ).to_dicts()
+
+
+def _entries(
+    built: BuiltSystem, constraint_id: str, index: SystemIndex | None
+) -> tuple[list[str], list[float]]:
+    """One constraint's `(cells, values)`, in frame order and aligned to each other.
+
+    Subscripted rather than `.get(..., ([], []))`: an empty group would make `_single_cell` return
+    False, so the row would reach `model.addRow` with no cells and no values -- a constraint on
+    nothing, narrowing no bound and raising nothing. REQ-029 has this system fail closed, and a
+    `KeyError` naming the constraint is what failing closed looks like here.
+    """
+    if index is not None:
+        return index.coefficients_by_constraint[constraint_id]
+    frame = built.coefficients.filter(pl.col("constraint_id") == constraint_id)
+    return frame["cell_id"].to_list(), [float(v) for v in frame["coefficient"].to_list()]
 
 
 def column_specs(
-    built: BuiltSystem, component_id: str, membership: pl.DataFrame
+    built: BuiltSystem,
+    component_id: str,
+    membership: pl.DataFrame,
+    *,
+    index: SystemIndex | None = None,
 ) -> dict[str, ColumnSpec]:
     """The box and integrality of every cell in one component."""
-    cells = sorted(membership.filter(pl.col("component_id") == component_id)["cell_id"].to_list())
+    cells = _component_cells(component_id, membership, index)
     box: dict[str, list[float]] = {cell: [-INFINITY, INFINITY] for cell in cells}
     integer = dict.fromkeys(cells, False)
-    # INV-005: only public accounting facts and valid definitional restrictions enter the
-    # deterministic feasible set, and `is_hard` is exactly that predicate (§7.8 restricts it to
-    # those two classes). A soft row stays in the graph and in the persisted table -- it is part of
-    # the recorded system -- but it must not move a bound. Stage 3 adds CBP as
-    # `empirical_measurement`, which is when this filter starts doing visible work.
-    rows = built.rows.filter((pl.col("component_id") == component_id) & pl.col("is_hard"))
-    for row in rows.iter_rows(named=True):
-        entries = built.coefficients.filter(pl.col("constraint_id") == row["constraint_id"])
+    for row in _hard_rows(built, component_id, index):
+        entry_cells, entry_values = _entries(built, row["constraint_id"], index)
         if row["relation"] == "integrality":
-            integer[entries["cell_id"][0]] = True
+            integer[entry_cells[0]] = True
             continue
-        if not _single_cell(entries):
+        if not _single_cell(entry_cells, entry_values):
             continue
-        cell = entries["cell_id"][0]
+        cell = entry_cells[0]
         if row["rhs_lower"] is not None:
             box[cell][0] = max(box[cell][0], float(row["rhs_lower"]))
         if row["rhs_upper"] is not None:
@@ -85,7 +130,9 @@ def column_specs(
     }
 
 
-def matrix_rows(built: BuiltSystem, component_id: str) -> list[dict[str, object]]:
+def matrix_rows(
+    built: BuiltSystem, component_id: str, *, index: SystemIndex | None = None
+) -> list[dict[str, object]]:
     """Every hard row of this component that `column_specs` did not fold into a column bound.
 
     That is every row coupling two or more cells, plus any single-cell row whose coefficient is
@@ -93,26 +140,25 @@ def matrix_rows(built: BuiltSystem, component_id: str) -> list[dict[str, object]
     silently divided through. The two functions partition the hard non-integrality rows
     between them, which is the property that matters.
 
-    Soft rows are excluded here for the same INV-005 reason `column_specs` states. Both filters
+    Soft rows are excluded here for the same INV-005 reason `_hard_rows` states. Both filters
     have to agree: a soft row admitted by one and rejected by the other would put half a
-    restriction in the model.
+    restriction in the model. They agree structurally rather than by inspection, because both
+    take their rows from `_hard_rows` and narrow from there.
     """
     kept: list[dict[str, object]] = []
-    for row in built.rows.filter(
-        (pl.col("component_id") == component_id)
-        & (pl.col("relation") != "integrality")
-        & pl.col("is_hard")  # INV-005; see `column_specs`
-    ).iter_rows(named=True):
-        entries = built.coefficients.filter(pl.col("constraint_id") == row["constraint_id"])
-        if _single_cell(entries):
+    for row in _hard_rows(built, component_id, index):
+        if row["relation"] == "integrality":
+            continue
+        entry_cells, entry_values = _entries(built, row["constraint_id"], index)
+        if _single_cell(entry_cells, entry_values):
             continue
         kept.append(
             {
                 "constraint_id": row["constraint_id"],
                 "lower": -INFINITY if row["rhs_lower"] is None else float(row["rhs_lower"]),
                 "upper": INFINITY if row["rhs_upper"] is None else float(row["rhs_upper"]),
-                "cells": entries["cell_id"].to_list(),
-                "values": [float(v) for v in entries["coefficient"].to_list()],
+                "cells": entry_cells,
+                "values": entry_values,
             }
         )
     return kept
@@ -184,15 +230,23 @@ def solve_component(
     config: BoundConfig,
     *,
     integer: bool,
+    index: SystemIndex | None = None,
+    specs: dict[str, ColumnSpec] | None = None,
 ) -> dict[str, tuple[float | None, float | None, str]]:
     """Sharp bounds for every unknown cell in one component.
 
     Observed cells are not solved: INV-001 pins them to their published values, and an equality
     already in the model would return that value at some solver cost. The feasibility probe below
     is what still exercises those equalities.
+
+    `specs` is accepted because `solve_bounds` has already computed it for its own record loop and
+    an integer re-solve would otherwise compute it a third time. It is not an override: passing
+    anything but this component's own specs is a caller error, which is why it is keyword-only and
+    defaults to computing them here.
     """
-    specs = column_specs(built, component_id, membership)
-    rows = matrix_rows(built, component_id)
+    if specs is None:
+        specs = column_specs(built, component_id, membership, index=index)
+    rows = matrix_rows(built, component_id, index=index)
     model, at = _model(specs, rows, config, integer=integer)
 
     model.run()
@@ -204,15 +258,19 @@ def solve_component(
             "continue. Run `solve-bounds` diagnostics for the conflicting rows"
         )
 
-    unknown = set(
-        built.cells.filter(pl.col("observation_status") == "suppressed")["cell_id"].to_list()
+    unknown = (
+        index.suppressed
+        if index is not None
+        else set(
+            built.cells.filter(pl.col("observation_status") == "suppressed")["cell_id"].to_list()
+        )
     )
     solved: dict[str, tuple[float | None, float | None, str]] = {}
-    for cell, index in at.items():
+    for cell, column in at.items():
         if cell not in unknown:
             continue
-        lower, lower_status = _optimize(model, index, highspy.ObjSense.kMinimize)
-        upper, upper_status = _optimize(model, index, highspy.ObjSense.kMaximize)
+        lower, lower_status = _optimize(model, column, highspy.ObjSense.kMinimize)
+        upper, upper_status = _optimize(model, column, highspy.ObjSense.kMaximize)
         status = (
             "optimal"
             if lower_status == upper_status == "optimal"
@@ -294,7 +352,14 @@ def solve_bounds(
     """
     built = system if system.rows["component_id"].null_count() == 0 else assign_components(system)
     membership = component_membership(built)
-    components = rank_table(built, rank_tolerance=config.rank_tolerance)
+    # Built from `built`, never from `system`: the line above may have replaced one with the
+    # other, and an index carrying the pre-decomposition rows would put every hard row under a
+    # null `component_id` and return an empty row list for every component. Both objects share a
+    # `constraint_set_hash` (§18.1 excludes `component_id`), so no hash check would catch it.
+    index = build_index(built, membership)
+    components = rank_table(
+        built, rank_tolerance=config.rank_tolerance, membership=membership, index=index
+    )
     rank_by_component = {
         row["component_id"]: (row["numerical_rank"], row["nullity"])
         for row in components.iter_rows(named=True)
@@ -306,7 +371,7 @@ def solve_bounds(
     records: list[dict[str, object]] = []
     reports: list[object] = []
     for component_id in sorted(set(membership["component_id"].to_list())):
-        specs = column_specs(built, component_id, membership)
+        specs = column_specs(built, component_id, membership, index=index)
         # Whether *this* component was found infeasible, which is not the same question as whether
         # it was quarantined. Quarantine is permission to continue past an infeasibility; it is not
         # an instruction to discard the bounds of a component that solved. Re-testing membership of
@@ -314,12 +379,16 @@ def solve_bounds(
         # feasible quarantined component to `infeasible` with no diagnostic to show for it.
         infeasible = False
         try:
-            lp = solve_component(built, component_id, membership, config, integer=False)
+            lp = solve_component(
+                built, component_id, membership, config, integer=False, index=index, specs=specs
+            )
         except InfeasibleComponentError as failure:
             from . import diagnostics as diagnostics_module  # local: breaks an import cycle
 
             infeasible = True
-            report = diagnostics_module.diagnose(built, component_id, membership, config)
+            report = diagnostics_module.diagnose(
+                built, component_id, membership, config, index=index
+            )
             reports.append(report)
             if component_id not in quarantined:
                 raise InfeasibleComponentError(
@@ -334,7 +403,9 @@ def solve_bounds(
         milp: dict[str, tuple[float | None, float | None, str]] = {}
         if lp and not infeasible and _needs_milp(lp, specs, config):
             try:
-                milp = solve_component(built, component_id, membership, config, integer=True)
+                milp = solve_component(
+                    built, component_id, membership, config, integer=True, index=index, specs=specs
+                )
             except InfeasibleComponentError as failure:
                 # An LP-feasible component with no integer point. The §9.7 diagnostic is built on
                 # the LP relaxation and would report zero slack here, so attaching it would say
