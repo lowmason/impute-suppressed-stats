@@ -24,6 +24,7 @@ from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import structural_rank
 
 from .graph import component_membership
+from .index import SystemIndex
 from .system import BuiltSystem
 
 
@@ -55,7 +56,11 @@ def numerical_rank_of(matrix: np.ndarray, *, tolerance: float) -> int:
 
 
 def equality_matrix(
-    built: BuiltSystem, component_id: str, membership: pl.DataFrame
+    built: BuiltSystem,
+    component_id: str,
+    membership: pl.DataFrame,
+    *,
+    index: SystemIndex | None = None,
 ) -> tuple[np.ndarray, list[str]]:
     """The dense equality matrix for one component, with its column order.
 
@@ -65,23 +70,36 @@ def equality_matrix(
     Soft equalities are excluded. Rank here answers "how many degrees of freedom does the feasible
     set leave", and INV-005 says a soft restriction is not part of that set.
     """
-    cells = sorted(membership.filter(pl.col("component_id") == component_id)["cell_id"].to_list())
-    equality_ids = (
-        built.rows.filter(
+    if index is None:
+        cells = sorted(
+            membership.filter(pl.col("component_id") == component_id)["cell_id"].to_list()
+        )
+        equality_ids = built.rows.filter(
             (pl.col("component_id") == component_id)
             & (pl.col("relation") == "eq")
             & pl.col("is_hard")  # INV-005: rank describes the feasible set, so only hard rows count
-        )["constraint_id"]
-        .sort()
-        .to_list()
-    )
+        )["constraint_id"].to_list()
+    else:
+        cells = index.cells_by_component[component_id]
+        equality_ids = [
+            row["constraint_id"]
+            for row in index.hard_rows_by_component.get(component_id, [])
+            if row["relation"] == "eq"  # INV-005 already applied: the index holds hard rows only
+        ]
+    equality_ids = sorted(equality_ids)
     matrix = np.zeros((len(equality_ids), len(cells)))
     at_row = {name: i for i, name in enumerate(equality_ids)}
     at_column = {name: i for i, name in enumerate(cells)}
-    for entry in built.coefficients.filter(pl.col("constraint_id").is_in(equality_ids)).iter_rows(
-        named=True
-    ):
-        matrix[at_row[entry["constraint_id"]], at_column[entry["cell_id"]]] = entry["coefficient"]
+    # Written positionally by key, so the order coefficients arrive in cannot reach the matrix --
+    # which is what lets the indexed and filtered paths differ in iteration order and still agree.
+    for constraint_id in equality_ids:
+        if index is None:
+            entries = built.coefficients.filter(pl.col("constraint_id") == constraint_id)
+            pairs = zip(entries["cell_id"], entries["coefficient"], strict=True)
+        else:
+            pairs = zip(*index.coefficients_by_constraint[constraint_id], strict=True)
+        for cell, coefficient in pairs:
+            matrix[at_row[constraint_id], at_column[cell]] = coefficient
     return matrix, cells
 
 
@@ -102,9 +120,10 @@ def component_rank(
     *,
     rank_tolerance: float,
     cache: dict[str, tuple[int, int]],
+    index: SystemIndex | None = None,
 ) -> RankRecord:
     """Rank and nullity for one component, reusing a cached shape when one matches."""
-    matrix, cells = equality_matrix(built, component_id, membership)
+    matrix, cells = equality_matrix(built, component_id, membership, index=index)
     key = _shape_key(matrix)
     hit = key in cache
     if not hit:
@@ -124,12 +143,32 @@ def component_rank(
     )
 
 
-def rank_table(built: BuiltSystem, *, rank_tolerance: float) -> pl.DataFrame:
-    """One `RankRecord` per component, in component order."""
-    membership = component_membership(built)
+def rank_table(
+    built: BuiltSystem,
+    *,
+    rank_tolerance: float,
+    membership: pl.DataFrame | None = None,
+    index: SystemIndex | None = None,
+) -> pl.DataFrame:
+    """One `RankRecord` per component, in component order.
+
+    `membership` and `index` are accepted so `solve_bounds` can hand over what it has already
+    derived; deriving membership here as well produced two frames with identical content and paid
+    for the join twice. Component order is unchanged and must stay so: CON-005's cache is filled
+    in this order, and which component records `cache_hit=False` is a function of it.
+    """
+    if membership is None:
+        membership = component_membership(built)
     cache: dict[str, tuple[int, int]] = {}
     records = [
-        component_rank(built, component_id, membership, rank_tolerance=rank_tolerance, cache=cache)
+        component_rank(
+            built,
+            component_id,
+            membership,
+            rank_tolerance=rank_tolerance,
+            cache=cache,
+            index=index,
+        )
         for component_id in sorted(set(membership["component_id"].to_list()))
     ]
     return pl.DataFrame([record.__dict__ for record in records])

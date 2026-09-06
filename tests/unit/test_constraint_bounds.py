@@ -9,7 +9,7 @@ import polars as pl
 import pytest
 
 from logging_employment.config import load_config
-from logging_employment.constraints import bounds, graph, rows, system
+from logging_employment.constraints import bounds, cells, graph, rows, system
 from logging_employment.contracts import HarmonizedData
 from logging_employment.errors import InfeasibleComponentError
 
@@ -217,3 +217,42 @@ def test_column_specs_fold_single_cell_rows_into_bounds_and_leave_the_margin_in_
     assert (class_six.lower, class_six.upper) == (400.0, 996.0)
     assert class_six.is_integer is True
     assert len(bounds.matrix_rows(built, coupled)) == 1  # the size margin only
+
+
+def test_matrix_rows_orders_the_size_margin_by_cell_id_with_the_total_last(
+    make_monthly, make_size
+) -> None:
+    """The coefficient order inside a coupling row, pinned against how it is produced.
+
+    Two mechanisms set it, and neither is read from this call. `size_margin_rows` emits the
+    published classes sorted by `size_class` at +1.0 and appends the all-sizes total at -1.0
+    (`rows.py`); `to_frames` then re-sorts every coefficient by `(constraint_id, cell_id)`
+    (`rows.py`), under which `national_size|...` precedes `national_total|...` because "size"
+    sorts before "total". `matrix_rows` reads that frame in frame order, and the list it returns
+    becomes `model.addRow`'s index array -- so this order is the model's, not a presentational
+    detail.
+
+    Pinned because nothing else in this suite can see it. Reversing the order fed to `addRow`
+    leaves every other test in the repo green and the bounds bit-identical, because every hard
+    coefficient this stage emits is +/-1. That is a property of this window, not a guarantee, and
+    it is exactly what stops holding when a later stage introduces fractional coefficients.
+    """
+    built, _ = _built(make_monthly(_national("2024-03", 41668, 7713)), make_size(*_REAL_2024))
+    membership = graph.component_membership(built)
+    coupled = membership.filter(pl.col("cell_id").str.starts_with("national_size|"))[
+        "component_id"
+    ][0]
+
+    (margin,) = bounds.matrix_rows(built, coupled)
+    assert [str(cell).split("|", 1)[0] for cell in margin["cells"]] == [
+        cells.KIND_NATIONAL_SIZE
+    ] * 7 + [cells.KIND_NATIONAL_TOTAL]
+    assert [str(cell).rsplit("|", 1)[1] for cell in margin["cells"]] == [
+        *(str(n) for n in range(1, 8)),
+        cells.TOTAL_SIZE_CLASS,
+    ]
+    assert margin["values"] == [*(1.0 for _ in range(7)), -1.0]
+
+    # `column_specs` keys are the HiGHS column indices (`_model` builds `at` from `list(specs)`),
+    # so their order is load-bearing in the same way and is fixed by the same cell_id sort.
+    assert list(bounds.column_specs(built, coupled, membership)) == list(margin["cells"])
