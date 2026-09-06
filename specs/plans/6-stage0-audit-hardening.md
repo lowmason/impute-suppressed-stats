@@ -1,5 +1,7 @@
 # Stage 0 Audit-Script Hardening — Implementation Plan
 
+**Status: COMPLETE (2026-09-05)** — executed via executing-plans; one item deferred (the `emplvl_raw_nonzero_rows` rename, see specs/deferred_items.md)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: **executing-plans** — inline execution was chosen
 > at the handoff on 2026-09-05, so run the tasks yourself in plan order rather than dispatching
 > subagents. Its stop-and-ask rules and completion chain apply. Steps use checkbox (`- [ ]`)
@@ -123,7 +125,7 @@ corruption path into a new crash.** Task 9 must land before Task 10.
 `test_cbp_metadata`, 5 in `test_bds_detail`, 3 in `test_susb_layout`), plus `susb_layout`'s
 `is_directory_listing` calls it internally, so 4 more tests exercise it transitively.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/audit/test_common.py`:
 
@@ -138,12 +140,12 @@ def test_html_title_reads_the_title_case_insensitively_and_lowercases_it() -> No
     assert _common.html_title(b"") == ""
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/audit/test_common.py -q -k html_title`
 Expected: FAIL with `AttributeError: module '_common' has no attribute 'html_title'`.
 
-- [ ] **Step 3: Add it to `_common.py`**
+- [x] **Step 3: Add it to `_common.py`**
 
 Add near the other module-level regexes, with `import re` if absent:
 
@@ -168,12 +170,12 @@ def html_title(body: bytes) -> str:
     return match.group(1).decode("utf-8", "replace").strip().lower()
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `uv run pytest tests/audit/test_common.py -q -k html_title`
 Expected: PASS.
 
-- [ ] **Step 5: Delete the three copies and repoint their callers**
+- [x] **Step 5: Delete the three copies and repoint their callers**
 
 In each of `cbp_metadata.py`, `bds_detail.py`, `susb_layout.py`: delete the `def html_title(...)`
 block and its `_TITLE_RE` assignment, then change every internal call from `html_title(` to
@@ -188,13 +190,19 @@ docstring written in Step 3, not in any module docstring here. The internal call
 `susb_layout.py:106` (`is_directory_listing`); grep each file for `html_title(` to catch the rest.
 Leave the PEP 723 headers alone — `re` is stdlib and `_common` is already imported.
 
-- [ ] **Step 6: Repoint the 12 test assertions**
+- [x] **Step 6: Repoint the 12 test assertions**
 
 In `test_cbp_metadata.py`, `test_bds_detail.py` and `test_susb_layout.py`, change every
 `m.html_title(` to `_common.html_title(`. `test_cbp_metadata.py` already does `import _common` at
 line 51; add that import to the other two if missing.
 
-- [ ] **Step 7: Verify and commit**
+> Deviation: **13** assertions, not 12 (5 + 5 + 3). `import _common` was added to
+> `test_bds_detail.py` and `test_susb_layout.py`. `re` became unused in `bds_detail.py` once
+> its copy went, so that import was dropped too. The edit introduced an I001 and an F401,
+> both fixed before the commit; the isort fix was `--select I` only, so the three deliberate
+> `# noqa: E402` markers survived.
+
+- [x] **Step 7: Verify and commit**
 
 Run: `uv run pytest tests/audit -q` → expect **669 passed** (668 + one new test; the four
 assertions inside it collect as one).
@@ -230,7 +238,7 @@ the counter reports 0 — precisely the case the docstring says the counter exis
 and new counters both give 3558/0/0, and the regenerated `notes` string is byte-identical to the
 one committed in `source-audit.md`. No regeneration step.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/audit/test_panel_flags.py`:
 
@@ -265,12 +273,12 @@ dicts**, not a DataFrame, and the dict-comprehension above is the idiom the exis
 frame covers. Running it against the shipped implementation returns
 `emplvl_raw_nonzero_rows: 1` — the defect — so the red is the assertion, not a fixture error.
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/audit/test_panel_flags.py -q -k unparseable_raw_value`
 Expected: FAIL, `assert 0 == 1` — the unparseable `"-"` was counted as a zero.
 
-- [ ] **Step 3: Move the null-fill after the comparison**
+- [x] **Step 3: Move the null-fill after the comparison**
 
 CURRENT (`scripts/audit/qcew_panel.py:253-255`, verbatim):
 
@@ -302,12 +310,12 @@ unparseable `"-"`), the `fill_null(True)`-only version gives **3** (also counts 
 and the expression above gives **2** — the unparseable and the genuine nonzero. On live data all
 three agree, because zero of the 4,836 retained rows are null or unparseable.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `uv run pytest tests/audit/test_panel_flags.py -q`
 Expected: all pass.
 
-- [ ] **Step 5: Prove artifact-neutrality before committing**
+- [x] **Step 5: Prove artifact-neutrality before committing**
 
 The counter feeds a note in the tracked document. Confirm the live value is unchanged, so no
 regeneration is owed:
@@ -338,7 +346,7 @@ Task 5's regeneration chain (`qcew_panel.py` → `qcew_identity.py` → `assembl
 `build_long` re-reads the cached raw QCEW files rather than the built panel, so this takes a few
 seconds. It makes no network request.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add scripts/audit/qcew_panel.py tests/audit/test_panel_flags.py
@@ -363,7 +371,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Three values, not two** — see "What the recon corrected", point 1.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_the_panel_and_the_long_frame_come_from_one_composition_site() -> None:
@@ -378,12 +386,12 @@ def test_the_panel_and_the_long_frame_come_from_one_composition_site() -> None:
 
 Add `build` and `PanelBuild` to the test module's imports.
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/audit/test_panel_flags.py -q -k one_composition_site`
 Expected: FAIL, `ImportError`/`NameError` on `build`.
 
-- [ ] **Step 3: Introduce `PanelBuild` and `build`**
+- [x] **Step 3: Introduce `PanelBuild` and `build`**
 
 CURRENT (`qcew_panel.py:186-187`, verbatim):
 
@@ -422,7 +430,7 @@ def build_panel(own_code: str) -> pl.DataFrame:
 Type `predicates` to whatever `build_long` actually returns — read line 183's `return long,
 recorded` and give it the real annotation rather than `list`.
 
-- [ ] **Step 4: Repoint `main`**
+- [x] **Step 4: Repoint `main`**
 
 CURRENT (`qcew_panel.py:421-424`, verbatim):
 
@@ -439,11 +447,14 @@ PROPOSED:
     long, panel, predicates = build(own_code)
 ```
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run: `uv run pytest tests/audit -q` → all pass, and confirm the eight `build_panel("5")` call
 sites were not edited (`git diff --stat tests/audit/test_panel_flags.py` should show only the new
 test and its import).
+
+> Deviation: confirmed — the diff was +17/-0. Inserting `build` into the import list broke
+> isort ordering (it sorts before `build_long`); fixed with `--select I --fix`.
 
 ```bash
 git add scripts/audit/qcew_panel.py tests/audit/test_panel_flags.py
@@ -470,7 +481,7 @@ artifact.
 `ImportError` — a collection-time failure of the whole module, not one test. Changing only the
 string *value* would leave the test green and the misleading Python name in place.
 
-- [ ] **Step 1: Rename the constant and its use**
+- [x] **Step 1: Rename the constant and its use**
 
 CURRENT (`qcew_identity.py:94-98`, verbatim):
 
@@ -502,14 +513,14 @@ NO_DISCRIMINATING_QUARTER = "no_discriminating_quarter"
 Then change `qcew_identity.py:403` from `verdict = NO_OTHER_AREA` to
 `verdict = NO_DISCRIMINATING_QUARTER`.
 
-- [ ] **Step 2: Rename in the test**
+- [x] **Step 2: Rename in the test**
 
 `tests/audit/test_identity_rule.py:31` (the import list) and `:291`
 (`assert out["verdict"] == NO_OTHER_AREA`, inside
 `test_a_zero_contribution_quarter_cannot_discriminate` — the test that pins precisely the
 mislabelled case).
 
-- [ ] **Step 3: Add the test that pins why the rename was needed**
+- [x] **Step 3: Add the test that pins why the rename was needed**
 
 ```python
 def test_a_withheld_non_state_amount_is_not_reported_as_no_such_area() -> None:
@@ -524,7 +535,7 @@ def test_a_withheld_non_state_amount_is_not_reported_as_no_such_area() -> None:
 Build `_raw_quarter` from the shape the existing tests use at `test_identity_rule.py:291` — read
 that test and mirror its fixture rather than inventing one.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run: `uv run pytest tests/audit/test_identity_rule.py -q` → all pass.
 Confirm artifact-neutrality: `grep -c no_non_state_area_present specs/findings/source-audit.md`
@@ -553,7 +564,7 @@ and `months < n_months` is never evaluated for an absent area. **DC (`11000`, 96
 missing from this summary while `qcew_panel`'s own summary records it** in
 `state_month_cell_coverage.areas_with_no_rows`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_an_area_with_no_rows_at_all_is_reported_rather_than_silently_dropped() -> None:
@@ -569,12 +580,12 @@ def test_an_area_with_no_rows_at_all_is_reported_rather_than_silently_dropped() 
 Build `_toy_panel` to match what `structural_findings` reads — `area_fips`, `area_title`,
 `area_class` (`"states_dc"`), and whatever else it touches. Read the function first.
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/audit/test_identity_rule.py -q -k no_rows_at_all`
 Expected: FAIL, `KeyError: 'states_dc_areas_with_no_rows'`.
 
-- [ ] **Step 3: Add the sibling binding**
+- [x] **Step 3: Add the sibling binding**
 
 After the `short_span = (...)` block ending at `qcew_identity.py:540`, add:
 
@@ -598,7 +609,7 @@ At `:562`, add the key beside its sibling:
 The name deliberately mirrors `qcew_panel`'s `state_month_cell_coverage.areas_with_no_rows` so the
 two summaries read against each other.
 
-- [ ] **Step 4: Make the derived note see it**
+- [x] **Step 4: Make the derived note see it**
 
 `states_dc_areas` (`:551`, = 50) and `states_dc_area_months_absent` (`:561`, = 84) are **both
 denominated against present areas**, so a zero-row area is in neither figure. The note must say so
@@ -617,12 +628,12 @@ and replace the `:600` f-string line with:
         f"any month, and so counted in neither figure above: {no_rows}. Also measured: "
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `uv run pytest tests/audit/test_identity_rule.py -q`
 Expected: all pass.
 
-- [ ] **Step 6: Run the offline regeneration chain, in this order**
+- [x] **Step 6: Run the offline regeneration chain, in this order**
 
 All three are network-free. **Order is load-bearing** — the gate must run last, because if a
 changed `verdict_sentence` reached it before the document was re-rendered, `check_verdict` fails
@@ -641,7 +652,7 @@ every findings key and flags `[]`. On today's data the value is `['11000']`, so 
 fire — if it does, the panel changed, and the fix is an entry in `LEGITIMATELY_EMPTY_FINDINGS`,
 not a silenced check.
 
-- [ ] **Step 7: Review the regenerated document deliberately**
+- [x] **Step 7: Review the regenerated document deliberately**
 
 `git diff specs/findings/source-audit.md` should show: the new key in `qcew_identity`'s findings
 fence, the reworded absent-months note, `qcew_identity`'s per-source `generated_utc` line, and the
@@ -650,7 +661,7 @@ regenerated from a different checkout — that field embeds an absolute path.
 
 `source-audit-extracts.csv` must **not** move: `qcew_identity` registers `extracts=[]`.
 
-- [ ] **Step 8: Commit as two commits, per house precedent**
+- [x] **Step 8: Commit as two commits, per house precedent**
 
 The convention is a separate `chore(audit): regenerate …` commit (see `164afc8`/`438cb44`,
 `54a3f24`/`c709ce2`, `b4afadb`/`7128144`).
@@ -680,7 +691,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 **Artifact-neutral, measured:** all ten Appendix A sources carry an explicit `enabled:` line, and
 running the real renderer over the real appendix reproduces `source-audit.md:42-51` byte-for-byte.
 
-- [ ] **Step 1: Change the affirming test first**
+- [x] **Step 1: Change the affirming test first**
 
 `tests/audit/test_verify_extracts.py:553` currently asserts a `"mystery"` source with no
 `enabled:` line equals `False`. That assertion **is** the defect. Change it to `is None` and
@@ -694,12 +705,12 @@ def test_parse_appendix_a_sources_reports_a_missing_enabled_line_as_not_declared
 
 Keep the existing `{"qcew": True, "cbp": False}` expectations; only `"mystery"` changes.
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/audit/test_verify_extracts.py -q -k not_declared`
 Expected: FAIL, `assert False is None`.
 
-- [ ] **Step 3: Widen the type**
+- [x] **Step 3: Widen the type**
 
 CURRENT (`verify_extracts.py:566`): `enabled.setdefault(current, False)`
 PROPOSED: `enabled.setdefault(current, None)`
@@ -707,7 +718,7 @@ PROPOSED: `enabled.setdefault(current, None)`
 Widen the function's annotation from `dict[str, bool]` to `dict[str, bool | None]` and add a line
 to its docstring saying `None` means the spec declared the source without an `enabled:` line.
 
-- [ ] **Step 4: Handle `None` in the renderer**
+- [x] **Step 4: Handle `None` in the renderer**
 
 `assemble_finding.py:145` currently renders `"true" if enabled else "false"`, which maps `None` to
 `"false"` — the exact conflation. Change it to a three-way:
@@ -718,7 +729,7 @@ to its docstring saying `None` means the spec declared the source without an `en
 
 Read line 145 in context first and preserve the surrounding row construction exactly.
 
-- [ ] **Step 5: Verify, and prove the shipped table is unchanged**
+- [x] **Step 5: Verify, and prove the shipped table is unchanged**
 
 Run: `uv run pytest tests/audit -q` → all pass.
 
@@ -729,7 +740,12 @@ uv run --no-project scripts/audit/assemble_finding.py && git diff --stat specs/f
 Expect **no diff** — every Appendix A source declares `enabled:`, so no cell becomes
 "not declared". If the document moves, stop and find out which source lost its line.
 
-- [ ] **Step 6: Commit**
+> Deviation: a second test was added beyond the plan, pinning that a `None` renders
+> "not declared" in `appendix_a_rows`. The three-way branch is dead on today's spec, which is
+> exactly the shape this repo has had to defer before, so it is demonstrated rather than
+> reasoned. `appendix_a_rows`' annotation was widened to `dict[str, bool | None]` to match.
+
+- [x] **Step 6: Commit**
 
 ```bash
 git add scripts/audit/verify_extracts.py scripts/audit/assemble_finding.py tests/audit/test_verify_extracts.py
@@ -763,7 +779,7 @@ and that value reaches `assemble_finding.render_document`, which writes it into
 `source-audit.md`'s Classification paragraph. So the consequence is a wrong value in a **tracked
 deliverable**, not merely a confused gate.
 
-- [ ] **Step 1: Write the failing test that pins the documented behaviour**
+- [x] **Step 1: Write the failing test that pins the documented behaviour**
 
 ```python
 def test_an_unclosed_section_31_fence_returns_later_sections_rather_than_raising() -> None:
@@ -780,14 +796,14 @@ Build `_spec_with_unclosed_31_fence` by mirroring the fixtures already in this f
 `test_parse_classification_record_raises_when_the_names_sit_outside_the_section_31_fence` and
 reuse its spec shape.
 
-- [ ] **Step 2: Run it — it should already PASS**
+- [x] **Step 2: Run it — it should already PASS**
 
 Run: `uv run pytest tests/audit/test_verify_extracts.py -q -k unclosed_section_31`
 Expected: PASS. This is a characterization test: it pins behaviour that already exists but was
 undocumented. That is the point — the deliverable here is the docstring, and this test stops the
 docstring going stale silently.
 
-- [ ] **Step 3: Extend the `Raises:` paragraph to name the return**
+- [x] **Step 3: Extend the `Raises:` paragraph to name the return**
 
 The current final paragraph ends: "That closing fence is the next fence line in the file rather
 than the next one inside the section, so an unclosed §3.1 fence is reported as unclosed only when
@@ -807,7 +823,7 @@ Append, in the same paragraph:
     because `main` calls this before any check runs and outside any handler.
 ```
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run: `uv run pytest tests/audit -q` → all pass.
 
@@ -840,7 +856,7 @@ emitted by `assemble_finding.render_document`: the `` ### `<name>` `` heading, t
 label, and the ```` ```json ```` fence. Rename any of them in the assembler and the exit gate
 fails on correct work. Say so in the code comment.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `check_roadmap_fields` reads the module-level `ROADMAP_FIELDS` directly — use `monkeypatch`, and
 do **not** add a `fields=` parameter that production never passes.
@@ -862,12 +878,12 @@ def test_a_roadmap_key_in_another_sources_fence_does_not_satisfy_the_document_ch
 Build `_document_with_key_only_in` to emit the assembler's real shape: a `` ### `<source>` ``
 heading, a `**findings**:` line, and a ```` ```json ```` fence.
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/audit/test_verify_extracts.py -q -k another_sources_fence`
 Expected: FAIL, `assert [] == ['E1']`.
 
-- [ ] **Step 3: Scope the match**
+- [x] **Step 3: Scope the match**
 
 Add a helper beside `check_roadmap_fields` that extracts one source's findings fence, and use it
 at `:612`. Read the assembler's `render_document` for the exact literals before writing it, and
@@ -884,7 +900,13 @@ carry this comment:
     # makes this gate fail on correct work.
 ```
 
-- [ ] **Step 4: Run the test, then prove the real gate still passes**
+- [x] **Step 4: Run the test, then prove the real gate still passes**
+
+> Deviation: an EXISTING test had to be rewritten —
+> `test_check_roadmap_fields_reports_a_field_absent_from_the_document` built its document as a
+> bare space-joined list of quoted keys, which is not the assembler's shape and cannot satisfy
+> a scoped check. It now constructs per-source fences. The plan did not anticipate it. A UP031
+> was introduced by the new fixture's `%`-formatting and fixed before the commit.
 
 Run: `uv run pytest tests/audit/test_verify_extracts.py -q` → all pass.
 Then run the gate against the real document — the scoped predicate must return zero failures over
@@ -896,7 +918,7 @@ uv run --no-project scripts/audit/verify_extracts.py
 
 Expected: `EXIT CRITERIA: PASS`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add scripts/audit/verify_extracts.py tests/audit/test_verify_extracts.py
@@ -923,7 +945,7 @@ unregistered/dangling-manifest state `cfe0c1f` was written to prevent, reached f
 This project has a recorded fact that Census and USDA both return 200 with an error body, so
 status-only handling is insufficient by construction.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_a_200_with_a_non_json_body_does_not_leave_a_registered_extract_behind(tmp_path) -> None:
@@ -946,12 +968,12 @@ def test_a_200_with_a_non_json_body_does_not_leave_a_registered_extract_behind(t
 Redirect `_common`'s extract root into `tmp_path` the way the existing tests in this file do —
 read one and copy its fixture, so nothing is written into the real `data/`.
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/audit/test_cbp_metadata.py -q -k non_json_body`
 Expected: FAIL with `json.JSONDecodeError` propagating out of `fetch_json_or_none`.
 
-- [ ] **Step 3: Parse before recording, and catch the decode error**
+- [x] **Step 3: Parse before recording, and catch the decode error**
 
 CURRENT (`cbp_metadata.py:305-309`, verbatim):
 
@@ -987,7 +1009,7 @@ PROPOSED:
 `json.JSONDecodeError` subclasses `ValueError`; catching `ValueError` also covers httpx's own
 decode failures.
 
-- [ ] **Step 4: Extend the docstring**
+- [x] **Step 4: Extend the docstring**
 
 Add a paragraph naming the newly-covered case and, explicitly, the case still **not** covered:
 
@@ -999,7 +1021,7 @@ Add a paragraph naming the newly-covered case and, explicitly, the case still **
     unregistered-files state. Narrowing the orphan class is not closing it.
 ```
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run: `uv run pytest tests/audit/test_cbp_metadata.py -q` → all pass (58 + the new one).
 
@@ -1033,7 +1055,7 @@ not. Preserve the existing order at the cost of two separate guard sites.
 response. The recorded run has `access.status == "verified"` and every one of these routes
 succeeded, so no recorded value moves. **Do not re-run the script** — see the boxed warning above.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Three tests, one per site, each driving the extracted helper with `httpx.MockTransport`:
 
@@ -1055,12 +1077,12 @@ the helper, then write the body against the signature you actually created. Ever
 plan carries complete code; if you find yourself guessing here, stop and read `main()` again rather
 than inventing a boundary.
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `uv run pytest tests/audit/test_cbp_metadata.py -q -k "refetch or variables_key or geography_document"`
 Expected: 3 failed — `ImportError`/`AttributeError` on the not-yet-extracted helpers.
 
-- [ ] **Step 3: Extract the helpers and route them through `fetch_json_or_none`**
+- [x] **Step 3: Extract the helpers and route them through `fetch_json_or_none`**
 
 Site by site. CURRENT at `:431` (the dataset re-fetch) is:
 
@@ -1105,12 +1127,17 @@ distinct cause when the document is unavailable, so `zero_pull_cause` cannot rea
 structure rather than status values, so nothing rejects it — but Stage 1 reads this field, so name
 it deliberately and record the addition in the commit message.
 
-- [ ] **Step 4: Run the three tests, then the whole file**
+> Deviation: the extracted helpers are `variable_names` and `geography_levels`, and a THIRD
+> recorded status was added beyond the plan's one — `variables_document_unavailable` alongside
+> `geography_document_unavailable`, since the same "unreadable vs. genuinely empty" confusion
+> applies to the variables document. The vocabulary went from three members to five, not four.
+
+- [x] **Step 4: Run the three tests, then the whole file**
 
 Run: `uv run pytest tests/audit/test_cbp_metadata.py -q`
 Expected: all pass.
 
-- [ ] **Step 5: Prove you did not run the script**
+- [x] **Step 5: Prove you did not run the script**
 
 ```bash
 python3 -c "import json;print(json.load(open('data/raw/audit/cbp_metadata/summary.json'))['generated_utc'])"
@@ -1119,7 +1146,7 @@ python3 -c "import json;print(json.load(open('data/raw/audit/cbp_metadata/summar
 Expected: `2026-09-04T14:06:01...` — unchanged. If it moved, the script was run; the extracts it
 deleted are unrecoverable and the tree must be assessed before going further.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add scripts/audit/cbp_metadata.py tests/audit/test_cbp_metadata.py
@@ -1132,7 +1159,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ### Task 11: gates and completion
 
-- [ ] **Step 1: Run every gate**
+- [x] **Step 1: Run every gate**
 
 ```bash
 uv run pytest -q
@@ -1141,11 +1168,11 @@ uv run ruff check .
 uv run --no-project scripts/audit/verify_extracts.py
 ```
 
-Expected: all tests pass with a count of 1111 + the tests this plan added; `black` reports all
+Expected: all tests pass with a count of 1111 + the tests this plan added — **actual: 1123**; `black` reports all
 files unchanged; `ruff check .` still reports exactly **24** violations (run the FULL check, not
 `--select I`); the gate ends `EXIT CRITERIA: PASS`.
 
-- [ ] **Step 2: Confirm the PEP 723 scripts still parse at their declared floor**
+- [x] **Step 2: Confirm the PEP 723 scripts still parse at their declared floor**
 
 ```bash
 uv run python -c "
@@ -1158,14 +1185,14 @@ print(f'{len(list(pathlib.Path(\"scripts/audit\").glob(\"*.py\")))} scripts, {le
 "
 ```
 
-- [ ] **Step 3: Confirm no unintended working-tree changes**
+- [x] **Step 3: Confirm no unintended working-tree changes**
 
 Run: `git status --porcelain`. Expected: only the files this plan names. This repo has a recorded
 incident of audit subagents writing into the working tree — check before committing, not after.
 
 Also confirm `data/raw/audit/cbp_metadata/` is intact: `ls data/raw/audit/cbp_metadata | wc -l`.
 
-- [ ] **Step 4: Run the Plan Completion Protocol**
+- [x] **Step 4: Run the Plan Completion Protocol**
 
 Resolve-before-defer gate, then markup this file with a status header, then tick the **eight**
 source items in `specs/deferred_items.md` with `- [x] … → done in plan 6`, then `git mv` this file

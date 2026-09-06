@@ -91,50 +91,100 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
 
 ### Reviewer Minors triaged as defer
 
-- [ ] **`scripts/audit/qcew_identity.py`: two sets named by predicates that
+- [x] **`scripts/audit/qcew_identity.py`: two sets named by predicates that
       over-collect.** `NO_OTHER_AREA` conflates "no such area" with "area exists but
       published nothing"; `states_dc_short_span_areas` is built by grouping present
       rows, so it is structurally incapable of reporting a zero-row area — which is
       why DC (96 absent months) does not appear in this summary even though
       `qcew_panel` records it. Neither is live today. Two-line fix: report
       `sorted(c.STATE_AREAS - set(present))` alongside `short_span`.
-- [ ] **`scripts/audit/qcew_panel.py`: `emplvl_raw_nonzero_rows` uses
+      **→ done in plan 6.** Both halves. `NO_OTHER_AREA` is renamed `NO_DISCRIMINATING_QUARTER`:
+      it was reached by a panel whose non-state amount is WITHHELD as well as by one with no such
+      area, so the verdict contradicted its own sibling counter inside one returned dict.
+      `states_dc_areas_with_no_rows` closes the second half — DC carries no row in any of the 96
+      months and appeared in neither this key nor `short_span`, while `qcew_panel`'s own summary
+      recorded it. The derived note names the 51-code universe too, because `states_dc_areas`
+      (50) and `states_dc_area_months_absent` (84) are both denominated against PRESENT areas.
+      Artifact regenerated offline; the rename touched no artifact.
+- [x] **`scripts/audit/qcew_panel.py`: `emplvl_raw_nonzero_rows` uses
       `strict=False` + `fill_null(0)`,** so a non-numeric raw value on a suppressed
       row counts as "not nonzero" — the one case the counter exists to catch. Not
       live (every real value parses). Fix the comparison or narrow the docstring;
       do not ship the current pairing.
-- [ ] **`scripts/audit/qcew_panel.py`: `build_panel` and `main` are two independent
+      **→ done in plan 6: fixed the comparison, not the docstring.** The counter feeds a note
+      into the committed source-audit.md, so the defect landed in a published artifact. Neither
+      offered fix was quite right: moving `fill_null` after the comparison and filling True
+      corrects the unparseable case but then counts a row that published NOTHING as nonzero, so
+      an explicit `is_not_null()` keeps all three cases apart. Measured on
+      `["-", "0", "5", None]`: old 1, naive fix 3, shipped 2. Artifact-neutral — the live panel
+      has 0 nulls and 0 unparseable, so the count stays 3558.
+- [x] **`scripts/audit/qcew_panel.py`: `build_panel` and `main` are two independent
       call sites** of the same `build_long` → `_conform` composition. They agree
       today; nothing enforces it. Having `build_panel` return `(panel, predicates)`
       removes the seam.
+      **→ done in plan 6, but not by the remedy this item proposed.** `(panel, predicates)` is
+      insufficient: `main` also needs the pre-`_conform` `long` frame, because `emplvl_raw`
+      exists only there and `disclosure_code_values` reads it. A `PanelBuild` NamedTuple returns
+      all three and `build()` is the single composition site; `build_panel` survives as
+      `build(own).panel`, so all eight existing test call sites are untouched.
 - [ ] **`scripts/audit/qcew_routes.py`: the multi-year bulk-disagreement branch is
       unexercised** — `bulk_years_required` is `[]`, so no real data reaches it.
       Correct by inspection; a synthetic dict through the reduction would make it
       demonstrated rather than reasoned.
-- [ ] **`html_title` exists in three byte-identical copies**
+- [x] **`html_title` exists in three byte-identical copies**
       (`cbp_metadata.py`, `bds_detail.py`, `susb_layout.py`), justified as "audit
       scripts are standalone PEP 723 files with no import between them" — true of
       script-to-script imports, but every one of them imports `_common`, which is
       the natural home. The risk is a fix to one not propagating.
-- [ ] **`scripts/audit/cbp_metadata.py`: three request sites remain unguarded by
+      **→ done in plan 6, and the risk had already materialised.** The four executable lines are
+      identical; the DOCSTRINGS are not — `susb_layout`'s had already lost the "including when
+      `body` isn't HTML at all" clause the other two carry. So this repaired existing drift
+      rather than preventing hypothetical drift. Now `_common.html_title`, with the corrected
+      rationale recorded rather than dropped. 13 test assertions repointed.
+- [x] **`scripts/audit/cbp_metadata.py`: three request sites remain unguarded by
       `fetch_json_or_none`** (the dataset re-fetch, `variables.json`, and
       `geography.json`), plus `vresp.json()["variables"]` which raises `KeyError` on
       an unexpected shape. A 404 or malformed body there still crashes mid-loop and
       produces the dangling-manifest state `cfe0c1f` was written to prevent.
-- [ ] **`scripts/audit/verify_extracts.py`: `enabled.setdefault(current, False)`
+      **→ done in plan 6, after fixing the guard itself first.** Two corrections to the item:
+      `fetch_json_or_none` is in `cbp_metadata.py`, not `_common.py`; and it was ITSELF reaching
+      the orphan state — `record_extract` ran before `resp.json()` and only `HTTPStatusError`
+      was caught, so a 200 carrying Census's HTML error page was written and registered, then
+      raised. Routing the three sites through the OLD helper would have made one failure mode
+      worse. A silent-wrong path the item does not name is closed too: `.get("fips", [])` on a
+      malformed geography body reached `zero_pull_cause` as `state_available=False` and
+      persisted "geography_unavailable" — a fetch failure recorded as a fact about CBP.
+      Verified by unit tests on extracted pure helpers; the script was NOT run.
+- [x] **`scripts/audit/verify_extracts.py`: `enabled.setdefault(current, False)`
       types a default.** All ten Appendix A sources carry an explicit `enabled:`
       line today, so nothing false ships — but a future spec source without one
       would render `false`, indistinguishable from a spec-declared false, **with a
       test affirming it**. Fix: `bool | None` and render "not declared".
-- [ ] **`scripts/audit/verify_extracts.py`: `classification_block`'s `Raises:`
+      **→ done in plan 6.** `bool | None`, and the one renderer is three-way. The affirming test
+      was flipped rather than deleted — its assertion WAS the defect. Artifact-neutral, proven
+      by regeneration: all ten sources declare `enabled:`, so no cell becomes "not declared".
+      That left the new branch dead on today's spec, so it is pinned by its own unit test.
+- [x] **`scripts/audit/verify_extracts.py`: `classification_block`'s `Raises:`
       paragraph names the error that is lost but not the return value that replaces
       it** — when a fence follows an unclosed §3.1 fence it returns lines spanning
       later sections, departing from its own summary line. Unreachable on today's
       spec.
-- [ ] **`scripts/audit/verify_extracts.py`: `check_roadmap_fields`'s
+      **→ done in plan 6: documented, deliberately not refused.** Two committed constraints rule
+      refusal out — stopping the closing scan at the next heading reintroduces the
+      `#`-inside-a-fence defect already pinned, and a new raise would be an uncaught traceback
+      rather than a FAIL line, because `main` calls this before any check runs and outside any
+      handler. Worth recording: the bad return reaches `assemble_finding`, which writes it into
+      the tracked document's Classification paragraph, so the consequence was a wrong value in a
+      deliverable, not just a confused gate. A characterization test pins it.
+- [x] **`scripts/audit/verify_extracts.py`: `check_roadmap_fields`'s
       document-presence check matches a quoted key name anywhere in the document**
       rather than in the owning source's fence. Measured safe today (zero
       double-quoted `ROADMAP_FIELDS` keys appear in the hand-written notes).
+      **→ done in plan 6.** Scoped to the owning source's `**findings**:` fence. The "measured
+      safe" is a QUOTING CONVENTION, not a structural guarantee: zero keys appear double-quoted
+      in the notes, but twelve of twenty appear there backticked. The cost is recorded in the
+      code — the gate now depends on three literals the assembler emits, so renaming any of them
+      breaks the gate on correct work. Verified: EXIT CRITERIA still PASS over all 20 entries.
 - [x] **`specs/findings/source-audit.md`'s seam signpost has a second, weaker
       exception:** the whitespace-collapsed `> **Recorded access reason:**`
       blockquote. The extract-count exception is now named; this one is not.
@@ -457,3 +507,16 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       hand and came back clean — mask-signature, call-site arity, anti-drift in test blocks, and
       §17.3 vacuity — but Task 18 was never machine-audited. Its twelve properties pass against
       the shipped implementation, which is evidence but not the same thing.
+
+## 6-stage0-audit-hardening — 2026-09-05
+
+- [ ] **`emplvl_raw_nonzero_rows` now means "not a published zero", but three things still say
+      "nonzero".** The comparison was fixed in plan 6 so an unparseable raw value is counted; the
+      key name in `scripts/audit/qcew_panel.py`, the interpolated note at `qcew_panel.py:369` and
+      its restatement at `:390` all still read "with a nonzero employment level in the source
+      month columns". That sentence would be false for exactly the case the fix added.
+      Deliberately not bundled: renaming the key changes a shipped `summary.json` key, so it
+      carries the offline regeneration chain (`qcew_panel` → `qcew_identity` → `assemble_finding`
+      → `verify_extracts`) plus a one-cell change to `source-audit-extracts.csv` from
+      `panel.parquet`'s restamped `retrieved_utc` — a different kind of change from the
+      comparison fix it would have ridden on.
