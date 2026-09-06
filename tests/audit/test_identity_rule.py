@@ -555,3 +555,26 @@ def test_a_withheld_non_state_amount_is_not_reported_as_no_such_area():
     assert out["verdict"] == NO_DISCRIMINATING_QUARTER
     assert out["quarters_non_state_amount_unpublished"] == 2
     assert out["quarters_discriminating"] == 0
+
+
+def test_an_area_with_no_rows_at_all_is_reported_rather_than_silently_dropped():
+    """`states_dc_short_span_areas` groups rows that exist, so its smallest group is one row.
+
+    An area with no row at all forms no group and can never appear in it, however the filter is
+    written -- so a zero-row area was invisible in this summary while `qcew_panel` recorded it.
+    DC is exactly that case on the real panel: 96 absent months, and absent from this key.
+    """
+    rows = []
+    for month in (1, 2, 3):
+        rows += [
+            ("US000", "US TOTAL", "national", 2017, 1, month, 500, 110, "", False),
+            ("01000", "Alabama", "states_dc", 2017, 1, month, 450, 100, "", False),
+        ]
+    rows.append(("10000", "Delaware", "states_dc", 2017, 1, 1, 50, 10, "", False))
+    frame = panel(rows)
+    out = structural_findings(frame, quarterly_estabs(frame))
+
+    assert [a["area_fips"] for a in out["states_dc_short_span_areas"]] == ["10000"]
+    assert "11000" in out["states_dc_areas_with_no_rows"]
+    assert "01000" not in out["states_dc_areas_with_no_rows"]
+    assert "10000" not in out["states_dc_areas_with_no_rows"]

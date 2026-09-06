@@ -545,6 +545,13 @@ def structural_findings(panel: pl.DataFrame, estabs: pl.DataFrame) -> dict:
         .sort("area_fips")
         .to_dicts()
     )
+    # `short_span` groups rows that exist, so its smallest group is one row: an area with no row
+    # at all forms no group and can never appear in it, however the filter is written. The
+    # configured universe is the only place such an area is named, so the absent codes come from
+    # `c.STATE_AREAS` directly. Codes and not titles, because an area with no row carries no
+    # `area_title` to report. `area_class == STATES_DC` is assigned upstream by membership of
+    # `c.STATE_AREAS`, so the difference is exactly the zero-row areas.
+    no_rows = sorted(c.STATE_AREAS - set(states["area_fips"].unique().to_list()))
     national, other = _by_class(panel, NATIONAL), _by_class(panel, OTHER)
     nat_estabs, other_estabs = _by_class(estabs, NATIONAL), _by_class(estabs, OTHER)
 
@@ -567,6 +574,7 @@ def structural_findings(panel: pl.DataFrame, estabs: pl.DataFrame) -> dict:
         },
         "states_dc_area_months_absent": int(n_areas * n_months - states.height),
         "states_dc_short_span_areas": short_span,
+        "states_dc_areas_with_no_rows": no_rows,
         "states_dc_suppressed_cells": int(flagged),
         "states_dc_unpublished_emp_cells": int(unpublished_emp),
         "states_dc_unpublished_emp_is_exactly_suppressed": bool(unpublished_emp == flagged == both),
@@ -598,13 +606,19 @@ def absent_state_months_note(structural: dict, evidence: dict) -> str:
         )
         or "none"
     )
+    # Both figures above are denominated against PRESENT areas, so an area with no row at all is
+    # in neither. Naming the configured universe alongside them keeps the sentence true rather
+    # than leaving 51 and the 50-area denominator to be reconciled by the reader.
+    no_rows = ", ".join(structural["states_dc_areas_with_no_rows"]) or "none"
     per_month = structural["states_dc_areas_per_month"]
     return (
         f"Absent states+DC area-months, measured: {structural['states_dc_area_months_absent']} "
         f"of the {structural['states_dc_areas']} x {structural['months_covered']} possible "
         f"area-month cells carry no row at all, and each month carries between "
         f"{per_month['min']} and {per_month['max']} of the {structural['states_dc_areas']} "
-        f"areas. The area(s) whose span is shorter than the panel's: {areas}. Also measured: "
+        f"areas. The area(s) whose span is shorter than the panel's: {areas}. Of the "
+        f"{len(c.STATE_AREAS)} configured states+DC area code(s), the one(s) carrying no row in "
+        f"any month, and so counted in neither figure above: {no_rows}. Also measured: "
         f"the establishment gap after non-state areas is exactly zero in "
         f"{evidence['quarters_closing']} of {evidence['quarters_evaluable']} evaluable "
         f"quarter(s). INFERENCE MARKER, OPENING: what follows to the closing marker is a "
