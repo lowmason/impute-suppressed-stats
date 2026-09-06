@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
@@ -101,6 +102,26 @@ STATES_DC_FIPS = (
 assert len(STATES_DC_FIPS) == 51, "states_dc universe must be 50 states + D.C."
 STATE_AREAS = {f"{f}000" for f in STATES_DC_FIPS}
 NATIONAL_AREA = "US000"
+
+_TITLE_RE = re.compile(rb"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
+
+
+def html_title(body: bytes) -> str:
+    """The HTML `<title>` text, lowercased and stripped, or `""` if there isn't one (including
+    when `body` isn't HTML at all). Case-insensitive on the tag itself (`<TITLE>` matches too).
+
+    Lives here because three audit scripts need it. The copies it replaces justified themselves
+    as "audit scripts are standalone PEP 723 files with no import between them" -- true of
+    script-to-script imports, but every one of those scripts already imports `_common`, so the
+    premise never applied to this module. The copies had in fact already drifted: susb_layout's
+    docstring had lost the "isn't HTML at all" clause. That is the propagation failure, observed
+    rather than predicted.
+    """
+    match = _TITLE_RE.search(body)
+    if not match:
+        return ""
+    return match.group(1).decode("utf-8", "replace").strip().lower()
+
 
 SECRET_ENV_VARS = ("CENSUS_API_KEY", "BLS_API_KEY", "BEA_API_KEY", "FRED_API_KEY")
 ACCESS_STATUSES = ("verified", "documented", "not_obtainable")

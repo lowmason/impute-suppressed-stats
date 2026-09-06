@@ -409,3 +409,13 @@ def test_assert_no_secrets_still_raises_on_a_key_bearing_url(monkeypatch):
     monkeypatch.setenv("CENSUS_API_KEY", "sekret-value-0123")
     with pytest.raises(RuntimeError, match="CENSUS_API_KEY"):
         _common.assert_no_secrets("https://example.test/x?key=sekret-value-0123")
+
+
+def test_html_title_reads_the_title_case_insensitively_and_lowercases_it():
+    """One implementation, one test. It lived in three scripts and the copies had already
+    drifted: susb_layout's docstring dropped the "isn't HTML at all" clause the other two
+    carried, which is the propagation failure the duplication was flagged for."""
+    assert _common.html_title(b"<html><TITLE>  Census Bureau  </TITLE></html>") == "census bureau"
+    assert _common.html_title(b"<title>A\nB</title>") == "a\nb"
+    assert _common.html_title(b'{"json": true}') == ""
+    assert _common.html_title(b"") == ""

@@ -97,7 +97,6 @@ import httpx
 SOURCE = "cbp_metadata"
 BASE = "https://api.census.gov/data/{year}/cbp"
 NAICS_RE = re.compile(r"^NAICS\d{4}$")
-_TITLE_RE = re.compile(rb"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
 
 # Only these two `classify_data_body` outcomes are evidence of a credential problem specifically
 # -- see `zero_pull_cause`. Any other non-"ok" outcome (a maintenance page, a rate-limit
@@ -110,15 +109,6 @@ _AUTH_REJECTION_STATUSES = frozenset({"invalid_key", "missing_key"})
 # data itself, not only in this module's docstring.
 EMPSZES_SOURCE_OFFICIAL = "official_metadata_crosswalk"
 EMPSZES_SOURCE_OBSERVED = "observed_in_113310_state_slice"
-
-
-def html_title(body: bytes) -> str:
-    """The HTML `<title>` text, lowercased and stripped, or `""` if there isn't one (including
-    when `body` isn't HTML at all). Case-insensitive on the tag itself (`<TITLE>` matches too)."""
-    match = _TITLE_RE.search(body)
-    if not match:
-        return ""
-    return match.group(1).decode("utf-8", "replace").strip().lower()
 
 
 def classify_data_body(content_type: str, body: bytes) -> tuple[str, list | None]:
@@ -147,7 +137,7 @@ def classify_data_body(content_type: str, body: bytes) -> tuple[str, list | None
                                     (e.g. a dict, an empty list, a list of scalars).
     """
     if "json" not in content_type.lower():
-        title = html_title(body)
+        title = c.html_title(body)
         if title == "invalid key":
             return "invalid_key", None
         if title == "missing key":

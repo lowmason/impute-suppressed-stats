@@ -31,6 +31,7 @@ block. `choose_file` (pure filename selection) and `read_table`'s .txt branch (p
 
 from __future__ import annotations
 
+import _common
 import polars as pl
 import susb_layout as m
 
@@ -167,15 +168,17 @@ def test_module_docstring_states_the_real_state_count_not_the_national_row_infla
 
 
 def test_html_title_reads_the_real_root_index_title():
-    assert m.html_title(ROOT_INDEX_HTML.encode()) == "index of /programs-surveys/susb/tables"
+    assert _common.html_title(ROOT_INDEX_HTML.encode()) == "index of /programs-surveys/susb/tables"
 
 
 def test_html_title_reads_the_real_year_dir_title():
-    assert m.html_title(YEAR_DIR_HTML.encode()) == "index of /programs-surveys/susb/tables/2022"
+    assert (
+        _common.html_title(YEAR_DIR_HTML.encode()) == "index of /programs-surveys/susb/tables/2022"
+    )
 
 
 def test_html_title_returns_empty_string_when_no_title_tag():
-    assert m.html_title(b"<html><body>no title here</body></html>") == ""
+    assert _common.html_title(b"<html><body>no title here</body></html>") == ""
 
 
 def test_is_directory_listing_true_for_the_real_root_index_page():

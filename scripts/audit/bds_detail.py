@@ -48,7 +48,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 
 import _common as c
 import httpx
@@ -58,25 +57,12 @@ BASE = "https://api.census.gov/data/timeseries/bds"
 CANDIDATES = ("11", "113", "1133", "11331", "113310")
 WANTED_VARS = ("ESTAB", "FIRM", "JOB_CREATION", "JOB_DESTRUCTION", "ESTABS_ENTRY", "ESTABS_EXIT")
 
-_TITLE_RE = re.compile(rb"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
 
 # Only these two `classify_probe_body` outcomes are evidence of a credential problem
 # specifically -- see `zero_answer_cause`. Any other non-"ok" outcome (204's genuine empty
 # match, a maintenance page, a rate-limit interstitial, a malformed body) must fall through to
 # the generic cause instead.
 _AUTH_REJECTION_OUTCOMES = frozenset({"invalid_key", "missing_key"})
-
-
-def html_title(body: bytes) -> str:
-    """The HTML `<title>` text, lowercased and stripped, or `""` if there isn't one (including
-    when `body` isn't HTML at all). Case-insensitive on the tag itself (`<TITLE>` matches too).
-    Same approach as `cbp_metadata.py`'s function of the same name -- audit scripts are
-    standalone PEP 723 files with no import between them, so this is a deliberate duplicate of
-    that approach, not a divergence from it."""
-    match = _TITLE_RE.search(body)
-    if not match:
-        return ""
-    return match.group(1).decode("utf-8", "replace").strip().lower()
 
 
 def classify_probe_body(status: int, content_type: str, body: bytes) -> tuple[str, list | None]:
@@ -120,7 +106,7 @@ def classify_probe_body(status: int, content_type: str, body: bytes) -> tuple[st
     if status == 204:
         return "no_content", None
     if "json" not in content_type.lower():
-        title = html_title(body)
+        title = c.html_title(body)
         if title == "invalid key":
             return "invalid_key", None
         if title == "missing key":

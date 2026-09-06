@@ -77,21 +77,8 @@ RECORD_LAYOUT_URL = (
 )
 TARGETS = ("us_state_naics_detailedsizes", "us_state_6digitnaics")
 
-_TITLE_RE = re.compile(rb"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
-
 
 # --- directory-listing parsing ----------------------------------------------------------------
-
-
-def html_title(body: bytes) -> str:
-    """The HTML `<title>` text, lowercased and stripped, or `""` if there isn't one. Same
-    approach as `cbp_metadata.py`'s and `bds_detail.py`'s function of the same name -- audit
-    scripts are standalone PEP 723 files with no import between them, so this is a deliberate
-    duplicate of that approach, not a divergence from it."""
-    match = _TITLE_RE.search(body)
-    if not match:
-        return ""
-    return match.group(1).decode("utf-8", "replace").strip().lower()
 
 
 def is_directory_listing(body: bytes) -> bool:
@@ -103,7 +90,7 @@ def is_directory_listing(body: bytes) -> bool:
     `filenames` a body to regex-search, silently yielding a plausible-but-wrong year or file
     list. This does not defend against every such body (a coincidentally matching title would
     still pass), but it catches the shape of failure the task names."""
-    return html_title(body).startswith("index of")
+    return c.html_title(body).startswith("index of")
 
 
 def year_dirs(html: str) -> list[int]:
@@ -432,7 +419,7 @@ def main() -> None:
     if not is_directory_listing(root.content):
         raise RuntimeError(
             f"SUSB tables root at {ROOT} did not return a directory-listing page (title: "
-            f"{html_title(root.content)!r}); refusing to parse year links from unexpected "
+            f"{c.html_title(root.content)!r}); refusing to parse year links from unexpected "
             "content"
         )
     extracts.append(c.record_extract(SOURCE, ROOT, "tables_index.html", root.content))
@@ -446,7 +433,7 @@ def main() -> None:
     if not is_directory_listing(ylist.content):
         raise RuntimeError(
             f"SUSB year directory at {ydir} did not return a directory-listing page (title: "
-            f"{html_title(ylist.content)!r}); refusing to parse file links from unexpected "
+            f"{c.html_title(ylist.content)!r}); refusing to parse file links from unexpected "
             "content"
         )
     extracts.append(c.record_extract(SOURCE, ydir, f"{latest}_index.html", ylist.content))

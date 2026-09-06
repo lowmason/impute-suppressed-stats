@@ -77,23 +77,23 @@ TABULAR_BODY = (
 
 
 def test_html_title_reads_the_missing_key_page():
-    assert m.html_title(MISSING_KEY_PREFIX) == "missing key"
+    assert _common.html_title(MISSING_KEY_PREFIX) == "missing key"
 
 
 def test_html_title_reads_the_invalid_key_page():
-    assert m.html_title(INVALID_KEY_PREFIX) == "invalid key"
+    assert _common.html_title(INVALID_KEY_PREFIX) == "invalid key"
 
 
 def test_html_title_is_case_insensitive_on_the_tag_itself():
-    assert m.html_title(b"<TITLE>Server Error</TITLE>") == "server error"
+    assert _common.html_title(b"<TITLE>Server Error</TITLE>") == "server error"
 
 
 def test_html_title_returns_empty_string_when_no_title_tag():
-    assert m.html_title(b"<html><body>no title here</body></html>") == ""
+    assert _common.html_title(b"<html><body>no title here</body></html>") == ""
 
 
 def test_html_title_returns_empty_string_on_non_html_bytes_not_a_crash():
-    assert m.html_title(b"\x00\x01\x02 not html at all") == ""
+    assert _common.html_title(b"\x00\x01\x02 not html at all") == ""
 
 
 # --- classify_data_body -----------------------------------------------------------------------
