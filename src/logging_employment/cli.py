@@ -380,25 +380,64 @@ def reconcile_command(
         raise typer.Exit(code=1)
 
 
+def _estimator_override(estimators: str | None) -> dict[str, list[str]] | None:
+    """`--estimators a,b` parsed, checked against §10's registry, and canonicalised for the run id.
+
+    Returns the mapping `run_id` folds into its payload, or `None` when no subset was asked for.
+    `None` is what keeps this option cheap: `run_id` omits the key entirely, so an un-overridden
+    run hashes exactly as it did before the option existed and not one run directory on disk was
+    renumbered by adding it.
+
+    The ids come back in REGISTRY order, so `a,b` and `b,a` name ONE run rather than two
+    directories holding byte-identical outputs. Raises `ConceptViolationError` on an unknown,
+    repeated, or empty subset; the caller turns that into `typer.BadParameter`.
+    """
+    from .baselines.runner import resolve_estimators
+
+    if estimators is None:
+        return None
+    names = [name.strip() for name in estimators.split(",") if name.strip()]
+    return {"estimators": [estimator.estimator_id for estimator in resolve_estimators(names)]}
+
+
 @app.command("validate")
 def validate_command(
     config: Path = typer.Option(..., "--config", exists=True, dir_okay=False),
+    estimators: str = typer.Option(
+        None,
+        "--estimators",
+        help=(
+            "Comma-separated §10 estimator ids to score, e.g. "
+            "'establishment_proportional,share_last_observed'. Omit for the full registry. "
+            "A subset changes the run id, so it gets its own run directory rather than "
+            "overwriting a full pass's metrics."
+        ),
+    ),
 ) -> None:
     """Run §13's pseudo-suppression harness and persist its metrics and scoreboard."""
     import json
 
-    from .baselines.runner import REGISTRY
+    from .baselines.runner import resolve_estimators
     from .build import write_parquet_deterministic
     from .contracts import VALIDATION_METRIC_SCHEMA, HarmonizedData, validate_frame
+    from .errors import ConceptViolationError
     from .runs import run_dir, run_id
     from .validate.harness import run_pseudo_suppression
 
+    # Resolved BEFORE the staged layer is read, so a mistyped id costs a message rather than a
+    # table load, and `typer.BadParameter` reports it the way every other bad option is reported.
+    try:
+        override = _estimator_override(estimators)
+    except ConceptViolationError as error:
+        raise typer.BadParameter(str(error), param_hint="--estimators") from error
+    chosen = resolve_estimators(None if override is None else override["estimators"])
+
     cfg = load_config(config)
     data = HarmonizedData.load(Path(cfg.storage.staged_uri))
-    run = run_dir(cfg, run_id(cfg, _input_digests(cfg)))
+    run = run_dir(cfg, run_id(cfg, _input_digests(cfg), overrides=override))
     run.mkdir(parents=True, exist_ok=True)
 
-    result = run_pseudo_suppression(data, REGISTRY, cfg)
+    result = run_pseudo_suppression(data, chosen, cfg)
 
     # The declared schema is made load-bearing here rather than left as documentation: Task 2
     # declares VALIDATION_METRIC_SCHEMA and §15.1 item 5 names the file, but nothing gated the
@@ -418,7 +457,14 @@ def validate_command(
             result.scoreboard, run / "validation_scoreboard.parquet"
         ),
     }
-    manifest = {**result.manifest, "output_hashes": hashes}
+    # Recorded at the TOP level, not only per regime. A reader asking "what did this run score"
+    # should not have to open thirteen regime entries and intersect them, and `runs/<id>/` carries
+    # no `config.resolved.yaml` for a `validate` run to state it instead.
+    manifest = {
+        **result.manifest,
+        "estimators": [estimator.estimator_id for estimator in chosen],
+        "output_hashes": hashes,
+    }
     (run / "validation_manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True))
     for regime, entry in sorted(result.manifest["regimes"].items()):
         typer.echo(f"{regime} {entry['disposition']} scored={entry['n_scored']}")

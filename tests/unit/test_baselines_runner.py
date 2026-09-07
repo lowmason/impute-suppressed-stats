@@ -9,6 +9,7 @@ from logging_employment.baselines.runner import (
     FALLBACK_ORDER,
     REGISTRY,
     preferred_estimator,
+    resolve_estimators,
     run_baselines,
 )
 from logging_employment.contracts import (
@@ -312,3 +313,47 @@ def test_run_baselines_accepts_an_estimator_subset(harmonized_toy, appendix_a_co
 def test_run_baselines_defaults_to_the_full_registry(harmonized_toy, appendix_a_config) -> None:
     results, _audit = run_baselines(harmonized_toy, appendix_a_config)
     assert results["estimator_id"].n_unique() == len(REGISTRY)
+
+
+def test_resolve_estimators_defaults_to_the_full_registry() -> None:
+    """No subset asked for means §10's whole registry, not nothing."""
+    assert resolve_estimators(None) == REGISTRY
+
+
+def test_resolve_estimators_returns_registry_order_whatever_order_it_is_given() -> None:
+    """Two orderings of one subset must resolve identically, so they cannot fork the run id.
+
+    `run_id` hashes the ids it is handed, so if they round-tripped in the order someone typed,
+    `--estimators a,b` and `--estimators b,a` would land in two directories holding byte-identical
+    outputs. Canonicalising here makes the subset a SET, which is what it means.
+    """
+    typed = ["share_last_observed", "equal_residual"]
+    assert resolve_estimators(typed) == resolve_estimators(list(reversed(typed)))
+    assert [e.estimator_id for e in resolve_estimators(typed)] == [
+        "equal_residual",
+        "share_last_observed",
+    ]
+
+
+def test_resolve_estimators_refuses_an_unknown_id() -> None:
+    """Fail closed, and name both the offender and the alternatives.
+
+    An unknown id filtered out would leave a smaller subset -- or an empty one whose manifest
+    reads `scored=0`, the empty-partition-as-success this stage refuses everywhere else.
+    """
+    with pytest.raises(ConceptViolationError) as excinfo:
+        resolve_estimators(["share_last_observed", "no_such_estimator"])
+    assert "no_such_estimator" in str(excinfo.value)
+    assert "share_last_observed" in str(excinfo.value)
+
+
+def test_resolve_estimators_refuses_an_empty_subset() -> None:
+    """`[]` is a request to score nothing, not a spelling of the default."""
+    with pytest.raises(ConceptViolationError):
+        resolve_estimators([])
+
+
+def test_resolve_estimators_refuses_a_repeated_id() -> None:
+    """A duplicate would run the estimator twice and double every denominator built on its rows."""
+    with pytest.raises(ConceptViolationError):
+        resolve_estimators(["equal_residual", "equal_residual"])
