@@ -141,3 +141,45 @@ def apply_mask(
         .drop("_label")
     )
     return dataclasses.replace(data, qcew_monthly=masked), truth
+
+
+def apply_size_mask(
+    data: HarmonizedData, reference_month: str, size_classes: Sequence[str]
+) -> tuple[HarmonizedData, pl.DataFrame]:
+    """Hide national size classes in one March margin.
+
+    This is the arm on which §13.2 steps 3 and 6 have identification content: a March margin is a
+    genuine multi-cell component, so masking one class is recoverable by subtraction and masking
+    two is not.
+
+    NOTE THE COLUMN NAMES. `qcew_national_size` does NOT share `qcew_monthly`'s vocabulary: it uses
+    `size_class`, `employment` and `establishments` where the monthly table uses `size_code`,
+    `employment_value` and `qtrly_establishments`, and it carries no `employment_raw`,
+    `wages_raw` or `is_published_numeric_zero`. Writing the monthly names here silently masks
+    nothing — the filter matches zero rows.
+    """
+    size = data.qcew_national_size
+    selector = (
+        (pl.col("reference_month") == reference_month)
+        & (pl.col("industry_code") == "113310")
+        & pl.col("size_class").is_in(list(size_classes))
+    )
+    chosen = size.filter(selector)
+    if chosen.height != len(size_classes):
+        raise ConceptViolationError(
+            f"{len(size_classes)} size classes requested, {chosen.height} matched in "
+            f"{reference_month}"
+        )
+    truth = chosen.select("reference_month", "size_class", pl.col("employment").alias("truth"))
+    masked = size.with_columns(
+        pl.when(selector).then(None).otherwise(pl.col("employment")).alias("employment"),
+        pl.when(selector)
+        .then(pl.lit("N"))
+        .otherwise(pl.col("disclosure_code"))
+        .alias("disclosure_code"),
+        pl.when(selector)
+        .then(pl.lit("suppressed"))
+        .otherwise(pl.col("observation_status"))
+        .alias("observation_status"),
+    )
+    return dataclasses.replace(data, qcew_national_size=masked), truth

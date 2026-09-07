@@ -16,9 +16,10 @@ import polars as pl
 
 from ..config import Config
 from ..constraints.bounds import solve_bounds
+from ..constraints.cells import KIND_NATIONAL_SIZE
 from ..constraints.system import build_constraint_system
 from ..contracts import HarmonizedData
-from .mask import MaskTarget, apply_mask
+from .mask import MaskTarget, apply_mask, apply_size_mask
 
 
 @dataclass(frozen=True)
@@ -68,3 +69,44 @@ def is_exactly_recoverable(bounds: pl.DataFrame, cell_id: str) -> bool:
     if row.height == 0:
         raise KeyError(f"{cell_id!r} is not in this system's bounds")
     return row["bound_status"].item() == "exactly_recoverable"
+
+
+def mask_and_solve_size(
+    data: HarmonizedData, reference_month: str, *, n_classes: int, seed: int, config: Config
+) -> tuple[MaskedSystem, str]:
+    """Mask `n_classes` observed size classes in one March and solve. Returns the first cell_id.
+
+    `solve_bounds` MAY raise: flipping a size cell to suppressed ADDS a hard `size_support` range
+    row (`rows.size_support_rows` fires only for suppressed classes), so a mask on this arm can
+    make the component infeasible. That is a legitimate outcome of a legitimate mask and the
+    harness records it rather than crashing the run.
+    """
+    size = data.qcew_national_size.filter(
+        (pl.col("industry_code") == "113310")
+        & (pl.col("reference_month") == reference_month)
+        & (pl.col("observation_status") == "observed")
+    )
+    drawn = size.sample(n=n_classes, with_replacement=False, shuffle=True, seed=seed)
+    codes = drawn["size_class"].to_list()
+    masked, truth = apply_size_mask(data, reference_month, codes)
+    built = build_constraint_system(masked, config)
+    result = solve_bounds(built, config.constraints)
+    # Looked up on the cells table's own key columns, NOT matched by substring on `cell_id`.
+    # `cell_id` is a pipe-separated key whose fields include "113310" and "NAICS 2017", so
+    # `str.contains(size_class)` on a one-character class matches every cell in the month —
+    # measured, that returned 6 rows where 1 was wanted.
+    candidates = built.cells.filter(
+        (pl.col("cell_id").str.starts_with(f"{KIND_NATIONAL_SIZE}|"))
+        & (pl.col("reference_month") == reference_month)
+        & (pl.col("size_class") == codes[0])
+    )
+    if candidates.height != 1:
+        raise KeyError(
+            f"{KIND_NATIONAL_SIZE} {reference_month}/{codes[0]} matched {candidates.height} "
+            "cells; exactly one was expected"
+        )
+    target_id = candidates["cell_id"].item()
+    return (
+        MaskedSystem(result.bounds, result.components, built.constraint_set_hash, truth),
+        target_id,
+    )
