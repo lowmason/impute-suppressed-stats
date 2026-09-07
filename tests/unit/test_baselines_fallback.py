@@ -10,7 +10,9 @@ from logging_employment.baselines.fallback import (
     FALLBACK_INTENSITIES,
     NATIONAL_CBP_MARCH,
     declared_fallback,
+    disclosed_intensity,
     establishment_fallback,
+    national_cbp_march_intensity,
     resolve_intensity,
 )
 from logging_employment.baselines.harvest import HarvestProportional
@@ -21,7 +23,7 @@ from logging_employment.baselines.regression import ConstrainedRegression
 from logging_employment.baselines.runner import REGISTRY
 from logging_employment.baselines.simple import EqualAllocation, establishment_weights
 from logging_employment.errors import ConceptViolationError
-from logging_employment.reconcile.anchor import national_residual, observed_partition
+from logging_employment.reconcile.anchor import Partition, national_residual, observed_partition
 
 COMPOSING_IDS = {
     "share_last_observed",
@@ -179,3 +181,64 @@ def test_an_estimator_that_declares_no_intensity_cannot_build_a_fallback_arm(
     context, anchor = _context_and_anchor(monthly, appendix_a_config)
     with pytest.raises(ConceptViolationError, match="fallback_intensity"):
         declared_fallback(estimator, context, anchor)
+
+
+def test_the_disclosed_intensity_refuses_a_partition_that_is_not_the_anchors(
+    make_monthly, appendix_a_config
+) -> None:
+    """T-5 / R-COMP-8. The residual and the intensity are two readings of one disclosed set.
+
+    A Stage 4 harness that masks a cell for the anchor but hands the estimator the unmasked
+    partitions would scale the fallback off a disclosed set the residual was never computed over.
+    Nothing signals that: both numbers are positive and the month still sums to R_t.
+    """
+    monthly = _panel(make_monthly)
+    partitions = observed_partition(monthly)
+    anchor = national_residual(monthly, partitions["2024-03"], reference_month="2024-03")
+
+    march = partitions["2024-03"]
+    states = monthly.filter(pl.col("area_type") == "state")
+    masked = {
+        "2024-03": Partition(
+            disclosed=march.disclosed.filter(pl.col("state_fips") != "01"),
+            missing=states.filter(pl.col("state_fips").is_in(["01", "02"])),
+        )
+    }
+    stale = EstimatorContext(
+        monthly=monthly, cbp=pl.DataFrame(), partitions=masked, config=appendix_a_config
+    )
+    with pytest.raises(ConceptViolationError, match="one partition"):
+        disclosed_intensity(stale, anchor)
+
+
+def test_the_disclosed_intensity_accepts_the_partition_the_anchor_came_from(
+    make_monthly, appendix_a_config
+) -> None:
+    """The other half: agreement is the normal case and must not raise."""
+    monthly = _panel(make_monthly)
+    context, anchor = _context_and_anchor(monthly, appendix_a_config)
+    assert disclosed_intensity(context, anchor) == pytest.approx(10.0)
+
+
+def test_the_national_cbp_intensity_reads_no_partition_and_is_unaffected(
+    make_monthly, appendix_a_config
+) -> None:
+    """R-COMP-8 binds the intensity DERIVED FROM THE DISCLOSED SET. §10.4's is derived from CBP,
+    so the same stale context leaves it untouched -- the check is placed where it can bite."""
+    monthly = _panel(make_monthly)
+    cbp = _cbp()
+    partitions = observed_partition(monthly)
+    anchor = national_residual(monthly, partitions["2024-03"], reference_month="2024-03")
+    states = monthly.filter(pl.col("area_type") == "state")
+    stale = EstimatorContext(
+        monthly=monthly,
+        cbp=cbp,
+        partitions={
+            "2024-03": Partition(
+                disclosed=partitions["2024-03"].disclosed.filter(pl.col("state_fips") != "01"),
+                missing=states,
+            )
+        },
+        config=appendix_a_config,
+    )
+    assert national_cbp_march_intensity(stale, anchor) == pytest.approx(7.0)

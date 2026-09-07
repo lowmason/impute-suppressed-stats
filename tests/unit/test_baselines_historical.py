@@ -14,7 +14,12 @@ from logging_employment.baselines.historical import (
     observed_share_history,
 )
 from logging_employment.baselines.interfaces import FALLBACK, OWN, EstimatorContext
-from logging_employment.reconcile.anchor import Anchor, Partition, observed_partition
+from logging_employment.reconcile.anchor import (
+    Anchor,
+    Partition,
+    national_residual,
+    observed_partition,
+)
 
 ALL_FIVE = [
     LastObservedShare,
@@ -96,9 +101,14 @@ def test_a_state_with_no_observed_history_takes_the_declared_fallback(
     employees-per-establishment, so it can be merged with an own arm that is a predicted
     employment level. Derived from the fixture below rather than typed: at 2024-03 the only
     disclosed cell is state 01 with 43 employees over 4 establishments.
+
+    The anchor comes from `national_residual` rather than being typed, because R-COMP-8 requires
+    the intensity and the residual to come from one partition and refuses them when they do not.
     """
     monthly = _history(make_monthly)
-    anchor = Anchor("2024-03", 50.0, ("02",), "declared_national_total")
+    partitions = observed_partition(monthly)
+    anchor = national_residual(monthly, partitions["2024-03"], reference_month="2024-03")
+    assert anchor.missing_cells == ("02",)
     out = cls().weights(_context(monthly, appendix_a_config), anchor)
     assert out.basis["02"] == FALLBACK
     assert out.values["02"] == pytest.approx(6.0 * (43 / 4))
@@ -264,12 +274,19 @@ def test_the_history_comes_from_the_partition_not_from_observation_status(
     )
     states = monthly.filter(pl.col("area_type") == "state")
     feb = states.filter(pl.col("reference_month") == "2024-02")
+    march = states.filter(pl.col("reference_month") == "2024-03")
     masked = {
         "2024-02": Partition(
             disclosed=feb.filter(pl.col("state_fips") == "02"),
             missing=feb.filter(pl.col("state_fips") == "01"),
         ),
-        "2024-03": observed_partition(monthly)["2024-03"],
+        # The mask holds state 01 out in the anchor month too. Leaving 2024-03 unmasked made the
+        # fixture describe a mask it did not apply: the anchor's residual was typed while the
+        # partition said the missing set was empty, which R-COMP-8 now refuses.
+        "2024-03": Partition(
+            disclosed=march.filter(pl.col("state_fips") == "02"),
+            missing=march.filter(pl.col("state_fips") == "01"),
+        ),
     }
     context = EstimatorContext(
         monthly=monthly, cbp=pl.DataFrame(), partitions=masked, config=appendix_a_config
@@ -284,9 +301,9 @@ def test_the_history_comes_from_the_partition_not_from_observation_status(
         vintage="NAICS 2022",
     )
     assert history["share"].to_list() == []
-    out = LastObservedShare().weights(
-        context, Anchor("2024-03", 400.0, ("01",), "declared_national_total")
-    )
+    anchor = national_residual(monthly, masked["2024-03"], reference_month="2024-03")
+    assert anchor.residual == pytest.approx(400.0)
+    out = LastObservedShare().weights(context, anchor)
     assert out.basis["01"] == FALLBACK
 
 

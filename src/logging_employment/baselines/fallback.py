@@ -25,13 +25,14 @@ raise anyway.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 
 import polars as pl
 
 from ..errors import ConceptViolationError
 from ..reconcile.allocate import Weights
-from ..reconcile.anchor import Anchor
+from ..reconcile.anchor import Anchor, national_residual
 from .interfaces import Decline, EmployeeWeights, Estimator, EstimatorContext, compose, usable_own
 from .simple import establishment_weights
 
@@ -72,6 +73,32 @@ def national_march_intensity(cbp: pl.DataFrame, *, reference_year: int) -> float
     return float(rows["employment"].sum()) / establishments
 
 
+def _assert_the_partition_is_the_anchors(context: EstimatorContext, anchor: Anchor) -> None:
+    """Refuse an intensity derived from a partition other than the one the residual came from.
+
+    §12.2's residual and this intensity are two readings of one disclosed set. The intensity looks
+    its partition up in the context while the residual arrives on the anchor, and under a §13.2
+    pseudo-suppression mask the two agree only if the harness rebuilt `EstimatorContext.partitions`
+    from the same mask it handed the anchor. Recomputing the residual is what makes that a refusal
+    rather than a hope: same partition, same residual, by construction.
+
+    SCOPE. This witnesses the DISCLOSED side, which is the side the intensity reads. It says
+    nothing about the missing set, deliberately -- `allocate.check_domain` already refuses a weight
+    vector whose domain is not the missing set, and asserting it here as well would refuse the
+    hand-built anchors that several unit tests use to drive one cell at a time.
+    """
+    partition = context.partitions[anchor.reference_month]
+    implied = national_residual(context.monthly, partition, reference_month=anchor.reference_month)
+    if not math.isclose(implied.residual, anchor.residual, rel_tol=1e-9, abs_tol=1e-9):
+        raise ConceptViolationError(
+            f"{anchor.reference_month}: the context's partition implies a residual of "
+            f"{implied.residual:.6g} but the anchor carries {anchor.residual:.6g}. The intensity "
+            "that scales the fallback arm and the residual that arm is allocated against must "
+            "come from one partition, or a mask moves one without moving the other and every "
+            "value stays positive while the month still sums to the residual"
+        )
+
+
 def disclosed_intensity(context: EstimatorContext, anchor: Anchor) -> float | None:
     """Published employees per establishment across this month's disclosed cells.
 
@@ -80,7 +107,11 @@ def disclosed_intensity(context: EstimatorContext, anchor: Anchor) -> float | No
     stays positive and well defined when R_t is 0 -- a degenerate case §12.3 requires to succeed.
     `None` when the disclosed set carries no establishments, which leaves the caller to fall back
     to an empty arm rather than divide by zero.
+
+    Refuses outright when the context's partition is not the one the anchor's residual came from
+    (R-COMP-8).
     """
+    _assert_the_partition_is_the_anchors(context, anchor)
     disclosed = context.partitions[anchor.reference_month].disclosed
     establishments = float(disclosed["qtrly_establishments"].fill_null(0).sum())
     if establishments <= 0.0:
