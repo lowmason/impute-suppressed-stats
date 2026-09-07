@@ -10,7 +10,7 @@
 
 **Tech Stack:** Python 3.14, Polars, pytest, ruff/black (line length 100), `uv` for execution.
 
-**Spec:** `specs/break-adjusted-share-refusal.md`. Read it before Task 2 — the requirement labels (R-BREAK-1 … R-BREAK-5) and test labels (T-1 … T-8) below refer to its sections.
+**Spec:** `specs/completed/break-adjusted-share-refusal.md` (retired with this plan). Read it before Task 2 — the requirement labels (R-BREAK-1 … R-BREAK-5) and test labels (T-1 … T-8) below refer to its sections.
 
 ## Global Constraints
 

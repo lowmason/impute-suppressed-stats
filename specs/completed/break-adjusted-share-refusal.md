@@ -4,7 +4,9 @@
 
 # The break-adjusted share refuses a degenerate cut
 
-**Status:** design-approved, awaiting plan
+**Status:** COMPLETE (2026-09-07) — implemented by
+`specs/plans/completed/10-break-adjusted-share-refusal.md`; R-BREAK-1 through R-BREAK-5
+shipped, and §4's prediction held: `baseline_results_golden.parquet` is byte-identical
 
 **Closes:** `specs/deferred_items.md` — ``BreakAdjustedShare`'s `<4` fallback is a design choice
 nobody chose`. This is the surviving third of the D1 triage group; its other two items became
