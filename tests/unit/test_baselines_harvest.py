@@ -34,6 +34,7 @@ def test_the_harvest_baseline_declines_rather_than_fabricating_a_factor(
     anchor = Anchor("2024-03", 40.0, ("01",), "declared_national_total")
     out = HarvestProportional().weights(context, anchor)
     assert isinstance(out, Decline)
+    assert out.kind == "by_design"
     assert "harvest" in out.reason.lower()
     assert "Stage 7" in out.reason
 
@@ -65,4 +66,5 @@ def test_the_decline_is_a_pass_for_the_run_every_baseline_criterion(
         context, Anchor("2024-03", 40.0, ("01",), "declared_national_total")
     )
     assert isinstance(out, Decline)
+    assert out.kind == "by_design"
     assert out.reason  # a decline always carries a reason a reader can act on

@@ -40,5 +40,8 @@ class HarvestProportional:
                 "source. Stage 7 supplies the harvest factor; until then §10.5 declines rather "
                 "than allocating on a substitute proxy that would be scored as if it were this "
                 "baseline"
-            )
+            ),
+            # The archetype of `by_design`: §10.5 refuses, and no vintage of the inputs it does
+            # have would change that. Stage 7 replaces the refusal, not the data.
+            kind="by_design",
         )

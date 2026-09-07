@@ -47,6 +47,7 @@ from typing import Protocol
 import polars as pl
 
 from ..config import Config
+from ..contracts import DECLINE_KINDS
 from ..errors import ConceptViolationError, WeightDomainError
 from ..reconcile.allocate import Weights
 from ..reconcile.anchor import Anchor, Partition
@@ -76,9 +77,24 @@ class EmployeeWeights:
 
 @dataclass(frozen=True)
 class Decline:
-    """A baseline's refusal to run for a month, carrying the reason a reader needs."""
+    """A baseline's refusal to run for a month, carrying the reason AND the kind of refusal.
+
+    `reason` is free text a reader acts on. `kind` is the closed set a scoreboard groups on: a
+    month that leaves the scored set because an input was missing biases a point-metric comparison
+    in a way an estimator's considered refusal does not, and prose cannot be grouped. The kind is
+    required rather than defaulted, so no code path can produce a decline without one.
+    """
 
     reason: str
+    kind: str
+
+    def __post_init__(self) -> None:
+        """Refuse a decline whose kind is outside the declared set."""
+        if self.kind not in DECLINE_KINDS:
+            raise ConceptViolationError(
+                f"decline_kind {self.kind!r} is outside the declared set {list(DECLINE_KINDS)}; "
+                "every decline reaches baseline_results.parquet and §13's scoreboard groups on it"
+            )
 
 
 @dataclass(frozen=True)
@@ -155,7 +171,10 @@ def compose(
             reason=(
                 "baselines.allow_declared_composite is false and this estimator has no own weight "
                 f"for {sorted(gaps)}"
-            )
+            ),
+            # `by_design`, not `data_gap`: the fallback arm exists and covers these cells, and the
+            # run is configured to refuse composing with it. Nothing about the inputs is absent.
+            kind="by_design",
         )
 
     uncovered = [cell for cell in gaps if fallback.values.get(cell, 0.0) <= 0.0]

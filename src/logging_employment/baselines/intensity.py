@@ -95,7 +95,8 @@ class CbpIntensity:
                     f"CBP publishes no reference year {reference_year}; §10.4's estimator is a "
                     "year-specific March intensity, and carrying an earlier year forward would be "
                     "an assumption this baseline does not make"
-                )
+                ),
+                kind="data_gap",
             )
         intensity = march_intensity(context.cbp, reference_year=reference_year)
         national = national_march_intensity(context.cbp, reference_year=reference_year)
@@ -105,7 +106,8 @@ class CbpIntensity:
                 reason=(
                     f"CBP reference year {reference_year} publishes no usable establishment "
                     "count, so neither a state intensity nor its national limit exists"
-                )
+                ),
+                kind="data_gap",
             )
         own = {
             cell: intensity[cell] * exposure[cell]
