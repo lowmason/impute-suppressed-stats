@@ -513,7 +513,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       two values were never far apart (disclosed 5.442-6.380, national 5.914-6.139) — this was an
       unexplained divergence in a layer Stage 4 is about to score, not a numerical error.
 
-- [ ] **`disclosed_intensity` reads the partition from the context while the residual comes from
+- [x] **`disclosed_intensity` reads the partition from the context while the residual comes from
       the anchor.** `baselines/simple.py` looks up `context.partitions[anchor.reference_month]`,
       but `national_residual` was handed a `Partition` argument directly. Under a Stage 4
       pseudo-suppression mask the two agree only if the harness rebuilds
@@ -533,6 +533,18 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       the same mask it hands the anchor, or every composing estimator now fails closed on it.
       §10.9 of `specs/logging-employment-spec.md` states that requirement; Stage 4's plan closes
       this item and should record that plan 9 supplied it.
+      **→ done in plan 11 (2026-09-07).** Closed STRUCTURALLY rather than by assertion, which is
+      stronger than the option this item asked for. Plan 11's harness never builds an
+      `EstimatorContext` or a `Partition` at all: `validate/mask.py::apply_mask` masks the FRAME
+      and returns a new `HarmonizedData`, and `run_baselines` derives both the partition and the
+      anchor from that single object (`baselines/runner.py:110-119`). There is no second object to
+      disagree with, so the mismatch is unconstructible rather than merely checked. Plan 11's
+      evidence §3 measured why the alternative fails: a Partition-only mask leaves the constraint
+      system fixing the answer (`bound_status='observed'`, an `eq` row at the held-out value) AND
+      leaves the truth in `context.partitions[m].missing["employment_value"]`, one column read from
+      any estimator — latent today only because none of the ten happens to read it. Pinned by
+      `tests/integration/test_validate_leakage.py::test_the_partition_the_runner_derives_carries_no_held_out_truth`,
+      which fails the moment anything reintroduces a partition built from unmasked data.
 
 - [ ] **The `general_method` guard lives at the CLI, not in the reconciliation layer.**
       `require_supported_method` is exported from `reconcile.projection` but is called only where
