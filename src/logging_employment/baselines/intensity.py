@@ -40,7 +40,7 @@ import polars as pl
 
 from ..reconcile.allocate import Weights
 from ..reconcile.anchor import Anchor
-from .interfaces import Decline, EstimatorContext, compose
+from .interfaces import Decline, EmployeeWeights, EstimatorContext, compose
 from .simple import establishment_weights
 
 DEFAULT_SHRINK_STRENGTH = 5.0
@@ -129,5 +129,8 @@ class CbpIntensity:
         # Both arms in employees: the fallback is the shrinkage limit, not a bare exposure count.
         fallback = {cell: national * value for cell, value in exposure.items()}
         return compose(
-            own, fallback, anchor, allowed=context.config.baselines.allow_declared_composite
+            EmployeeWeights(own),
+            EmployeeWeights(fallback),
+            anchor,
+            allowed=context.config.baselines.allow_declared_composite,
         )

@@ -27,7 +27,7 @@ import polars as pl
 
 from ..reconcile.allocate import Weights
 from ..reconcile.anchor import Anchor
-from .interfaces import Decline, EstimatorContext, compose
+from .interfaces import Decline, EmployeeWeights, EstimatorContext, compose
 from .simple import establishment_fallback_in_employees, establishment_weights
 
 MINIMUM_TRAINING_ROWS = 3
@@ -74,8 +74,8 @@ class ConstrainedRegression:
             # Not a decline: the declared fallback covers it, and a two-point fit would be noise
             # dressed as a model.
             return compose(
-                {},
-                establishment_fallback_in_employees(context, anchor),
+                EmployeeWeights({}),
+                EmployeeWeights(establishment_fallback_in_employees(context, anchor)),
                 anchor,
                 allowed=context.config.baselines.allow_declared_composite,
             )
@@ -91,8 +91,8 @@ class ConstrainedRegression:
         # exposure covers every missing cell and no gap arises, but a raw-A fallback here would be
         # the same units bug §10.3 and §10.4 carried, waiting for the first month that has one.
         return compose(
-            own,
-            establishment_fallback_in_employees(context, anchor),
+            EmployeeWeights(own),
+            EmployeeWeights(establishment_fallback_in_employees(context, anchor)),
             anchor,
             allowed=context.config.baselines.allow_declared_composite,
         )

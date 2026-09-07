@@ -41,7 +41,7 @@ from typing import Protocol
 import polars as pl
 
 from ..config import Config
-from ..errors import WeightDomainError
+from ..errors import ConceptViolationError, WeightDomainError
 from ..reconcile.allocate import Weights
 from ..reconcile.anchor import Anchor, Partition
 
@@ -51,6 +51,25 @@ FALLBACK = "establishment_fallback"
 # A units tripwire, not a statistical threshold. Arms that genuinely share a unit sit within a
 # small factor of each other; the failure this exists to catch was four orders of magnitude.
 MAX_SCALE_RATIO = 100.0
+
+
+@dataclass(frozen=True)
+class EmployeeWeights:
+    """A weight vector in EMPLOYEES, claimed where it is constructed rather than inferred.
+
+    `allocate` normalizes the union of a composite's two arms, so a union of arms in different
+    units is decided entirely by whichever arm is numerically larger -- and the result is positive
+    in every cell and sums exactly to R_t, which is why review does not catch it. The claim is
+    made once, here, by whoever builds the vector; nothing re-derives it from the values.
+
+    NO POSITIVITY CHECK HERE, DELIBERATELY. `compose` reads a non-positive own weight as a cell
+    with no own signal and hands that cell to the fallback, which is behaviour §12.2 requires and
+    a test pins. Positivity is enforced by `allocate.check_domain` on the COMPOSED vector -- the
+    one that becomes estimates -- so validating it here would turn a legitimate fall-back into a
+    raise.
+    """
+
+    values: dict[str, float]
 
 
 @dataclass(frozen=True)
@@ -105,24 +124,46 @@ def _assert_comparable_scales(
         )
 
 
+def usable_own(own: EmployeeWeights, anchor: Anchor) -> dict[str, float]:
+    """The own weights `compose` will actually use: in the missing set, present, and positive.
+
+    Public so a caller can ask whether a fallback arm is needed at all before paying to build one.
+    Duplicating this predicate at a call site would let "needs a fallback" and "took the fallback"
+    drift apart, which is the split `weight_basis` exists to report.
+    """
+    return {
+        cell: value
+        for cell, value in own.values.items()
+        if cell in anchor.missing_cells and value is not None and value > 0.0
+    }
+
+
 def compose(
-    own: dict[str, float],
-    fallback: dict[str, float],
+    own: EmployeeWeights,
+    fallback: EmployeeWeights,
     anchor: Anchor,
     *,
     allowed: bool,
 ) -> Weights | Decline:
     """Own weight where it is positive and finite, declared fallback elsewhere.
 
+    Both arms are `EmployeeWeights` and nothing else. A type annotation alone would not carry
+    that: nothing in this project runs a static type checker, so the refusal below is what stops
+    a plain `dict[str, float]` from impersonating an employees-valued arm at a call site.
+
     Raises `WeightDomainError` when the fallback itself cannot cover the gap: that is a data
-    problem, not an estimator's refusal, and it must not be reported as a decline. Raises it too
-    when the arms are not on a common scale, which is a units bug in the caller.
+    problem, not an estimator's refusal, and it must not be reported as a decline.
     """
-    usable = {
-        cell: value
-        for cell, value in own.items()
-        if cell in anchor.missing_cells and value is not None and value > 0.0
-    }
+    for name, arm in (("own", own), ("fallback", fallback)):
+        if not isinstance(arm, EmployeeWeights):
+            raise ConceptViolationError(
+                f"{anchor.reference_month}: compose's {name} arm is a {type(arm).__name__}, not "
+                "an EmployeeWeights. Both arms are employees-valued and the unit is carried by "
+                "the type: measured on D1, substituting a raw establishment count for the scaled "
+                "fallback shipped own-cell estimates up to 6.12x too large while every value "
+                "stayed positive and every month summed exactly to the residual"
+            )
+    usable = usable_own(own, anchor)
     gaps = [cell for cell in anchor.missing_cells if cell not in usable]
     if not gaps:
         return Weights(values=usable, basis=dict.fromkeys(usable, OWN))
@@ -135,13 +176,13 @@ def compose(
             )
         )
 
-    uncovered = [cell for cell in gaps if fallback.get(cell, 0.0) <= 0.0]
+    uncovered = [cell for cell in gaps if fallback.values.get(cell, 0.0) <= 0.0]
     if uncovered:
         raise WeightDomainError(
             f"{anchor.reference_month}: the establishment fallback cannot weight {sorted(uncovered)}"
         )
 
-    _assert_comparable_scales(usable, fallback, anchor)
-    values = dict(usable) | {cell: fallback[cell] for cell in gaps}
+    _assert_comparable_scales(usable, fallback.values, anchor)
+    values = dict(usable) | {cell: fallback.values[cell] for cell in gaps}
     basis = dict.fromkeys(usable, OWN) | dict.fromkeys(gaps, FALLBACK)
     return Weights(values=values, basis=basis)

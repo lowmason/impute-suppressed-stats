@@ -6,6 +6,6 @@ estimates. That is what makes §10's "same reconciliation layer as the full mode
 
 from __future__ import annotations
 
-from .interfaces import Decline, Estimator, EstimatorContext, compose
+from .interfaces import Decline, EmployeeWeights, Estimator, EstimatorContext, compose
 
-__all__ = ["Decline", "Estimator", "EstimatorContext", "compose"]
+__all__ = ["Decline", "EmployeeWeights", "Estimator", "EstimatorContext", "compose"]

@@ -41,7 +41,7 @@ import polars as pl
 
 from ..reconcile.allocate import Weights
 from ..reconcile.anchor import Anchor, Partition
-from .interfaces import Decline, EstimatorContext, compose
+from .interfaces import Decline, EmployeeWeights, EstimatorContext, compose
 from .simple import establishment_fallback_in_employees
 
 
@@ -152,8 +152,8 @@ class _ShareBaseline:
                 # Share -> employees, so both arms of the composite share a unit.
                 own[cell] = reduced * national
         return compose(
-            own,
-            establishment_fallback_in_employees(context, anchor),
+            EmployeeWeights(own),
+            EmployeeWeights(establishment_fallback_in_employees(context, anchor)),
             anchor,
             allowed=cfg.allow_declared_composite,
         )
