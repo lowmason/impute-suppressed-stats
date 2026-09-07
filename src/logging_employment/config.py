@@ -9,7 +9,7 @@ from typing import Literal
 
 import yaml
 from dotenv import dotenv_values
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 _MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
@@ -170,6 +170,53 @@ class DisclosureConfig(_Strict):
     narrow_interval_relative_width: float
 
 
+class ValidationConfig(_Strict):
+    """§13's harness settings, adapted from Appendix A.
+
+    `include_vintage_comparison` defaults False against Appendix A's True: measured 2026-09-07, no
+    period in any staged table carries a second snapshot, and `release_vintage` is the reference
+    quarter lowercased rather than a publication vintage. Turning it on is a fail-closed error in
+    `regimes.py`, not a silent empty partition.
+    """
+
+    pseudo_suppression_seeds: list[int] = [1024, 2048, 4096]
+    include_random_mask_sanity_check: bool = True
+    include_primary_like: bool = True
+    include_complementary_like: bool = True
+    include_long_runs: bool = True
+    include_rolling_origin: bool = True
+    include_retrospective_smoothing: bool = False
+    include_vintage_comparison: bool = False
+    replicates_per_regime: int = 20
+    minimum_unmasked_lookback_months: int = 6
+    minimum_missing_set_size: int = 2
+
+    @model_validator(mode="after")
+    def _refuse_a_random_mask_only_design(self) -> "ValidationConfig":
+        designed = (
+            self.include_primary_like
+            or self.include_complementary_like
+            or self.include_long_runs
+            or self.include_rolling_origin
+            or self.include_retrospective_smoothing
+            or self.include_vintage_comparison
+        )
+        if not designed:
+            raise ValueError(
+                "random_mask_only: §13.2 prohibits random masking as the ONLY validation design. "
+                "Enable at least one designed regime beside the random sanity check."
+            )
+        return self
+
+
+class PromotionConfig(_Strict):
+    """§13.10's gates. Configurable engineering thresholds, not findings."""
+
+    minimum_wape_improvement: float = 0.05
+    maximum_major_stratum_wape_degradation: float = 0.02
+    nominal_coverage_tolerance: float = 0.05
+
+
 class Config(_Strict):
     """The whole resolved configuration."""
 
@@ -180,6 +227,8 @@ class Config(_Strict):
     reconciliation: ReconciliationConfig
     baselines: BaselinesConfig
     disclosure: DisclosureConfig
+    validation: ValidationConfig = ValidationConfig()
+    promotion: PromotionConfig = PromotionConfig()
 
 
 def load_config(path: Path) -> Config:

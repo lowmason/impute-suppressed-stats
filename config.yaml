@@ -70,3 +70,24 @@ disclosure:
   # Resolves §21's "Disclosure thresholds" row: policy, not evidence. See plan 3.
   narrow_interval_absolute_width: 10
   narrow_interval_relative_width: 0.25
+
+validation:
+  pseudo_suppression_seeds: [1024, 2048, 4096]
+  include_random_mask_sanity_check: true
+  include_primary_like: true
+  include_complementary_like: true
+  include_long_runs: true
+  include_rolling_origin: true
+  # Appendix A ships these two true. Both are turned off here with a recorded reason:
+  # retrospective smoothing has no smoothing estimator in the §10 registry to exercise, and
+  # vintage comparison has no second vintage on disk (see the plan's evidence §6).
+  include_retrospective_smoothing: false
+  include_vintage_comparison: false
+  replicates_per_regime: 20
+  minimum_unmasked_lookback_months: 6
+  minimum_missing_set_size: 2
+
+promotion:
+  minimum_wape_improvement: 0.05
+  maximum_major_stratum_wape_degradation: 0.02
+  nominal_coverage_tolerance: 0.05
