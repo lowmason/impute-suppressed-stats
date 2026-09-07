@@ -476,20 +476,42 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
 
 ## 4-stage3-logging-employment-spec — 2026-09-05
 
-- [ ] **`MAX_SCALE_RATIO = 100.0` is an originated tripwire with no spec warrant.**
+- [x] **`MAX_SCALE_RATIO = 100.0` is an originated tripwire with no spec warrant.**
       `baselines/interfaces.py` refuses a composite whose two arms' medians differ by more than
       100x. The factor is this package's decision, chosen to sit far above any honest
       employees-vs-employees ratio and far below the ~1e4 units mismatch it was written to catch.
       Nothing in §10 or §12 speaks to it. If a future baseline legitimately produces arms an order
       of magnitude apart, the number needs re-deriving rather than nudging.
+      **→ done in plan 9: deleted, not re-derived.** The item's own remedy assumed a better
+      threshold exists. Measured on the D1 window, it does not: substituting a raw establishment
+      count for the scaled fallback — the exact bug the guard was written to catch — produces
+      arm-median ratios of 0.182-0.811 for the share family and 0.160-0.316 for §10.4, entirely
+      inside the honest 0.947-4.996 range, and reintroducing it tripped the guard zero times while
+      shipping own-cell estimates up to 6.12x too large. The honest range and the bug's range
+      overlap, so the unit is now carried structurally by `baselines/interfaces.py::EmployeeWeights`
+      — a frozen wrapper `compose` refuses to accept a bare dict in place of (R-COMP-1 to R-COMP-3).
+      `tests/integration/test_baseline_golden.py` inherits the guard's remaining job and says so in
+      its module docstring: a corrupt column or a moved CBP vintage changes the NUMBERS while every
+      arm stays honestly typed, and the golden is now the only check that reddens on either.
 
-- [ ] **§10.3's fallback scales by the DISCLOSED intensity; §10.4's uses the NATIONAL one.**
+- [x] **§10.3's fallback scales by the DISCLOSED intensity; §10.4's uses the NATIONAL one.**
       Both put the fallback arm in employees, and each is defensible on its own terms — §10.4's is
       exactly its own n->0 shrinkage limit, §10.3 has no such limit to appeal to and uses a
       published ratio of two published sums. But two baselines answering "how many employees does
       an establishment carry" differently is a divergence no section asked for. See
       `baselines/simple.py:establishment_fallback_in_employees` and
       `baselines/intensity.py:national_march_intensity`.
+      **→ done in plan 9: declared, deliberately not standardised.** The divergence is kept
+      (R-COMP-7) — §10.4's national value is exactly its own shrinkage limit as the CBP cell count
+      goes to zero, a derivation §10.3 and §10.6 have nothing equivalent to appeal to, so collapsing
+      the two would have made one of them arbitrary. What was actually wrong was that the choice was
+      unstated and duplicated: each composing baseline built and scaled its own arm. Both functions
+      this item names have moved into a new `baselines/fallback.py`, which owns the ONLY construction
+      that turns §10.2 exposure into employees and takes the intensity as an argument; each estimator
+      declares its choice as `fallback_intensity`, and `baseline_manifest.json` reports it per
+      estimator, so an arm can be checked against its name without reading source. Measured on D1 the
+      two values were never far apart (disclosed 5.442-6.380, national 5.914-6.139) — this was an
+      unexplained divergence in a layer Stage 4 is about to score, not a numerical error.
 
 - [ ] **`disclosed_intensity` reads the partition from the context while the residual comes from
       the anchor.** `baselines/simple.py` looks up `context.partitions[anchor.reference_month]`,
@@ -499,6 +521,18 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       that, and a mismatch would scale the fallback off the unmasked partition without any signal.
       This is the mask-parameterisation rule one level above where the plan stated it. Stage 4
       should either thread the partition through the estimator call or assert the two agree.
+      **→ STILL OPEN, and re-scoped by plan 9.** Plan 9 took the second option INSIDE the
+      estimator layer and left the harness half for Stage 4, which is why this box stays unticked.
+      Two corrections to the pointers above, since the code moved under them: `disclosed_intensity`
+      now lives in `baselines/fallback.py`, not `baselines/simple.py`; and it no longer merely
+      reads the context's partition — `_assert_the_partition_is_the_anchors` recomputes
+      `national_residual` from that partition and raises `ConceptViolationError` when it disagrees
+      with `anchor.residual` (R-COMP-8, pinned by T-5 in `tests/unit/test_baselines_fallback.py`).
+      The check witnesses the DISCLOSED side only, deliberately. What remains for Stage 4 is the
+      obligation this creates on the harness: it must rebuild `EstimatorContext.partitions` from
+      the same mask it hands the anchor, or every composing estimator now fails closed on it.
+      §10.9 of `specs/logging-employment-spec.md` states that requirement; Stage 4's plan closes
+      this item and should record that plan 9 supplied it.
 
 - [ ] **The `general_method` guard lives at the CLI, not in the reconciliation layer.**
       `require_supported_method` is exported from `reconcile.projection` but is called only where

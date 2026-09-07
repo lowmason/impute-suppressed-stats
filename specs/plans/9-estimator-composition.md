@@ -1,5 +1,7 @@
 # Estimator Composition Implementation Plan
 
+**Status: COMPLETE (2026-09-07)** — executed via executing-plans; nothing deferred
+
 > **For agentic workers:** REQUIRED SUB-SKILL: implement this plan task-by-task via subagent-driven-development (the default) — or executing-plans when your human partner chose inline execution at the handoff. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Give the two-arm composition step `baselines/interfaces.py::compose` performs a written
@@ -62,7 +64,7 @@ deleted in Task 2, so this task's diff is exactly "the arms are now typed".
   - `compose(own: EmployeeWeights, fallback: EmployeeWeights, anchor: Anchor, *, allowed: bool)
     -> Weights | Decline` — the two arms are now positional-typed, everything else unchanged.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Replace the whole of `tests/unit/test_baseline_interfaces.py` with the version below. Every
 `compose` call now wraps its arms; `test_arms_in_incommensurable_units_are_refused` and
@@ -195,12 +197,12 @@ def test_an_empty_own_arm_composes_into_an_all_fallback_composite() -> None:
     assert w.values == {"01": 9.0, "02": 9.0, "04": 7.0}
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_baseline_interfaces.py -q`
 Expected: FAIL — `ImportError: cannot import name 'EmployeeWeights'`.
 
-- [ ] **Step 3: Add the type and retype `compose`**
+- [x] **Step 3: Add the type and retype `compose`**
 
 In `src/logging_employment/baselines/interfaces.py`, add `ConceptViolationError` to the errors
 import:
@@ -303,7 +305,7 @@ def compose(
     return Weights(values=values, basis=basis)
 ```
 
-- [ ] **Step 4: Wrap the four call sites**
+- [x] **Step 4: Wrap the four call sites**
 
 In `src/logging_employment/baselines/historical.py`, add `EmployeeWeights` to the interfaces
 import and wrap the own arm (lines 154-159):
@@ -376,7 +378,7 @@ from .interfaces import Decline, EmployeeWeights, Estimator, EstimatorContext, c
 __all__ = ["Decline", "EmployeeWeights", "Estimator", "EstimatorContext", "compose"]
 ```
 
-- [ ] **Step 5: Run the full suite**
+- [x] **Step 5: Run the full suite**
 
 Run: `uv run pytest -q`
 Expected: PASS, 1155 passed. The count DROPS BY ONE from the 1156 this plan starts at:
@@ -389,7 +391,7 @@ composite passes, which is exactly what
 `test_partial_own_coverage_composes_and_records_the_basis_per_cell` asserts over the same shape. A
 different number means a test elsewhere changed behaviour.
 
-- [ ] **Step 6: Lint and commit**
+- [x] **Step 6: Lint and commit**
 
 ```bash
 uv run ruff check src tests && uv run black --check src tests && uv run interrogate src
@@ -413,7 +415,7 @@ recurring failure is an aged claim surviving the code change that falsified it, 
 - Consumes: `EmployeeWeights`, `compose` from Task 1.
 - Produces: `MAX_SCALE_RATIO` and `_assert_comparable_scales` no longer exist.
 
-- [ ] **Step 1: Delete the guard**
+- [x] **Step 1: Delete the guard**
 
 In `src/logging_employment/baselines/interfaces.py`:
 
@@ -439,7 +441,7 @@ the `raise`), and delete its call site inside `compose`:
     _assert_comparable_scales(usable, fallback.values, anchor)
 ```
 
-- [ ] **Step 2: Rewrite the module docstring paragraph it licensed**
+- [x] **Step 2: Rewrite the module docstring paragraph it licensed**
 
 In `src/logging_employment/baselines/interfaces.py`, replace the final paragraph of the module
 docstring — the one beginning `BOTH ARMS MUST BE IN THE SAME UNIT, AND THE GUARD ENFORCES IT.` and
@@ -465,7 +467,7 @@ a claim made once, where the vector is built, that a plain dict cannot impersona
 `specs/estimator-composition.md` §2.)
 ```
 
-- [ ] **Step 3: State the golden's role where the golden is defined (R-COMP-4)**
+- [x] **Step 3: State the golden's role where the golden is defined (R-COMP-4)**
 
 Removing the guard leaves the frozen baseline golden as the only remaining check on a *data*
 pathology a type cannot see. In `tests/integration/test_baseline_golden.py`, replace the module
@@ -503,7 +505,15 @@ def test_the_baseline_output_matches_its_golden_fixture(
     """
 ```
 
-- [ ] **Step 4: Verify the guard is gone by name**
+- [x] **Step 4: Verify the guard is gone by name**
+
+> Deviation: this step's `grep` expects no output, but Steps 2 and 3 of this same task
+> mandate prose that names `MAX_SCALE_RATIO` in backticks to explain its removal — so the
+> command as written can never pass alongside the deliverable above it. The criterion's
+> intent is that the SYMBOL is gone, so it was verified at the token level instead
+> (`tokenize` over `src/` and `tests/`, checking for a NAME token `MAX_SCALE_RATIO` or
+> `_assert_comparable_scales`): no hit. The same correction applies to the matching exit
+> criterion below.
 
 Run:
 
@@ -514,13 +524,13 @@ grep -rn "MAX_SCALE_RATIO\|_assert_comparable_scales\|comparable scales\|THE GUA
 Expected: no output (exit status 1). This is the exit criterion "`MAX_SCALE_RATIO` does not appear
 in the codebase" as a command rather than an assertion.
 
-- [ ] **Step 5: Run the full suite**
+- [x] **Step 5: Run the full suite**
 
 Run: `uv run pytest -q`
 Expected: PASS, 1155 passed — unchanged from Task 1. This task deletes production code and rewrites
 prose; it adds and removes no test.
 
-- [ ] **Step 6: Lint and commit**
+- [x] **Step 6: Lint and commit**
 
 ```bash
 uv run ruff check src tests && uv run black --check src tests && uv run interrogate src
@@ -574,7 +584,7 @@ Satisfies R-COMP-5, R-COMP-6, R-COMP-7 and test T-4.
   intensities, so the module that resolves a declaration must own them, and `march_intensity`'s
   shrink target is exactly that value.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_baselines_fallback.py`:
 
@@ -764,12 +774,23 @@ def test_an_estimator_that_declares_no_intensity_cannot_build_a_fallback_arm(
         declared_fallback(estimator, context, anchor)
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
+
+> Deviation: `fallback.py` was created in the same call as the test, so the red observed
+> was not `ModuleNotFoundError` but the seven failures the missing declarations produce
+> (`AttributeError: 'LastObservedShare' object has no attribute 'fallback_intensity'` and
+> siblings) — still red for the contract Steps 4-8 add, with two tests that exercise only
+> `fallback.py` itself already green.
 
 Run: `uv run pytest tests/unit/test_baselines_fallback.py -q`
 Expected: FAIL — `ModuleNotFoundError: No module named 'logging_employment.baselines.fallback'`.
 
-- [ ] **Step 3: Create `baselines/fallback.py`**
+- [x] **Step 3: Create `baselines/fallback.py`**
+
+> Deviation: `compose_with_declared_fallback` binds `usable_own(own, anchor)` once above
+> the `any(...)` rather than calling it inside the per-cell generator, which rebuilt the
+> whole dict for every cell in the missing set. Semantics-identical: the function is pure
+> in `own.values` and `anchor.missing_cells`, and neither is mutated between iterations.
 
 ```python
 """The one construction that turns §10.2 establishment exposure into an employees-valued arm.
@@ -941,7 +962,7 @@ def compose_with_declared_fallback(
     )
 ```
 
-- [ ] **Step 4: Add the declaration to the `Estimator` protocol**
+- [x] **Step 4: Add the declaration to the `Estimator` protocol**
 
 In `src/logging_employment/baselines/interfaces.py`, extend the protocol:
 
@@ -961,7 +982,7 @@ class Estimator(Protocol):
         ...
 ```
 
-- [ ] **Step 5: Strip the moved functions out of `simple.py` and declare `None`**
+- [x] **Step 5: Strip the moved functions out of `simple.py` and declare `None`**
 
 In `src/logging_employment/baselines/simple.py`, delete `disclosed_intensity` (lines 88-99) and
 `establishment_fallback_in_employees` (lines 102-121) entirely, along with the now-unused imports
@@ -1011,7 +1032,7 @@ class HarvestProportional:
     fallback_intensity = None
 ```
 
-- [ ] **Step 6: Rewire `historical.py`**
+- [x] **Step 6: Rewire `historical.py`**
 
 Replace the two `.interfaces` / `.simple` imports:
 
@@ -1045,7 +1066,7 @@ And replace the `compose(...)` tail of `weights`:
 The local `cfg = context.config.baselines` binding is still used for the lookback keys, so leave
 it; only its `allow_declared_composite` read goes away.
 
-- [ ] **Step 7: Rewire `regression.py`**
+- [x] **Step 7: Rewire `regression.py`**
 
 ```python
 from .fallback import DISCLOSED_QCEW, compose_with_declared_fallback
@@ -1077,7 +1098,7 @@ Both call sites collapse to one line each:
         return compose_with_declared_fallback(self, EmployeeWeights(own), context, anchor)
 ```
 
-- [ ] **Step 8: Rewire `intensity.py`**
+- [x] **Step 8: Rewire `intensity.py`**
 
 Delete `ALL_ESTABLISHMENTS_SIZE_CODE`, `_intensity_rows` and `national_march_intensity` from this
 module and import them from `fallback.py`:
@@ -1167,7 +1188,7 @@ That choice is declared as `fallback_intensity = NATIONAL_CBP_MARCH` rather than
 module's body, and `baselines/fallback.py` is the one thing that builds the arm.
 ```
 
-- [ ] **Step 9: Run the new test, then the full suite**
+- [x] **Step 9: Run the new test, then the full suite**
 
 Run: `uv run pytest tests/unit/test_baselines_fallback.py -q`
 Expected: PASS, 9 passed — six test functions; T-4 is parametrized over three estimators and the
@@ -1176,7 +1197,7 @@ no-declaration test over two.
 Run: `uv run pytest -q`
 Expected: PASS, 1164 passed (1155 + 9).
 
-- [ ] **Step 10: Lint and commit**
+- [x] **Step 10: Lint and commit**
 
 ```bash
 uv run ruff check src tests && uv run black --check src tests && uv run interrogate src
@@ -1206,7 +1227,7 @@ requirement Stage 4 enforces.
 - Produces: `disclosed_intensity` raises `ConceptViolationError` when the context's partition for
   the month implies a residual other than `anchor.residual`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/unit/test_baselines_fallback.py`:
 
@@ -1289,12 +1310,12 @@ from logging_employment.baselines.fallback import (
 from logging_employment.reconcile.anchor import Partition, national_residual, observed_partition
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_baselines_fallback.py -k partition -q`
 Expected: FAIL — `DID NOT RAISE ConceptViolationError` on the first test.
 
-- [ ] **Step 3: Add the refusal**
+- [x] **Step 3: Add the refusal**
 
 In `src/logging_employment/baselines/fallback.py`, add `math` to the imports and
 `national_residual` to the anchor import:
@@ -1356,7 +1377,7 @@ def disclosed_intensity(context: EstimatorContext, anchor: Anchor) -> float | No
     ...
 ```
 
-- [ ] **Step 4: Repair the two fixtures the refusal exposes**
+- [x] **Step 4: Repair the two fixtures the refusal exposes**
 
 Exactly two existing tests build an anchor by hand *and* reach the disclosed fallback. Both are in
 `tests/unit/test_baselines_historical.py`. Every other hand-built anchor in the suite is covered by
@@ -1441,14 +1462,14 @@ and replace the two closing statements with:
 The `history["share"].to_list() == []` assertion above is unaffected: `observed_share_history`
 reads months in `[floor, before)` and excludes the anchor month itself.
 
-- [ ] **Step 5: Run the full suite**
+- [x] **Step 5: Run the full suite**
 
 Run: `uv run pytest -q`
 Expected: PASS, 1167 passed (1164 + the three tests appended in Step 1). The two repaired tests in
 Step 4 change no count: `test_a_state_with_no_observed_history_takes_the_declared_fallback` stays
 parametrized over the same five variants.
 
-- [ ] **Step 6: Lint and commit**
+- [x] **Step 6: Lint and commit**
 
 ```bash
 uv run ruff check src tests && uv run black --check src tests && uv run interrogate src
@@ -1483,7 +1504,7 @@ data bug can make a baseline's WAPE look *better* than a correct implementation'
   - `Decline(reason: str, kind: str)` — `kind` is required and validated against `DECLINE_KINDS`.
   - `runner._decline_rows(estimator_id, anchor, reason, constraint_set_hash, ids, *, kind: str)`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/unit/test_baselines_runner.py` (T-3 — one test per kind, each driving a different
 `runner.py` call site):
@@ -1587,12 +1608,12 @@ from logging_employment.reconcile.allocate import Weights
 
 (`run_baselines`, `REGISTRY`, `HarmonizedData` and `pl` are already imported there.)
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/unit/test_baselines_runner.py -q`
 Expected: FAIL — `ColumnNotFoundError: decline_kind`.
 
-- [ ] **Step 3: Declare the closed set and the column**
+- [x] **Step 3: Declare the closed set and the column**
 
 In `src/logging_employment/contracts.py`, add after `ANCHOR_BASES` (line 219):
 
@@ -1626,7 +1647,7 @@ column beside `decline_reason`:
     "residual": pl.Float64,
 ```
 
-- [ ] **Step 4: Make `Decline` carry a kind**
+- [x] **Step 4: Make `Decline` carry a kind**
 
 In `src/logging_employment/baselines/interfaces.py`, import the closed set:
 
@@ -1674,7 +1695,7 @@ And give `compose`'s config decline its kind:
         )
 ```
 
-- [ ] **Step 5: Give the other three declines their kinds**
+- [x] **Step 5: Give the other three declines their kinds**
 
 In `src/logging_employment/baselines/harvest.py`:
 
@@ -1718,7 +1739,7 @@ In `src/logging_employment/baselines/intensity.py`, both declines are absent inp
             )
 ```
 
-- [ ] **Step 6: Write the kind at all three runner call sites**
+- [x] **Step 6: Write the kind at all three runner call sites**
 
 In `src/logging_employment/baselines/runner.py`, give `_decline_rows` a required keyword and emit
 the column:
@@ -1839,7 +1860,7 @@ drops out non-randomly, and a data bug can make a baseline's WAPE look better th
 implementation's.
 ```
 
-- [ ] **Step 7: Update the two unit tests that construct or assert a `Decline`**
+- [x] **Step 7: Update the two unit tests that construct or assert a `Decline`**
 
 `tests/unit/test_baselines_harvest.py:34-37` and `:65-68` assert `isinstance(out, Decline)`; add
 the kind assertion beside each:
@@ -1856,7 +1877,7 @@ the kind assertion beside each:
     assert out.kind == "data_gap"
 ```
 
-- [ ] **Step 8: Run the suite and confirm exactly the golden fails**
+- [x] **Step 8: Run the suite and confirm exactly the golden fails**
 
 Run: `uv run pytest -q`
 Expected: FAIL — one failure, `test_the_baseline_output_matches_its_golden_fixture`, because the
@@ -1864,7 +1885,13 @@ frame now carries a column the pinned file does not. Every other test passes. If
 fails, stop and fix it before regenerating: a golden re-pinned over an unrelated failure records
 the bug.
 
-- [ ] **Step 9: Regenerate the golden (T-6)**
+- [x] **Step 9: Regenerate the golden (T-6)**
+
+> Addition: the §17.6 reason was verified before re-pinning rather than asserted. The new
+> frame was compared against the old golden first — 1,380 rows both sides, no removed
+> column, `decline_kind` the only addition, and the fourteen pre-existing columns
+> bit-identical (`new.select(shared).equals(old.select(shared))` is True). New digest
+> `771f1df8d03a79b0dee7d138ecf8299ccf9ea0df6e249d7349c2e302bd585d3c`.
 
 Only `baseline_results_golden.parquet` changes; `anchor_audit_golden.parquet` is untouched.
 
@@ -1889,12 +1916,12 @@ PY
 Expected: prints a sha256 and a column list ending `..., 'decline_reason', 'decline_kind',
 'residual', 'missing_set_size', 'constraint_set_hash']`.
 
-- [ ] **Step 10: Run the full suite**
+- [x] **Step 10: Run the full suite**
 
 Run: `uv run pytest -q`
 Expected: PASS, 1172 passed (1167 + the five tests appended in Step 1).
 
-- [ ] **Step 11: Lint and commit**
+- [x] **Step 11: Lint and commit**
 
 The §17.6 reason goes in this commit message, not only in the spec — that is what T-6 asks for.
 
@@ -1937,7 +1964,7 @@ the thing R-COMP-6 exists to fix.
 - Produces: `baseline_manifest.json` gains `fallback_intensity: {estimator_id: str}` and its
   `declines` key becomes `{estimator_id: {decline_kind: count}}`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/integration/test_baseline_cli.py`:
 
@@ -1981,12 +2008,12 @@ def test_declines_are_counted_in_the_manifest(staged_repo) -> None:
     assert isinstance(manifest["declines"]["harvest_proportional"], dict)
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/integration/test_baseline_cli.py -q`
 Expected: FAIL — `KeyError: 'fallback_intensity'` and `TypeError`/assertion on the pooled int.
 
-- [ ] **Step 3: Write both into the manifest**
+- [x] **Step 3: Write both into the manifest**
 
 In `src/logging_employment/cli.py`, add `REGISTRY` to the `run-baselines` import block:
 
@@ -2045,12 +2072,12 @@ And update the echo loop for the nested shape:
             typer.echo(f"declined {estimator_id} {kind} {count}")
 ```
 
-- [ ] **Step 4: Run the suite**
+- [x] **Step 4: Run the suite**
 
 Run: `uv run pytest -q`
 Expected: PASS, 1174 passed (1172 + the two tests appended in Step 1).
 
-- [ ] **Step 5: Lint and commit**
+- [x] **Step 5: Lint and commit**
 
 ```bash
 uv run ruff check src tests && uv run black --check src tests && uv run interrogate src
@@ -2078,7 +2105,7 @@ new sections would assert that a sentence exists, not that it is true.
 - Consumes: the shipped column list from Task 5's `BASELINE_RESULT_SCHEMA`.
 - Produces: nothing code-facing.
 
-- [ ] **Step 1: Add §7.13 `baseline_result`**
+- [x] **Step 1: Add §7.13 `baseline_result`**
 
 Insert immediately before the `---` that closes §7 (after §7.12's `release_action` block). The
 column list must match `BASELINE_RESULT_SCHEMA`'s order exactly, including `decline_kind` after
@@ -2123,7 +2150,7 @@ A declining estimator MUST write rows, never omit them: an absent row is indisti
 bug.
 ````
 
-- [ ] **Step 2: Add §10.9 "Composition and the fallback arm"**
+- [x] **Step 2: Add §10.9 "Composition and the fallback arm"**
 
 Insert after §10.8's numbered list and before the `---` that closes §10.
 
@@ -2162,7 +2189,7 @@ the estimator's partitions from the same mask it used for the residual, and a di
 fail rather than silently scale the fallback off the wrong disclosed set.
 ```
 
-- [ ] **Step 3: Add the decline-reporting requirement to §13**
+- [x] **Step 3: Add the decline-reporting requirement to §13**
 
 Append to the end of §13.8, after the sentence "Reconciled production output requires zero
 hard-constraint violations within tolerance." and before `### 13.9`:
@@ -2174,7 +2201,7 @@ of the scored set drops out non-randomly, so an unreported data-driven decline c
 implementation's point and probabilistic metrics look better than a correct one's.
 ```
 
-- [ ] **Step 4: Verify the three sections landed and the spec still parses**
+- [x] **Step 4: Verify the three sections landed and the spec still parses**
 
 Run:
 
@@ -2187,7 +2214,7 @@ Expected: three lines, in ascending order.
 Run: `uv run pytest tests/unit/test_classification.py -q`
 Expected: PASS, 3 passed — the §3.1 parser is anchored and is not reached by any of these edits.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add specs/logging-employment-spec.md
@@ -2201,16 +2228,16 @@ git commit -m "spec(baselines): §10.9 composition, §7.13 baseline_result, §13
 Run these after Task 7, before the Plan Completion Protocol. Each maps to a bullet in
 `specs/estimator-composition.md` §7.
 
-- [ ] **A raw establishment fallback arm cannot be constructed or passed to `compose`, demonstrated
+- [x] **A raw establishment fallback arm cannot be constructed or passed to `compose`, demonstrated
   by T-1.**
   Run: `uv run pytest tests/unit/test_baseline_interfaces.py::test_a_raw_dict_cannot_be_passed_as_an_arm -v`
   Expected: PASS.
 
-- [ ] **`MAX_SCALE_RATIO` does not appear in the codebase.**
+- [x] **`MAX_SCALE_RATIO` does not appear in the codebase.**
   Run: `grep -rn "MAX_SCALE_RATIO" src/ tests/`
   Expected: no output.
 
-- [ ] **Exactly one construction converts exposure into employees, and each estimator's choice is
+- [x] **Exactly one construction converts exposure into employees, and each estimator's choice is
   readable from the run output.**
   Run: `grep -rn "def establishment_fallback\b" src/` → exactly one hit, in
   `src/logging_employment/baselines/fallback.py`.
@@ -2219,22 +2246,22 @@ Run these after Task 7, before the Plan Completion Protocol. Each maps to a bull
   Run: `uv run pytest tests/integration/test_baseline_cli.py::test_the_manifest_declares_each_estimators_fallback_intensity -v`
   Expected: PASS.
 
-- [ ] **Every declined row carries a `decline_kind`, and no code path produces a decline without
+- [x] **Every declined row carries a `decline_kind`, and no code path produces a decline without
   one.**
   Run: `uv run pytest tests/unit/test_baselines_runner.py -k decline -v`
   Expected: PASS.
   Run: `grep -rn "Decline(" src/` → four sites, each with a `kind=`.
 
-- [ ] **The full suite passes with no new skips.**
+- [x] **The full suite passes with no new skips.**
   Run: `uv run pytest -q -rs`
   Expected: `1174 passed`, and the skip list is identical to the pre-plan run (the `data/`-gated
   D1 integration tests only, and only when `data/staged` is absent).
 
-- [ ] **The golden's regeneration is accompanied by its documented reason.**
+- [x] **The golden's regeneration is accompanied by its documented reason.**
   Run: `git log --format=%B -n 1 -- tests/fixtures/baselines/baseline_results_golden.parquet | head -20`
   Expected: Task 5's message, naming R-COMP-9 and §17.6.
 
-- [ ] **`specs/deferred_items.md` has both composition items ticked.** Done by the Plan Completion
+- [x] **`specs/deferred_items.md` has both composition items ticked.** Done by the Plan Completion
   Protocol, not here: tick `MAX_SCALE_RATIO = 100.0 is an originated tripwire with no spec warrant`
   and `§10.3's fallback scales by the DISCLOSED intensity; §10.4's uses the NATIONAL one` with
   `→ done in plan 9`. Leave `disclosed_intensity reads the partition from the context while the
