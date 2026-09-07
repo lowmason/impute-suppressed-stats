@@ -62,6 +62,7 @@ def test_declines_are_counted_in_the_manifest(staged_repo) -> None:
     assert result.exit_code == 0, result.output
     manifest = json.loads((staged_repo.run_dir / "baseline_manifest.json").read_text())
     assert "harvest_proportional" in manifest["declines"]
+    assert isinstance(manifest["declines"]["harvest_proportional"], dict)
 
 
 def test_reconcile_writes_a_manifest_like_every_other_command(staged_repo) -> None:
@@ -89,3 +90,30 @@ def test_reconcile_refuses_before_run_baselines_has_produced_anything(staged_rep
     result = runner.invoke(app, ["reconcile", "--config", str(staged_repo.config_path)])
     assert result.exit_code != 0
     assert "run-baselines" in result.output
+
+
+def test_the_manifest_declares_each_estimators_fallback_intensity(staged_repo) -> None:
+    """R-COMP-6. Two baselines answer "how many employees does an establishment carry"
+    differently, and R-COMP-7 keeps it that way — so the choice has to be readable from a run's
+    output rather than from source."""
+    result = runner.invoke(app, ["run-baselines", "--config", str(staged_repo.config_path)])
+    assert result.exit_code == 0, result.output
+    manifest = json.loads((staged_repo.run_dir / "baseline_manifest.json").read_text())
+    declared = manifest["fallback_intensity"]
+    assert declared["share_last_observed"] == "disclosed_qcew"
+    assert declared["constrained_regression"] == "disclosed_qcew"
+    assert declared["cbp_intensity"] == "national_cbp_march"
+    # An estimator that composes nothing declares nothing, and is absent rather than null.
+    assert "equal_residual" not in declared
+    assert "harvest_proportional" not in declared
+
+
+def test_declines_are_broken_down_by_kind_not_pooled(staged_repo) -> None:
+    """R-COMP-9. §13's scoreboard must be able to tell a considered refusal from a data gap:
+    pooled, a baseline that drops months for a data reason is indistinguishable from §10.5."""
+    result = runner.invoke(app, ["run-baselines", "--config", str(staged_repo.config_path)])
+    assert result.exit_code == 0, result.output
+    manifest = json.loads((staged_repo.run_dir / "baseline_manifest.json").read_text())
+    declines = manifest["declines"]
+    assert set(declines["harvest_proportional"]) == {"by_design"}
+    assert declines["harvest_proportional"]["by_design"] > 0
