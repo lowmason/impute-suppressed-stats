@@ -1,8 +1,22 @@
 """§16.2's `run_pseudo_suppression`.
 
-Cost: one replicate is ~30 s, essentially all of it `run_baselines` (the mask-and-solve arm is
-~0.36 s). 13 regimes x 20 replicates is ~2.2 hours at the full registry, which is why
-`run_baselines` takes an estimator subset and why regimes declare the estimators they need.
+Cost, measured 2026-09-07 on the D1 staged layer at one seed -- 9 of the 13 regimes score, one
+(regime, seed) pass each, 9 passes in all: 226.6 s for the full ten-estimator registry, 49.6 s for
+`share_last_observed` alone, 6.2 s for `establishment_proportional` alone. Those last two are the
+controlled comparison and they name the bill: both do identical `run_baselines` work for one
+estimator, and the only difference between them is that one is in `metrics._INTERVAL_FAMILIES` and
+one is not. The 43 s between them is §13.7's CRPS.
+
+So the dominant cost is the metric layer, not `run_baselines`, and it is superlinear in an
+estimator's own scored-cell count (`intervals.crps` is O(n log n) per cell, O(n^2 log n) per
+estimator). Ten estimators cost 36x one rather than 10x. An earlier note here read "~30 s per
+replicate, essentially all of it `run_baselines`"; that predates the sorted-ensemble CRPS, and it
+also read `replicates_per_regime` as this loop's trip count -- that setting sizes the MASK
+(`regimes.sample_targets`), while the loop runs once per configured seed.
+
+The estimator subset is still the lever, it just pulls on CRPS: `run_baselines` takes one, regimes
+can declare the ones they need, and `validate --estimators` reaches it from the command line. The
+shipped three-seed, full-registry run is 11:03.
 """
 
 from __future__ import annotations

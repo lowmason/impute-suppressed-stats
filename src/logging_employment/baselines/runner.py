@@ -30,7 +30,7 @@ import polars as pl
 from ..config import Config
 from ..constraints.cells import KIND_STATE_TOTAL, TOTAL_SIZE_CLASS, cell_id
 from ..contracts import BASELINE_RESULT_SCHEMA, HarmonizedData, assert_declared_provenance
-from ..errors import InfeasibleResidualError, WeightDomainError
+from ..errors import ConceptViolationError, InfeasibleResidualError, WeightDomainError
 from ..reconcile.allocate import allocate
 from ..reconcile.anchor import (
     assert_universe_closes,
@@ -73,6 +73,47 @@ FALLBACK_ORDER: tuple[str, ...] = (
     "share_last_observed",
     "establishment_proportional",
 )
+
+
+def resolve_estimators(declared: Sequence[str] | None) -> tuple[Estimator, ...]:
+    """Estimator ids resolved against `REGISTRY`, in REGISTRY order.
+
+    `None` means the whole registry. Every other input is checked and REFUSED rather than
+    silently narrowed, because each failure mode produces a plausible-looking run:
+
+      - an unknown id filtered out would leave a smaller subset, or an empty one whose manifest
+        reads `scored=0` -- the empty partition that reads as "scored, nothing wrong" and that
+        §13's harness refuses everywhere else;
+      - `[]` is a request to score nothing, not a spelling of the default;
+      - a repeated id would run one estimator twice and double every denominator built on the
+        row count.
+
+    The order is REGISTRY's, never the caller's. `run_id` hashes the ids it is handed, so a
+    subset that round-tripped in the order someone typed would give `a,b` and `b,a` two run
+    directories holding byte-identical outputs. Canonicalising makes the subset the set it means.
+    """
+    if declared is None:
+        return REGISTRY
+    known = {estimator.estimator_id: estimator for estimator in REGISTRY}
+    if not declared:
+        raise ConceptViolationError(
+            "--estimators is empty: that asks the harness to score no estimator at all. "
+            f"Omit the option for the full registry, or name some of {sorted(known)}"
+        )
+    duplicates = sorted({name for name in declared if declared.count(name) > 1})
+    if duplicates:
+        raise ConceptViolationError(
+            f"--estimators repeats {duplicates}: an estimator run twice doubles every "
+            "denominator counted off its rows"
+        )
+    unknown = sorted(set(declared) - set(known))
+    if unknown:
+        raise ConceptViolationError(
+            f"--estimators names {unknown}, which §10's registry does not carry. "
+            f"Known estimators: {sorted(known)}"
+        )
+    chosen = set(declared)
+    return tuple(e for e in REGISTRY if e.estimator_id in chosen)
 
 
 def _cell_ids(partition, anchor) -> dict[str, str]:

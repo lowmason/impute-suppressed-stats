@@ -1167,7 +1167,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       model validator that refuses a random-mask-only design reads the same flags, so today it
       refuses a configuration that would in fact have run every regime. Decide the mapping, then
       either wire it or delete the flags that name nothing.
-- [ ] **The `validate` CLI runs the full REGISTRY with no estimator-subset option.**
+- [x] **The `validate` CLI runs the full REGISTRY with no estimator-subset option.**
       Task 4 added `estimators` to `run_baselines` and the plan calls it "a 5x lever"; §16.2's
       `run_pseudo_suppression` takes the sequence and `cli.py::validate_command` hardcodes
       `REGISTRY`. One CLI pass over one seed is ~3.7 minutes and the shipped three-seed run is
@@ -1176,3 +1176,41 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       or a per-regime declared subset as the plan's Task 18 note suggests ("regimes declare the
       estimators they need"), would let the CLI test cover the wiring in seconds instead of
       minutes. Nothing is wrong today; the lever is simply not reachable from the command line.
+      **→ retired 2026-09-07: `validate --estimators a,b` ships, and the run id carries it.**
+      `baselines.runner.resolve_estimators` maps ids to `REGISTRY` members IN REGISTRY ORDER and
+      refuses an unknown, repeated, or empty subset rather than narrowing silently — a filtered-out
+      typo would leave a smaller subset, or an empty one whose manifest reads `scored=0`, which is
+      the empty-partition-as-success this stage refuses everywhere else. The refusal runs BEFORE
+      `HarmonizedData.load`, so a mistyped id costs a message and not a table load;
+      `test_validate_refuses_an_unknown_estimator_before_it_reads_the_staged_layer` points
+      `staged_uri` at a directory that does not exist and so pins the ORDER, not just the exit code.
+
+      THE DESIGN DECISION, since the obvious implementation is wrong. `runs.run_id` hashes the
+      resolved config, so an option that stopped at `argv` would send a one-estimator pass and a
+      full one to the SAME `runs/<id>/` and overwrite one's metrics with the other's bytes under a
+      single identifier — destroying exactly the byte-identity §16.1 makes checkable. The subset
+      therefore reaches the id. It does so through a new keyword-only `overrides` parameter whose
+      key is OMITTED when absent, rather than through a `validation.estimators` config field:
+      measured, adding a field to `ValidationConfig` moved the shipped config from `f03023ac9f3a`
+      to `c07d8e7d58b0` and orphaned all five directories under `runs/`, including Stage 4's
+      acceptance artifact and the Stage 3 run that `solve-bounds` / `run-baselines` / `reconcile`
+      gate on. `tests/unit/test_runs.py` pins the compatibility by re-deriving the pre-parameter
+      payload, so a later `"overrides": null` cannot renumber the run directories by accident.
+      The cost of the choice, stated: the subset is reachable only from the command line, not
+      declarable in `config.yaml`. Task 18's other suggestion — "regimes declare the estimators
+      they need" — is untouched and remains available.
+
+      WHAT IT BOUGHT, measured 2026-09-07 on the D1 staged layer at one seed (9 scoring regimes,
+      9 passes): 226.6 s for the full ten-estimator registry, 49.6 s for `share_last_observed`
+      alone, 6.2 s for `establishment_proportional` alone, 50.2 s for the pair. Those last two
+      single-estimator numbers are the controlled comparison that names the cost — identical
+      `run_baselines` work, and the 43 s between them is §13.7's CRPS, which runs only for
+      `metrics._INTERVAL_FAMILIES`. `tests/integration/test_validate_cli.py` now runs the pair, so
+      one invocation still crosses BOTH branches of `probabilistic_metrics` and the idempotence
+      test keeps covering the metric path that dominates the run. Measured back-to-back on this
+      machine 2026-09-07, that module went from 7:31 to 1:38, and the whole suite now runs in
+      6:41 over 1,282 tests with `slow` included. `validate/harness.py`'s module docstring
+      carried the pre-CRPS cost model
+      ("~30 s per replicate, essentially all of it `run_baselines`") and read
+      `replicates_per_regime` as the loop's trip count when it sizes the MASK; both are corrected
+      there against these measurements.
