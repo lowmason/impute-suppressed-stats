@@ -6,7 +6,12 @@ import pytest
 
 from logging_employment.contracts import HarmonizedData
 from logging_employment.errors import ConceptViolationError
-from logging_employment.validate.mask import MaskTarget, apply_mask, eligible_targets
+from logging_employment.validate.mask import (
+    MaskTarget,
+    apply_mask,
+    apply_size_mask,
+    eligible_targets,
+)
 
 STAGED = Path("data/staged")
 
@@ -145,3 +150,38 @@ def test_a_duplicated_target_is_refused():
     target = MaskTarget("41", "2019-06", "state_total", "primary_like")
     with pytest.raises(ConceptViolationError, match="twice"):
         apply_mask(data, [target, target])
+
+
+def test_no_column_of_a_masked_size_row_retains_the_withheld_truth():
+    """The size-arm counterpart of the state-arm leak test, which reads only `qcew_monthly`.
+
+    This is the arm Stage 4's exit criterion runs on, so a retained truth here is worse than one
+    on the state arm. `establishments` is deliberately NOT flipped: a real suppressed size row
+    keeps its establishment count and nulls only `employment`, so blanking it would make the
+    masked row a shape the source never publishes.
+    """
+    data = _data()
+    masked, truth = apply_size_mask(data, "2017-03", ["1"])
+    withheld = str(truth["truth"].item())
+    row = masked.qcew_national_size.filter(
+        (pl.col("reference_month") == "2017-03")
+        & (pl.col("size_class") == "1")
+        & (pl.col("industry_code") == "113310")
+    ).row(0, named=True)
+    for column, value in row.items():
+        assert str(value) != withheld, f"{column} retained the held-out truth"
+
+
+def test_a_masked_size_row_matches_a_real_suppressed_one():
+    data = _data()
+    masked, _truth = apply_size_mask(data, "2017-03", ["1"])
+    real = data.qcew_national_size.filter(pl.col("observation_status") == "suppressed").head(1)
+    made = masked.qcew_national_size.filter(
+        (pl.col("reference_month") == "2017-03")
+        & (pl.col("size_class") == "1")
+        & (pl.col("industry_code") == "113310")
+    )
+    shared = ["employment", "disclosure_code", "observation_status"]
+    assert made.select(shared).row(0) == real.select(shared).row(0)
+    # The establishment count survives on both, which is what makes them the same shape.
+    assert made["establishments"].item() > 0
