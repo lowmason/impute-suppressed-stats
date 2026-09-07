@@ -211,17 +211,39 @@ class BreakAdjustedShare(_ShareBaseline):
 
     Uses the median of the most recent segment after the largest single-step change, so one
     reclassification or one plant closure does not drag the estimate toward a regime that ended.
-    At four or more shares this is not a plain median over the whole lookback; below four it is
-    exactly that, because a segment split needs points on both sides.
+
+    REFUSES RATHER THAN IMPERSONATES. A cut leaving fewer than two points in the recent segment
+    is not evidence of a regime, so this variant declines it: a one-point segment IS the last
+    observation, which is variant 1, and a history too short to cut at all reduces to the plain
+    median, which is variant 3. Either would ship another variant's number under this one's name.
+    `_reduce` returns `None` instead and the cell takes the declared §10.2 fallback -- the same
+    refusal `SameMonthPreviousYearShare` makes, for the same reason.
+
+    THE THRESHOLD IS A PROPERTY OF THE SELECTED CUT, NOT OF THE HISTORY LENGTH. A three-point
+    history cut in the middle leaves two points and is kept; a twelve-point history whose largest
+    step is its last leaves one point and is refused. No bound on the number of shares separates
+    those two cases.
+
+    THE EARLIEST TIED STEP WINS. `steps.index(max(steps))` takes the first maximum, so a history
+    with two equal largest steps segments at the earlier one. That is declared here, not chosen
+    here: it is the behaviour this class has always had, and moving it would move cells for a
+    reason nothing has argued.
     """
 
     estimator_id = "share_break_adjusted"
 
     def _reduce(self, shares, anchor, history):
-        """The median of the segment following the largest single-step level change."""
-        if len(shares) < 4:
-            return statistics.median(shares)
+        """The median of the segment following the largest single-step level change, or `None`.
+
+        The length guard is not the threshold: it is what makes `max(steps)` legal, since a
+        one-point history has no steps to take a maximum over and `max(())` raises. The threshold
+        proper is the segment check, which is why it reads the cut rather than the input.
+        """
+        if len(shares) < 2:
+            return None
         steps = [abs(shares[i + 1] - shares[i]) for i in range(len(shares) - 1)]
         cut = steps.index(max(steps)) + 1
         segment = shares[cut:]
+        if len(segment) < 2:
+            return None
         return statistics.median(segment)
