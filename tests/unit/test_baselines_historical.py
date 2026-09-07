@@ -16,6 +16,7 @@ from logging_employment.baselines.historical import (
     observed_share_history,
 )
 from logging_employment.baselines.interfaces import FALLBACK, OWN, EstimatorContext
+from logging_employment.reconcile.allocate import Weights
 from logging_employment.reconcile.anchor import (
     Anchor,
     Partition,
@@ -571,6 +572,41 @@ def test_a_long_history_with_an_interior_break_follows_the_recent_segment() -> N
     # The largest single step is 10 -> 30, so the segment is [30, 31, 29, 34], median (30 + 31) / 2.
     assert _reduce_shares(shares) == pytest.approx(30.5)
     assert statistics.median(shares) == pytest.approx(11.0)
+
+
+def test_a_refused_cell_takes_the_establishment_fallback_rather_than_declining(
+    make_monthly, appendix_a_config
+) -> None:
+    """T-7. R-BREAK-3: refusal reuses the existing `None` path, so the cell is COMPOSED, not
+    declined -- no new decline reason and no new config key.
+
+    The anchor comes from `national_residual` rather than being typed, because R-COMP-8 requires
+    the intensity and the residual to come from one partition and refuses them when they do not:
+    a hand-typed residual raises `ConceptViolationError` here the moment a fallback arm is built.
+    State 02 is disclosed at the anchor so the fallback has an intensity to be scaled by."""
+    rows = _share_rows(["2023-12", "2024-01", "2024-02"], [10, 11, 90])
+    rows.append(
+        {
+            "state_fips": "02",
+            "area_fips": "02000",
+            "reference_month": "2024-03",
+            "employment_value": 800,
+            "qtrly_establishments": 80,
+            "observation_status": "observed",
+        }
+    )
+    monthly = make_monthly(*rows)
+    partitions = observed_partition(monthly)
+    anchor = national_residual(monthly, partitions["2024-03"], reference_month="2024-03")
+    assert anchor.missing_cells == ("01",)
+
+    out = BreakAdjustedShare().weights(_context(monthly, appendix_a_config), anchor)
+
+    assert isinstance(out, Weights), "a refused cell is composed, not declined"
+    assert out.basis["01"] == FALLBACK
+    # Derived from the fixture: 2024-03's only disclosed cell is state 02, 800 employees over 80
+    # establishments, and state 01 brings 4 establishments of exposure to that intensity.
+    assert out.values["01"] == pytest.approx(4 * (800 / 80))
 
 
 def test_the_break_adjusted_docstring_declares_its_refusal() -> None:
