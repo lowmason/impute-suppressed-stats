@@ -8,7 +8,10 @@ two, and it is on every row for that reason.
 
 from __future__ import annotations
 
+import numpy as np
 import polars as pl
+
+from .intervals import clip_at_zero, crps, empirical_interval, residual_ensemble
 
 
 def bound_metrics(scores: pl.DataFrame, *, regime: str, seed: int, arm: str) -> pl.DataFrame:
@@ -108,4 +111,93 @@ def point_metrics(scores: pl.DataFrame, *, regime: str, seed: int, arm: str) -> 
             ),
         }
         rows.extend({**base, "metric_name": n, "value": values[n]} for n in _POINT_NAMES)
+    return pl.DataFrame(rows)
+
+
+_LEVELS = (0.50, 0.80, 0.90, 0.95)
+# §10.7 names exactly three families that SHOULD carry intervals. Everything else is point-only,
+# and says so in `interval_source` rather than being silently absent from the coverage table.
+_INTERVAL_FAMILIES = ("share_", "cbp_intensity", "constrained_regression")
+
+
+def probabilistic_metrics(
+    scores: pl.DataFrame, *, regime: str, seed: int, arm: str
+) -> pl.DataFrame:
+    """§13.7's coverage, width and CRPS from §10.7's residual-shifted ensembles."""
+    rows: list[dict[str, object]] = []
+    for (estimator,), group in scores.group_by("estimator_id", maintain_order=True):
+        name = str(estimator)
+        eligible = any(name.startswith(f) or name == f for f in _INTERVAL_FAMILIES)
+        scored = group.filter(pl.col("estimate").is_not_null())
+        base = {
+            "regime": regime,
+            "seed": seed,
+            "mask_arm": arm,
+            "estimator_id": name,
+            "metric_family": "probabilistic",
+            "denominator": float(group.height),
+            "denominator_basis": "masked_cell_rows",
+            "n_scored": scored.height,
+        }
+        if not eligible or scored.height < 2:
+            rows.append(
+                {
+                    **base,
+                    "metric_name": "coverage_0.90",
+                    "value": None,
+                    "interval_source": "none",
+                    "calibration_sample_size": 0,
+                }
+            )
+            continue
+
+        residual_pool = (scored["estimate"] - scored["truth"]).to_numpy()
+        covered = {level: 0 for level in _LEVELS}
+        widths: list[float] = []
+        crps_values: list[float] = []
+        clipped_total = 0
+        for position, row in enumerate(scored.iter_rows(named=True)):
+            # LEAVE-ONE-OUT BY POSITION, not by value. A residual computed on this cell IS the
+            # withheld truth (§13.4), so it must go; excluding by float equality would also drop
+            # every OTHER cell that happens to share the same residual, silently shrinking the
+            # calibration sample.
+            others = np.delete(residual_pool, position)
+            if others.size < 2:
+                continue
+            ensemble, n_clipped = clip_at_zero(residual_ensemble(others, row["estimate"]))
+            clipped_total += n_clipped
+            for level in _LEVELS:
+                lo, hi = empirical_interval(ensemble, level)
+                if lo <= row["truth"] <= hi:
+                    covered[level] += 1
+                if level == 0.90:
+                    widths.append(hi - lo)
+            crps_values.append(crps(ensemble, row["truth"]))
+
+        n = len(crps_values)
+        common = {
+            **base,
+            "interval_source": "rolling_residual_ensemble",
+            "calibration_sample_size": n,
+        }
+        for level in _LEVELS:
+            rows.append(
+                {
+                    **common,
+                    "metric_name": f"coverage_{level:.2f}",
+                    "value": covered[level] / n if n else None,
+                }
+            )
+        rows.append(
+            {
+                **common,
+                "metric_name": "mean_interval_width_0.90",
+                "value": float(np.mean(widths)) if widths else None,
+            }
+        )
+        rows.append(
+            {**common, "metric_name": "crps", "value": float(np.mean(crps_values)) if n else None}
+        )
+        # The clip is REPORTED, not absorbed: it shifts nominal coverage.
+        rows.append({**common, "metric_name": "n_clipped_at_zero", "value": float(clipped_total)})
     return pl.DataFrame(rows)
