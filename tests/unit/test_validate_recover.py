@@ -17,9 +17,7 @@ def test_a_masked_state_total_is_unbounded_and_the_hash_moves():
     cfg = load_config(Path("config.yaml"))
     data = HarmonizedData.load(Path("data/staged"))
     base = mask_and_solve(data, [], cfg)
-    masked = mask_and_solve(
-        data, [MaskTarget("41", "2019-06", "state_total", "primary_like")], cfg
-    )
+    masked = mask_and_solve(data, [MaskTarget("41", "2019-06", "state_total", "primary_like")], cfg)
     cell = "state_total|41|2019-06|5|113310|NAICS 2017|ALL"
     row = masked.bounds.filter(pl.col("cell_id") == cell).row(0, named=True)
     assert row["bound_status"] == "unbounded"

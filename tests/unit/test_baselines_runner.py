@@ -281,9 +281,7 @@ def test_a_reconciliation_refusal_is_recorded_as_a_reconciliation_failure(
     # default is bound at definition time into `run_baselines.__defaults__`, so rebinding the
     # module attribute no longer reaches the loop. The keyword is the seam the patch was
     # reaching for, and it needs no mock.
-    results, _ = run_baselines(
-        harmonized_toy, appendix_a_config, estimators=(_WrongDomain(),)
-    )
+    results, _ = run_baselines(harmonized_toy, appendix_a_config, estimators=(_WrongDomain(),))
     assert set(results["decline_kind"].unique().to_list()) == {"reconciliation_failure"}
 
 

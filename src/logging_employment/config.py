@@ -192,7 +192,7 @@ class ValidationConfig(_Strict):
     minimum_missing_set_size: int = 2
 
     @model_validator(mode="after")
-    def _refuse_a_random_mask_only_design(self) -> "ValidationConfig":
+    def _refuse_a_random_mask_only_design(self) -> ValidationConfig:
         designed = (
             self.include_primary_like
             or self.include_complementary_like

@@ -27,8 +27,13 @@ def test_a_masked_row_is_indistinguishable_from_a_real_suppression():
         (pl.col("state_fips") == "41") & (pl.col("reference_month") == "2019-06")
     )
     shared = [
-        "employment_value", "employment_raw", "wages_value", "wages_raw",
-        "disclosure_code", "observation_status", "is_published_numeric_zero",
+        "employment_value",
+        "employment_raw",
+        "wages_value",
+        "wages_raw",
+        "disclosure_code",
+        "observation_status",
+        "is_published_numeric_zero",
     ]
     assert made.select(shared).row(0) == real.select(shared).row(0)
     # ...but the synthetic label distinguishes it for INV-009.
@@ -83,9 +88,7 @@ def test_an_observed_cell_with_no_establishments_is_refused():
     """
     data = _data()
     poisoned = data.qcew_monthly.with_columns(
-        pl.when(
-            (pl.col("state_fips") == "41") & (pl.col("reference_month") == "2019-06")
-        )
+        pl.when((pl.col("state_fips") == "41") & (pl.col("reference_month") == "2019-06"))
         .then(0)
         .otherwise(pl.col("qtrly_establishments"))
         .alias("qtrly_establishments")
@@ -105,8 +108,14 @@ def test_an_already_suppressed_cell_is_refused_as_a_target():
     with pytest.raises(ConceptViolationError, match="observation_status"):
         apply_mask(
             data,
-            [MaskTarget(suppressed["state_fips"], suppressed["reference_month"],
-                        "state_total", "primary_like")],
+            [
+                MaskTarget(
+                    suppressed["state_fips"],
+                    suppressed["reference_month"],
+                    "state_total",
+                    "primary_like",
+                )
+            ],
         )
 
 
