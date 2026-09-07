@@ -705,6 +705,41 @@ restricted_access
 withhold
 ```
 
+### 7.13 `baseline_result`
+
+One row per estimator, reference month, and missing cell — including the cells a declining
+estimator could not weight, which are rows with a null estimate rather than absences.
+
+```text
+estimator_id
+cell_id
+state_fips
+reference_month
+raw_weight
+estimate
+estimate_integer
+weight_basis
+anchor_basis
+reconciliation_status
+decline_reason
+decline_kind
+residual
+missing_set_size
+constraint_set_hash
+```
+
+Allowed `decline_kind` values:
+
+```text
+by_design
+data_gap
+reconciliation_failure
+```
+
+`decline_reason` is free text for a reader; `decline_kind` is the closed set §13 groups on.
+A declining estimator MUST write rows, never omit them: an absent row is indistinguishable from a
+bug.
+
 ---
 
 ## 8. Ingestion and harmonization requirements
@@ -999,6 +1034,39 @@ If the full Bayesian model is not supported, use:
 2. reconciled constrained regression;
 3. reconciled historical shares; then
 4. establishment-count proportional allocation.
+
+### 10.9 Composition and the fallback arm
+
+A baseline MAY compose an **own arm** — the weights its own method produces — with the §10.2
+establishment fallback arm, cell by cell, and reconcile the union. §10.8's rank-1 phrasing,
+"reconciled CBP/QCEW employee-per-establishment with robust historical adjustment", is this
+document's own precedent that a composed estimator is a legitimate baseline rather than a degraded
+one.
+
+Composition MUST be visible per cell. Every reconciled cell MUST record which arm produced its
+weight, and a run's baseline manifest MUST report the split per estimator. Reporting a composite's
+score as a pure estimator's is a validation defect under §13.
+
+Both arms MUST be employees-valued, and the unit MUST be carried structurally — by the type of the
+value handed to composition — rather than checked after the fact by comparing the two arms'
+magnitudes. Reconciliation normalizes the union of the arms, so arms in different units are decided
+entirely by whichever is numerically larger, and the result is positive in every cell and sums
+exactly to the residual. A magnitude comparison cannot separate an honest composite from a units
+error: the two ranges overlap.
+
+There MUST be exactly one construction that turns §10.2 establishment exposure into an
+employees-valued fallback arm. It MUST take the intensity that scales it as an argument; no
+estimator may build or scale a fallback arm itself. Each estimator MUST declare which intensity
+scales its fallback arm, and that declaration MUST appear in the run's baseline manifest. The
+declared intensities need not agree across baselines — §10.4's national CBP March intensity is
+exactly its own shrinkage limit as the CBP cell count goes to zero, a derivation §10.3 and §10.6
+have no equivalent of — but each estimator's choice MUST be readable from the run output without
+reading source.
+
+An intensity derived from the disclosed set MUST come from the same partition the month's residual
+was derived from. Under a §13.2 pseudo-suppression mask the two agree only if the harness rebuilds
+the estimator's partitions from the same mask it used for the residual, and a disagreement MUST
+fail rather than silently scale the fallback off the wrong disclosed set.
 
 ---
 
@@ -1467,6 +1535,11 @@ For every method and draw set, report:
 plus negative outputs, integerization violations, row-sum violations, and class-margin violations.
 
 Reconciled production output requires zero hard-constraint violations within tolerance.
+
+Every scored comparison in §13.5–13.8 MUST report decline counts by kind, per method and per
+holdout regime, and MUST state the denominator it was computed over. A method whose months drop out
+of the scored set drops out non-randomly, so an unreported data-driven decline can make a broken
+implementation's point and probabilistic metrics look better than a correct one's.
 
 ### 13.9 Sensitivity and ablation
 

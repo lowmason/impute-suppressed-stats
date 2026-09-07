@@ -28,6 +28,8 @@ class HarvestProportional:
     """§10.5. Declines until Stage 7 supplies a harvest factor."""
 
     estimator_id = "harvest_proportional"
+    # Declines on this window, so it never reaches a composite.
+    fallback_intensity = None
 
     def weights(self, context: EstimatorContext, anchor: Anchor) -> Weights | Decline:
         """Always a decline on this window, carrying the reason a reader can act on."""
@@ -38,5 +40,8 @@ class HarvestProportional:
                 "source. Stage 7 supplies the harvest factor; until then §10.5 declines rather "
                 "than allocating on a substitute proxy that would be scored as if it were this "
                 "baseline"
-            )
+            ),
+            # The archetype of `by_design`: §10.5 refuses, and no vintage of the inputs it does
+            # have would change that. Stage 7 replaces the refusal, not the data.
+            kind="by_design",
         )

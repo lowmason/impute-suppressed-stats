@@ -1,4 +1,13 @@
-"""§17.4 row 4 and §17.6: every baseline on a frozen fixture, pinned to golden output."""
+"""§17.4 row 4 and §17.6: every baseline on a frozen fixture, pinned to golden output.
+
+THIS FILE IS THE UNITS-AND-MAGNITUDE REGRESSION NET. `EmployeeWeights` carries the composite's
+unit claim structurally, but a type cannot see a corrupt source column or a CBP vintage that moves
+an intensity -- both change the NUMBERS while every arm stays honestly typed. Since
+`MAX_SCALE_RATIO` was removed (see `specs/completed/estimator-composition.md` R-COMP-3), the golden below is
+the only check that would redden on either. Re-pinning it is therefore a decision about the data,
+not a chore: §17.6 requires a documented reason and reviewer approval, and the reason belongs in
+the commit that regenerates the file.
+"""
 
 from __future__ import annotations
 
@@ -50,6 +59,9 @@ def test_the_baseline_output_matches_its_golden_fixture(
     frozen_harmonized, appendix_a_config
 ) -> None:
     """§17.6 golden coverage for baseline predictions and reconciliation.
+
+    Also the units-and-magnitude regression net described in this module's docstring: a source
+    column or a CBP vintage that moves an intensity redden here or nowhere.
 
     The in-memory frame is put into the writer's own row order before comparing.
     `run_baselines` returns rows in emission order (month, then estimator) while

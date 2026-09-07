@@ -227,6 +227,7 @@ def run_baselines_command(
     import polars as pl
 
     from .baselines.runner import (
+        REGISTRY,
         preferred_estimator,
         preferred_estimator_by_month,
         run_baselines,
@@ -267,12 +268,25 @@ def run_baselines_command(
     basis_counts: dict[str, dict[str, int]] = {}
     for row in ran.group_by(["estimator_id", "weight_basis"]).len().iter_rows(named=True):
         basis_counts.setdefault(row["estimator_id"], {})[row["weight_basis"]] = row["len"]
-    declines = {
-        row["estimator_id"]: row["len"]
-        for row in results.filter(pl.col("reconciliation_status") == "declined")
-        .group_by("estimator_id")
+    # Nested by kind, not pooled. §13.5-13.8 define no decline metric, so a scoreboard has to be
+    # able to separate §10.5's considered refusal from a month an estimator lost to a data gap:
+    # pooled, a broken baseline and a benchmark that never runs look identical.
+    declines: dict[str, dict[str, int]] = {}
+    for row in (
+        results.filter(pl.col("reconciliation_status") == "declined")
+        .group_by(["estimator_id", "decline_kind"])
         .len()
         .iter_rows(named=True)
+    ):
+        declines.setdefault(row["estimator_id"], {})[row["decline_kind"]] = row["len"]
+    # R-COMP-6: which intensity scaled each estimator's fallback arm, read off the estimators
+    # themselves. §10.3 and §10.6 declare the disclosed ratio and §10.4 the national CBP March
+    # one, and R-COMP-7 keeps that difference rather than standardising it — so it is reported
+    # here, where a reader can check an arm against the name without reading source.
+    fallback_intensity = {
+        estimator.estimator_id: estimator.fallback_intensity
+        for estimator in REGISTRY
+        if estimator.fallback_intensity is not None
     }
     # A SIBLING manifest. `schema_manifest.json` is `solve-bounds`'s precondition gate and an
     # idempotence test pins its bytes, so nothing here may write to it.
@@ -287,6 +301,7 @@ def run_baselines_command(
                     "anchor_audit": schema_fingerprint(ANCHOR_AUDIT_SCHEMA),
                 },
                 "weight_basis_counts": basis_counts,
+                "fallback_intensity": fallback_intensity,
                 "declines": declines,
                 "anchor": {
                     "basis": "declared_national_total",
@@ -303,8 +318,9 @@ def run_baselines_command(
     for estimator_id, counts in sorted(basis_counts.items()):
         for basis, count in sorted(counts.items()):
             typer.echo(f"{estimator_id} {basis} {count}")
-    for estimator_id, count in sorted(declines.items()):
-        typer.echo(f"declined {estimator_id} {count}")
+    for estimator_id, kinds in sorted(declines.items()):
+        for kind, count in sorted(kinds.items()):
+            typer.echo(f"declined {estimator_id} {kind} {count}")
 
 
 @app.command("reconcile")

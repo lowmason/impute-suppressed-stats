@@ -218,6 +218,13 @@ WEIGHT_BASES: tuple[str, ...] = ("own_estimator", "establishment_fallback", "non
 # QCEW vintage publishes a month with no suppressed cell and SRC-QCEW-006 becomes testable.
 ANCHOR_BASES: tuple[str, ...] = ("declared_national_total", "verified_identity", "none")
 
+# Why a declining estimator declined, as three groupable values rather than prose. §13.5-13.8
+# score estimates against truth and define no decline metric, so an estimator whose months drop
+# out of the scored set drops out non-randomly -- and a data bug can make a baseline's WAPE look
+# BETTER than a correct implementation's. `decline_reason` stays free text beside this; the kind
+# is what a scoreboard groups on.
+DECLINE_KINDS: tuple[str, ...] = ("by_design", "data_gap", "reconciliation_failure")
+
 
 def assert_declared_provenance(frame: pl.DataFrame) -> None:
     """Refuse a provenance value outside its declared tuple.
@@ -232,6 +239,7 @@ def assert_declared_provenance(frame: pl.DataFrame) -> None:
         ("reconciliation_status", RECONCILIATION_STATUSES),
         ("weight_basis", WEIGHT_BASES),
         ("anchor_basis", ANCHOR_BASES),
+        ("decline_kind", DECLINE_KINDS),
     ):
         if column not in frame.columns:
             continue
@@ -330,6 +338,7 @@ BASELINE_RESULT_SCHEMA: dict[str, pl.DataType] = {
     "anchor_basis": pl.String,
     "reconciliation_status": pl.String,
     "decline_reason": pl.String,
+    "decline_kind": pl.String,
     "residual": pl.Float64,
     "missing_set_size": pl.Int64,
     "constraint_set_hash": pl.String,

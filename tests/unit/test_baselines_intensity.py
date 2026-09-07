@@ -108,6 +108,7 @@ def test_reference_year_2024_declines_rather_than_carrying_2023_forward(
     anchor = Anchor("2024-06", 40.0, ("01",), "declared_national_total")
     out = CbpIntensity().weights(context, anchor)
     assert isinstance(out, Decline)
+    assert out.kind == "data_gap"
     assert "2024" in out.reason
 
 

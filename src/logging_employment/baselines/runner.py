@@ -5,10 +5,15 @@ source universes cannot be reconciled. A nonzero establishment gap in any month 
 national row contains a component the state table does not, which makes every month's residual
 suspect -- so this halts the run rather than declining one month and shipping the other 95.
 
-EVERY DECLINE IS A ROW. A baseline that cannot run for a month writes a row with a null estimate
-and a populated `decline_reason`, never no row at all: an absent row is indistinguishable from a
-bug, and §17.4 row 4's "run every baseline on a small frozen fixture" is satisfied by a clean
-decline only if the decline is visible in the output.
+EVERY DECLINE IS A ROW, AND EVERY ROW NAMES ITS KIND. A baseline that cannot run for a month writes
+a row with a null estimate and a populated `decline_reason`, never no row at all: an absent row is
+indistinguishable from a bug, and §17.4 row 4's "run every baseline on a small frozen fixture" is
+satisfied by a clean decline only if the decline is visible in the output. The three situations
+below -- a data problem, an estimator's considered refusal, and a reconciliation failure -- used to
+produce one indistinguishable row shape. `decline_kind` separates them, because §13.5-13.8 score
+against truth and define no decline metric: an estimator whose months drop out of the scored set
+drops out non-randomly, and a data bug can make a baseline's WAPE look better than a correct
+implementation's.
 
 §10.8's HIERARCHY HAS FOUR RUNGS AND §10.1 IS NOT ONE OF THEM. The spec calls equal allocation a
 sanity check and leaves it out of the ordering on purpose -- it ignores the establishment counts
@@ -129,14 +134,24 @@ def run_baselines(
                 # no usable establishment count kills all ten estimators across every month.
                 rows.extend(
                     _decline_rows(
-                        estimator.estimator_id, anchor, str(exc), constraint_set_hash, ids
+                        estimator.estimator_id,
+                        anchor,
+                        str(exc),
+                        constraint_set_hash,
+                        ids,
+                        kind="data_gap",
                     )
                 )
                 continue
             if isinstance(outcome, Decline):
                 rows.extend(
                     _decline_rows(
-                        estimator.estimator_id, anchor, outcome.reason, constraint_set_hash, ids
+                        estimator.estimator_id,
+                        anchor,
+                        outcome.reason,
+                        constraint_set_hash,
+                        ids,
+                        kind=outcome.kind,
                     )
                 )
                 continue
@@ -150,7 +165,12 @@ def run_baselines(
                 # `UniverseClosureError` stays a whole-run halt: that one really is global.
                 rows.extend(
                     _decline_rows(
-                        estimator.estimator_id, anchor, str(exc), constraint_set_hash, ids
+                        estimator.estimator_id,
+                        anchor,
+                        str(exc),
+                        constraint_set_hash,
+                        ids,
+                        kind="reconciliation_failure",
                     )
                 )
                 continue
@@ -188,6 +208,7 @@ def run_baselines(
                         "anchor_basis": anchor.anchor_basis,
                         "reconciliation_status": "anchored_and_reconciled",
                         "decline_reason": None,
+                        "decline_kind": None,
                         "residual": anchor.residual,
                         "missing_set_size": len(anchor.missing_cells),
                         "constraint_set_hash": constraint_set_hash,
@@ -204,8 +225,15 @@ def _decline_rows(
     reason: str,
     constraint_set_hash: str | None,
     ids: dict[str, str],
+    *,
+    kind: str,
 ) -> list[dict[str, object]]:
-    """One visible row per cell a declining estimator could not weight."""
+    """One visible row per cell a declining estimator could not weight, carrying the kind.
+
+    `kind` is keyword-only and has no default: the three call sites below are three different
+    situations, and the whole point of the column is that a reader can tell them apart without
+    parsing `reason`.
+    """
     return [
         {
             "estimator_id": estimator_id,
@@ -219,6 +247,7 @@ def _decline_rows(
             "anchor_basis": anchor.anchor_basis,
             "reconciliation_status": "declined",
             "decline_reason": reason,
+            "decline_kind": kind,
             "residual": anchor.residual,
             "missing_set_size": len(anchor.missing_cells),
             "constraint_set_hash": constraint_set_hash,
