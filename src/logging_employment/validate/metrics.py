@@ -53,3 +53,59 @@ def bound_metrics(scores: pl.DataFrame, *, regime: str, seed: int, arm: str) -> 
         # None, never inf and never 0: an unbounded cell has no width to average.
         rows.append({**base, "metric_name": "mean_feasible_width", "value": width})
     return pl.DataFrame(rows)
+
+
+_POINT_NAMES = ("mae", "rmse", "bias", "wape", "median_ape")
+
+
+def point_metrics(scores: pl.DataFrame, *, regime: str, seed: int, arm: str) -> pl.DataFrame:
+    """§13.6's point metrics over the SCORED rows, with the declined rows counted beside them.
+
+    The denominator is masked cell-rows; the numerator is rows carrying an estimate. Reporting only
+    the numerator is the failure §13.8's closing paragraph names: a method that declines its hard
+    months looks better than one that attempts them.
+    """
+    rows: list[dict[str, object]] = []
+    for (estimator,), group in scores.group_by("estimator_id", maintain_order=True):
+        scored = group.filter(pl.col("estimate").is_not_null())
+        counts = {
+            kind: group.filter(pl.col("decline_kind") == kind).height
+            for kind in ("by_design", "data_gap", "reconciliation_failure")
+        }
+        base = {
+            "regime": regime,
+            "seed": seed,
+            "mask_arm": arm,
+            "estimator_id": str(estimator),
+            "metric_family": "point",
+            "denominator": float(group.height),
+            "denominator_basis": "masked_cell_rows",
+            "n_scored": scored.height,
+            "n_declined_by_design": counts["by_design"],
+            "n_declined_data_gap": counts["data_gap"],
+            "n_declined_reconciliation_failure": counts["reconciliation_failure"],
+        }
+        if scored.height == 0:
+            # Null, never 0.0. A zero error over zero rows reads as perfect accuracy.
+            rows.extend({**base, "metric_name": n, "value": None} for n in _POINT_NAMES)
+            continue
+
+        err = scored["estimate"] - scored["truth"]
+        abs_err = err.abs()
+        values = {
+            "mae": abs_err.mean(),
+            "rmse": float((err**2).mean() ** 0.5),
+            "bias": err.mean(),
+            "wape": (
+                float(abs_err.sum() / scored["truth"].abs().sum())
+                if scored["truth"].abs().sum()
+                else None
+            ),
+            "median_ape": (
+                float((abs_err / scored["truth"].abs()).median())
+                if scored.filter(pl.col("truth").abs() > 0).height == scored.height
+                else None
+            ),
+        }
+        rows.extend({**base, "metric_name": n, "value": values[n]} for n in _POINT_NAMES)
+    return pl.DataFrame(rows)
