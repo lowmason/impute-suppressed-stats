@@ -4,7 +4,10 @@
 
 # Estimator composition: the declared two-arm weight vector
 
-**Status:** design-approved, awaiting plan
+**Status:** COMPLETE (2026-09-07) — implemented by
+`specs/plans/completed/9-estimator-composition.md`; R-COMP-1 through R-COMP-9 and R-COMP-11
+shipped, R-COMP-10 landed as a requirement on Stage 4 in `specs/logging-employment-spec.md`
+§13.8
 **Closes:** `specs/deferred_items.md` — `MAX_SCALE_RATIO = 100.0 is an originated tripwire with no
 spec warrant` and `§10.3's fallback scales by the DISCLOSED intensity; §10.4's uses the NATIONAL
 one`

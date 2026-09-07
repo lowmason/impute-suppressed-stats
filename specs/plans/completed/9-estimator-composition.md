@@ -2,6 +2,13 @@
 
 **Status: COMPLETE (2026-09-07)** — executed via executing-plans; nothing deferred
 
+> Retirement note: `specs/estimator-composition.md` retired to `specs/completed/` in the same
+> commit as this file, and all seven of this plan's references to it were re-pointed at the
+> new path. Three of those seven sit inside code fences below (the `interfaces.py` module
+> docstring, its `Estimator` protocol comment, and the `test_baseline_golden.py` module
+> docstring), so those blocks now differ by one path from what was transcribed at execution
+> time and match the shipped source instead. Nothing else in any code block was touched.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: implement this plan task-by-task via subagent-driven-development (the default) — or executing-plans when your human partner chose inline execution at the handoff. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Give the two-arm composition step `baselines/interfaces.py::compose` performs a written
@@ -20,7 +27,7 @@ new column and the run manifest as a breakdown.
 line-length 100. `interrogate` runs at `fail-under = 100` over `src/`, so **every** new module,
 class, function, and `__post_init__` needs a docstring.
 
-**Spec:** `specs/estimator-composition.md` (requirements R-COMP-1 … R-COMP-11, tests T-1 … T-6).
+**Spec:** `specs/completed/estimator-composition.md` (requirements R-COMP-1 … R-COMP-11, tests T-1 … T-6).
 
 ## Global Constraints
 
@@ -34,7 +41,7 @@ class, function, and `__post_init__` needs a docstring.
 - Run tests with `uv run pytest`. There is no `timeout` binary on this machine; do not wrap
   commands in one.
 - The spec amendment in Task 7 assumes one reading that is stated here so a reviewer can veto it:
-  `specs/estimator-composition.md` §4.2 says "**§7 `baseline_result`.** Add `decline_kind`", but
+  `specs/completed/estimator-composition.md` §4.2 says "**§7 `baseline_result`.** Add `decline_kind`", but
   `specs/logging-employment-spec.md` §7 runs 7.1–7.12 and contains no `baseline_result` contract
   (verified: `grep -n "baseline_result" specs/logging-employment-spec.md` returns only the
   `baseline_results/` directory line in §6.2). Since the amendment is filed under "Amendments to
@@ -464,7 +471,7 @@ bug tripped the guard zero times while shipping own-cell estimates up to 6.12x t
 honest range and the bug's range overlap, so the unit is carried by `EmployeeWeights` instead --
 a claim made once, where the vector is built, that a plain dict cannot impersonate at a call site.
 (Measured 2026-09-06 on the D1 window and `tests/fixtures/baselines/`; see
-`specs/estimator-composition.md` §2.)
+`specs/completed/estimator-composition.md` §2.)
 ```
 
 - [x] **Step 3: State the golden's role where the golden is defined (R-COMP-4)**
@@ -479,7 +486,7 @@ docstring:
 THIS FILE IS THE UNITS-AND-MAGNITUDE REGRESSION NET. `EmployeeWeights` carries the composite's
 unit claim structurally, but a type cannot see a corrupt source column or a CBP vintage that moves
 an intensity -- both change the NUMBERS while every arm stays honestly typed. Since
-`MAX_SCALE_RATIO` was removed (see `specs/estimator-composition.md` R-COMP-3), the golden below is
+`MAX_SCALE_RATIO` was removed (see `specs/completed/estimator-composition.md` R-COMP-3), the golden below is
 the only check that would redden on either. Re-pinning it is therefore a decision about the data,
 not a chore: §17.6 requires a documented reason and reviewer approval, and the reason belongs in
 the commit that regenerates the file.
@@ -974,7 +981,7 @@ class Estimator(Protocol):
     # Which intensity scales this estimator's fallback arm, or None when it builds none. Declared
     # here rather than chosen inside `weights` so that a run's manifest can report the choice, and
     # so §10.3's disclosed value and §10.4's national one stay a reviewable difference rather than
-    # an accident (see `specs/estimator-composition.md` R-COMP-6 and R-COMP-7).
+    # an accident (see `specs/completed/estimator-composition.md` R-COMP-6 and R-COMP-7).
     fallback_intensity: str | None
 
     def weights(self, context: EstimatorContext, anchor: Anchor) -> Weights | Decline:
@@ -2089,7 +2096,7 @@ git commit -m "feat(cli): declare the fallback intensity and break declines out 
 
 ### Task 7: Amend `logging-employment-spec.md`
 
-`specs/estimator-composition.md` §4 lists three amendments. This task makes them. R-COMP-10 lands
+`specs/completed/estimator-composition.md` §4 lists three amendments. This task makes them. R-COMP-10 lands
 here and nowhere else — it is a requirement *on Stage 4*, and this spec is sequenced before Stage 4
 is planned precisely so the requirement exists before the scoreboard is built.
 
@@ -2226,7 +2233,7 @@ git commit -m "spec(baselines): §10.9 composition, §7.13 baseline_result, §13
 ## Exit criteria check
 
 Run these after Task 7, before the Plan Completion Protocol. Each maps to a bullet in
-`specs/estimator-composition.md` §7.
+`specs/completed/estimator-composition.md` §7.
 
 - [x] **A raw establishment fallback arm cannot be constructed or passed to `compose`, demonstrated
   by T-1.**

@@ -3,7 +3,7 @@
 THIS FILE IS THE UNITS-AND-MAGNITUDE REGRESSION NET. `EmployeeWeights` carries the composite's
 unit claim structurally, but a type cannot see a corrupt source column or a CBP vintage that moves
 an intensity -- both change the NUMBERS while every arm stays honestly typed. Since
-`MAX_SCALE_RATIO` was removed (see `specs/estimator-composition.md` R-COMP-3), the golden below is
+`MAX_SCALE_RATIO` was removed (see `specs/completed/estimator-composition.md` R-COMP-3), the golden below is
 the only check that would redden on either. Re-pinning it is therefore a decision about the data,
 not a chore: §17.6 requires a documented reason and reviewer approval, and the reason belongs in
 the commit that regenerates the file.

@@ -36,7 +36,7 @@ bug tripped the guard zero times while shipping own-cell estimates up to 6.12x t
 honest range and the bug's range overlap, so the unit is carried by `EmployeeWeights` instead --
 a claim made once, where the vector is built, that a plain dict cannot impersonate at a call site.
 (Measured 2026-09-06 on the D1 window and `tests/fixtures/baselines/`; see
-`specs/estimator-composition.md` §2.)
+`specs/completed/estimator-composition.md` §2.)
 """
 
 from __future__ import annotations
@@ -114,7 +114,7 @@ class Estimator(Protocol):
     # Which intensity scales this estimator's fallback arm, or None when it builds none. Declared
     # here rather than chosen inside `weights` so that a run's manifest can report the choice, and
     # so §10.3's disclosed value and §10.4's national one stay a reviewable difference rather than
-    # an accident (see `specs/estimator-composition.md` R-COMP-6 and R-COMP-7).
+    # an accident (see `specs/completed/estimator-composition.md` R-COMP-6 and R-COMP-7).
     fallback_intensity: str | None
 
     def weights(self, context: EstimatorContext, anchor: Anchor) -> Weights | Decline:
