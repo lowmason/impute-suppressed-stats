@@ -20,9 +20,54 @@ import polars as pl
 
 from ..contracts import HarmonizedData
 
+# Columns that stay PUBLIC when a cell is suppressed, so a value of theirs equal to the withheld
+# employment is a coincidence rather than a retention. Excluded by name, and by name only, so that
+# any column added later is checked by default.
+#
+# The list is not a convenience. It was forced by a real firing on the first full harness run:
+# `aggregation_level` is the QCEW aggregation-level code and takes exactly two values, '18'
+# (national) and '58' (state) — so every masked state cell whose truth is 58 employees tripped a
+# string comparison against a constant. `qtrly_establishments` is the same class of case and the
+# more important one: QCEW publishes it FOR suppressed cells, which is the entire basis of §10.2
+# and of §13.2's propensity, so a state with 58 establishments and 58 employees is public data
+# coinciding with the truth, not a leak. `source_row_hash` is built from identity columns only
+# (`ingest/qcew.py` uses no value column), so retaining it does not retain the value.
+_PUBLIC_UNDER_SUPPRESSION: frozenset[str] = frozenset(
+    {
+        "snapshot_id",
+        "release_vintage",
+        "release_status",
+        "reference_quarter",
+        "reference_month",
+        "area_fips",
+        "area_type",
+        "state_fips",
+        "industry_code",
+        "naics_vintage",
+        "ownership_code",
+        "aggregation_level",
+        "size_code",
+        "qtrly_establishments",
+        "disclosure_code",
+        "observation_status",
+        "is_published_numeric_zero",
+        "is_true_zero",
+        "source_row_hash",
+        "suppression_type",
+    }
+)
+
 
 def assert_no_retained_truth(masked: HarmonizedData, truth: pl.DataFrame) -> None:
-    """§13.4 bullet 1: no direct copy or derived feature retains the held-out value."""
+    """§13.4 bullet 1: no direct copy or derived feature retains the held-out value.
+
+    SCOPE. This is a tripwire over the columns a mask is responsible for clearing, not a proof of
+    independence: the columns in `_PUBLIC_UNDER_SUPPRESSION` are published for suppressed cells
+    anyway, so an equality there carries no information a real suppression would not also carry.
+    The proof that nothing DERIVED depends on the withheld value is the perturbation test in
+    `tests/integration/test_validate_leakage.py`, which changes the truth and requires an
+    identical masked frame.
+    """
     for row in truth.iter_rows(named=True):
         cell = masked.qcew_monthly.filter(
             (pl.col("state_fips") == row["state_fips"])
@@ -32,6 +77,8 @@ def assert_no_retained_truth(masked: HarmonizedData, truth: pl.DataFrame) -> Non
             continue
         withheld = str(row["truth"])
         for column, value in cell.row(0, named=True).items():
+            if column in _PUBLIC_UNDER_SUPPRESSION:
+                continue
             assert str(value) != withheld, (
                 f"{column} on {row['state_fips']}/{row['reference_month']} retains the held-out "
                 f"value {withheld}"

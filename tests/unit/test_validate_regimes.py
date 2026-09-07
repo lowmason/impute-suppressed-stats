@@ -1,3 +1,6 @@
+import subprocess
+import sys
+import textwrap
 from pathlib import Path
 
 import polars as pl
@@ -72,3 +75,58 @@ def test_the_census_divisions_partition_the_state_universe():
     flat = [f for members in CENSUS_DIVISIONS.values() for f in members]
     assert len(flat) == len(set(flat)), "a state appears in two divisions"
     assert set(flat) == set(STATES_DC_FIPS)
+
+
+def test_every_selector_is_reproducible_within_a_process():
+    """§16.1's idempotence MUST, at the selection layer.
+
+    Two of the seven selectors sampled from an UNORDERED frame — `unique()` and `group_by()` give
+    no order guarantee, so a seeded `sample` over them picked a different month or state-year per
+    process. The `validate` CLI's idempotence test caught it end to end; this catches it here,
+    where the cause is legible.
+    """
+    monthly, cfg = _monthly(), load_config(Path("config.yaml"))
+    for regime, spec in REGIME_SPECS.items():
+        if spec.select is None:
+            continue
+        first = select_targets(regime, monthly, seed=1024, config=cfg)
+        second = select_targets(regime, monthly, seed=1024, config=cfg)
+        assert first == second, f"{regime} is not reproducible for a fixed seed"
+
+
+def test_every_selector_is_reproducible_ACROSS_processes():
+    """The property a within-process repeat cannot check.
+
+    Polars returns the same arbitrary order twice inside one process, so an unordered `unique()`
+    or `group_by()` feeding a seeded `sample` looks stable until the next run. Measured before the
+    fix: `clustered_states_within_month` and `whole_state_year_blocks` produced a different digest
+    in every fresh interpreter, which is what broke §16.1's idempotence MUST for the `validate`
+    command. Two subprocesses is the cheapest honest test of it.
+    """
+    script = textwrap.dedent("""
+        import hashlib
+        from pathlib import Path
+        from logging_employment.config import load_config
+        from logging_employment.contracts import HarmonizedData
+        from logging_employment.validate.regimes import REGIME_SPECS, select_targets
+
+        monthly = HarmonizedData.load(Path("data/staged")).qcew_monthly
+        cfg = load_config(Path("config.yaml"))
+        parts = []
+        for regime, spec in sorted(REGIME_SPECS.items()):
+            if spec.select is None:
+                continue
+            targets = select_targets(regime, monthly, seed=1024, config=cfg)
+            parts.append(regime + ":" + repr(sorted((t.state_fips, t.reference_month) for t in targets)))
+        print(hashlib.sha256("|".join(parts).encode()).hexdigest())
+        """)
+    digests = {
+        subprocess.run(
+            [sys.executable, "-c", script], capture_output=True, text=True, check=True
+        ).stdout.strip()
+        for _ in range(2)
+    }
+    # A subprocess that printed nothing would give {""} and pass vacuously.
+    assert digests != {""}, "the subprocess produced no digest"
+    assert len(next(iter(digests))) == 64
+    assert len(digests) == 1, f"selection differs across processes: {digests}"

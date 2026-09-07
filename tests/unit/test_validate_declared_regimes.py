@@ -32,3 +32,26 @@ def test_break_windows_are_declared_in_config_not_detected():
     windows = cfg.validation.structural_break_windows
     assert len(windows) >= 1
     assert all(len(w) == 2 for w in windows)
+
+
+def test_asking_for_the_vintage_regime_makes_the_harness_refuse():
+    """§13.3 regime 12 is fail-closed, not skip-quietly.
+
+    Appendix A ships `include_vintage_comparison: true`. This package defaults it false because the
+    data cannot support it, and the plan requires the harness to REFUSE rather than emit an empty
+    partition if an operator turns it back on. Before this, every `include_*` flag was decorative:
+    the harness iterated `REGIME_SPECS` and read none of them.
+    """
+    from logging_employment.validate.harness import run_pseudo_suppression
+
+    data = HarmonizedData.load(Path("data/staged"))
+    cfg = load_config(Path("config.yaml"))
+    asked = cfg.model_copy(
+        update={
+            "validation": cfg.validation.model_copy(
+                update={"include_vintage_comparison": True, "pseudo_suppression_seeds": []}
+            )
+        }
+    )
+    with pytest.raises(NotImplementedError, match="second snapshot"):
+        run_pseudo_suppression(data, (), asked)

@@ -93,19 +93,24 @@ def apply_mask(
             "ninth, costing the whole month non-randomly"
         )
 
-    truth = chosen.select(
-        pl.col("state_fips"),
-        pl.col("reference_month"),
-        pl.col("employment_value").alias("truth"),
-        pl.col("qtrly_establishments"),
-    )
-
     labels = pl.DataFrame(
         {
             "state_fips": [t.state_fips for t in targets],
             "reference_month": [t.reference_month for t in targets],
             "_label": [t.suppression_type for t in targets],
         }
+    )
+
+    # The INV-009 label rides on the truth table, not just on the masked frame. `baseline_results`
+    # carries no `suppression_type`, so this is the harness's only route from a target's label to
+    # its scored row — and §13.2 step 8 requires primary-like and complementary-like cells to be
+    # scored SEPARATELY.
+    truth = chosen.join(labels, on=["state_fips", "reference_month"], how="left").select(
+        pl.col("state_fips"),
+        pl.col("reference_month"),
+        pl.col("employment_value").alias("truth"),
+        pl.col("qtrly_establishments"),
+        pl.col("_label").alias("suppression_type"),
     )
 
     masked = (

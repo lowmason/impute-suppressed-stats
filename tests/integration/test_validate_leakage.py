@@ -78,3 +78,35 @@ def test_the_partition_the_runner_derives_carries_no_held_out_truth():
     assert held_out["employment_value"].item() is None
     # And it is genuinely the cell whose truth we hold: same key, value withheld.
     assert truth["truth"].item() is not None
+
+
+def test_a_public_column_coinciding_with_the_truth_is_not_a_leak():
+    """The guard's scope, pinned by the case that forced it.
+
+    `aggregation_level` is the QCEW aggregation-level code: '18' national, '58' state. Every
+    masked state cell whose truth happens to be 58 employees would trip a naive all-columns
+    string comparison. 17/2021-06 is such a cell on D1 — it fired on the first full harness run.
+    """
+    data = HarmonizedData.load(Path("data/staged"))
+    masked, truth = apply_mask(data, [MaskTarget("17", "2021-06", "state_total", "primary_like")])
+    assert truth["truth"].item() == 58
+    row = masked.qcew_monthly.filter(
+        (pl.col("state_fips") == "17") & (pl.col("reference_month") == "2021-06")
+    ).row(0, named=True)
+    assert row["aggregation_level"] == "58"
+    assert_no_retained_truth(masked, truth)
+
+
+def test_a_value_column_that_kept_the_truth_is_still_caught():
+    """The guard must not have been widened into uselessness by the exclusion list."""
+    data = HarmonizedData.load(Path("data/staged"))
+    masked, truth = apply_mask(data, [MaskTarget("41", "2019-06", "state_total", "primary_like")])
+    withheld = truth["truth"].item()
+    leaky = masked.qcew_monthly.with_columns(
+        pl.when((pl.col("state_fips") == "41") & (pl.col("reference_month") == "2019-06"))
+        .then(pl.lit(str(withheld)))
+        .otherwise(pl.col("employment_raw"))
+        .alias("employment_raw")
+    )
+    with pytest.raises(AssertionError, match="employment_raw"):
+        assert_no_retained_truth(dataclasses.replace(masked, qcew_monthly=leaky), truth)

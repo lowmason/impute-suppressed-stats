@@ -82,7 +82,16 @@ def _concentration(monthly: pl.DataFrame, seed: int, config: Config) -> list[Mas
 def _clustered(monthly: pl.DataFrame, seed: int, config: Config) -> list[MaskTarget]:
     """Several states inside ONE month — the regime that stresses the residual, not the history."""
     pool = eligible_targets(monthly)
-    month = pool.select("reference_month").unique().sample(n=1, seed=seed)["reference_month"].item()
+    # SORT BEFORE SAMPLING. `unique()` gives no order guarantee, so a seeded sample over its output
+    # picks a different month per process — measured, this regime and `_state_year` were the only
+    # two of seven that changed digest across runs, and that broke §16.1's idempotence MUST.
+    month = (
+        pool.select("reference_month")
+        .unique()
+        .sort("reference_month")
+        .sample(n=1, seed=seed)["reference_month"]
+        .item()
+    )
     inside = pool.filter(pl.col("reference_month") == month)
     drawn = inside.sample(
         n=min(config.validation.replicates_per_regime, inside.height),
@@ -126,7 +135,12 @@ def _state_year(monthly: pl.DataFrame, seed: int, config: Config) -> list[MaskTa
         pl.col("reference_month").str.slice(0, 4).alias("_year")
     )
     complete = (
-        pool.group_by("state_fips", "_year").agg(pl.len().alias("_n")).filter(pl.col("_n") == 12)
+        pool.group_by("state_fips", "_year")
+        .agg(pl.len().alias("_n"))
+        .filter(pl.col("_n") == 12)
+        # SORT BEFORE SAMPLING: `group_by` returns rows in arbitrary order, so a seeded sample over
+        # it is not reproducible across processes. See `_clustered` for the measurement.
+        .sort("state_fips", "_year")
     )
     if complete.height == 0:
         return []

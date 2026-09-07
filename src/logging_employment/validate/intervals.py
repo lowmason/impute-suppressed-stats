@@ -44,8 +44,21 @@ def empirical_interval(ensemble: np.ndarray, level: float) -> tuple[float, float
 
 
 def crps(ensemble: np.ndarray, truth: float) -> float:
-    """CRPS by the energy form: E|X - y| - 0.5 * E|X - X'|."""
-    x = np.asarray(ensemble, dtype=float)
+    """CRPS by the energy form: E|X - y| - 0.5 * E|X - X'|.
+
+    The second term uses the sorted-ensemble identity
+    `sum_i sum_j |x_i - x_j| = 2 * sum_i (2i - n + 1) * x_(i)`
+    rather than materialising the n x n pairwise matrix. It is an IDENTITY, not an approximation —
+    `test_the_closed_form_matches_the_pairwise_matrix` pins the two against each other.
+
+    The reason is cost, and it is not academic. The harness scores one CRPS per masked cell over an
+    ensemble of the other cells' residuals, so the pairwise form is O(n^2) per cell and O(n^3) per
+    estimator; `whole_seasonal_blocks` masks 291 cells, and §13.7's metrics — not `run_baselines` —
+    became the harness's dominant cost.
+    """
+    x = np.sort(np.asarray(ensemble, dtype=float))
+    n = x.size
     term_one = np.abs(x - float(truth)).mean()
-    term_two = np.abs(x[:, None] - x[None, :]).mean()
+    weights = 2.0 * np.arange(n, dtype=float) - n + 1.0
+    term_two = 2.0 * float(np.dot(weights, x)) / (n * n)
     return float(term_one - 0.5 * term_two)

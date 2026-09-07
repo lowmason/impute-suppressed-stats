@@ -54,6 +54,7 @@ def _empty_truth() -> pl.DataFrame:
             "reference_month": pl.String,
             "truth": pl.Int64,
             "qtrly_establishments": pl.Int64,
+            "suppression_type": pl.String,
         }
     )
 
