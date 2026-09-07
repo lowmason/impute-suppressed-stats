@@ -201,3 +201,83 @@ def probabilistic_metrics(
         # The clip is REPORTED, not absorbed: it shifts nominal coverage.
         rows.append({**common, "metric_name": "n_clipped_at_zero", "value": float(clipped_total)})
     return pl.DataFrame(rows)
+
+
+def decline_and_basis_report(scores: pl.DataFrame, *, regime: str, seed: int) -> pl.DataFrame:
+    """§13.8's R-COMP-10 report: decline counts by kind AND weight basis, per method per regime.
+
+    The weight-basis half is not redundant. Plan 10's `BreakAdjustedShare` refusals reuse the
+    `None` path, so the cell is COMPOSED onto the §10.2 fallback rather than declined: it carries
+    `weight_basis = 'establishment_fallback'` and NO `decline_kind`. A report built from decline
+    counts alone therefore shows §10.3 variant 5 as fully covered. Measured on D1,
+    `share_break_adjusted` is 226 own / 1,001 fallback against its three siblings' 327/900.
+    """
+    rows: list[dict[str, object]] = []
+    for (estimator,), group in scores.group_by("estimator_id", maintain_order=True):
+        rows.append(
+            {
+                "regime": regime,
+                "seed": seed,
+                "estimator_id": str(estimator),
+                "metric_family": "declines",
+                "denominator": float(group.height),
+                "denominator_basis": "masked_cell_rows",
+                "n_scored": group.filter(pl.col("estimate").is_not_null()).height,
+                "n_declined_by_design": group.filter(pl.col("decline_kind") == "by_design").height,
+                "n_declined_data_gap": group.filter(pl.col("decline_kind") == "data_gap").height,
+                "n_declined_reconciliation_failure": group.filter(
+                    pl.col("decline_kind") == "reconciliation_failure"
+                ).height,
+                "n_own_estimator": group.filter(pl.col("weight_basis") == "own_estimator").height,
+                "n_establishment_fallback": group.filter(
+                    pl.col("weight_basis") == "establishment_fallback"
+                ).height,
+            }
+        )
+    return pl.DataFrame(rows)
+
+
+def constraint_metrics(
+    scores: pl.DataFrame, anchor_residuals: pl.DataFrame, *, regime: str, seed: int, arm: str
+) -> pl.DataFrame:
+    """§13.8's residual norms and violation counts.
+
+    Two rules that are silent when broken. (1) An empty row set yields NULL, never 0.0 — a norm of
+    zero over zero rows reads as a perfect pass, so `constraint_rows_scored` rides alongside.
+    (2) The anchor's adding-up residual is its OWN column, outside the norms: the anchor is a
+    `modeling_assumption` and never a constraint row (INV-004/INV-005), so folding it in would
+    report a modelling choice as a constraint violation.
+    """
+    rows: list[dict[str, object]] = []
+    for (estimator,), group in scores.group_by("estimator_id", maintain_order=True):
+        scored = group.filter(pl.col("estimate").is_not_null())
+        n = scored.height
+        negatives = scored.filter(pl.col("estimate") < 0).height
+        integer_violations = scored.filter(
+            pl.col("estimate_integer").is_not_null()
+            & ((pl.col("estimate_integer") - pl.col("estimate")).abs() > 1.0)
+        ).height
+        anchor = anchor_residuals.filter(pl.col("estimator_id") == estimator)
+        base = {
+            "regime": regime,
+            "seed": seed,
+            "mask_arm": arm,
+            "estimator_id": str(estimator),
+            "metric_family": "constraint",
+            "denominator": float(group.height),
+            "denominator_basis": "masked_cell_rows",
+            "n_scored": n,
+            "constraint_rows_scored": n,
+        }
+        rows.append({**base, "metric_name": "negative_outputs", "value": float(negatives)})
+        rows.append(
+            {**base, "metric_name": "integerization_violations", "value": float(integer_violations)}
+        )
+        rows.append(
+            {
+                **base,
+                "metric_name": "anchor_adding_up_max_abs",
+                "value": float(anchor["residual_abs"].max()) if anchor.height else None,
+            }
+        )
+    return pl.DataFrame(rows)
