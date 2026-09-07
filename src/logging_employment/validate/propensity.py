@@ -106,3 +106,30 @@ def sample_targets(monthly: pl.DataFrame, *, n: int, seed: int, config: Config) 
         MaskTarget(r["state_fips"], r["reference_month"], "state_total", "primary_like")
         for r in drawn.iter_rows(named=True)
     ]
+
+
+def complementary_partners(
+    monthly: pl.DataFrame, target: MaskTarget, *, n: int, seed: int
+) -> list[MaskTarget]:
+    """§13.2 step 3's complementary-like cells, in the target's own month.
+
+    SCOPE, stated because the obvious reading is wrong: on the `state_total` arm this defeats no
+    subtraction, because there is none. Measured 2026-09-07, all 4,716 state cells are single-cell
+    components — `assert_no_national_employment_margin` is Stage 0's SRC-QCEW-006 `decline` in
+    code. A masked state total is `unbounded` with and without partners.
+
+    The partners are still required: §13.2 step 8 scores primary-like and complementary-like cells
+    separately, and INV-009 reserves those labels for synthetic masks. Task 8's national-size arm
+    is where a complementary mask actually changes identification.
+    """
+    same_month = eligible_targets(monthly).filter(
+        (pl.col("reference_month") == target.reference_month)
+        & (pl.col("state_fips") != target.state_fips)
+    )
+    drawn = same_month.sample(
+        n=min(n, same_month.height), with_replacement=False, shuffle=True, seed=seed
+    )
+    return [
+        MaskTarget(r["state_fips"], r["reference_month"], "state_total", "complementary_like")
+        for r in drawn.iter_rows(named=True)
+    ]
