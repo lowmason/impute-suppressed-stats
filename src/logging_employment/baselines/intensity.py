@@ -10,8 +10,15 @@ WHAT CBP DOES AND DOES NOT COVER ON THIS WINDOW, MEASURED.
   DECLINE. Carrying the 2023 March intensity forward would be an invention: the entire content of
   §10.4 is a year-specific March intensity, so a carried-forward value is not a weaker version of
   this baseline, it is a different one wearing its name.
-- Hawaii ('15') and Rhode Island ('44') have no row in any published year, and take the declared
-  establishment fallback rather than emptying the baseline.
+- COVERAGE IS PER STATE-YEAR, NOT PER STATE. No year publishes an all-establishments row for all
+  51 cells, and the set of states missing one MOVES BETWEEN YEARS -- so a cell takes the declared
+  establishment fallback in some years and its own shrunk intensity in others. Hawaii ('15') and
+  Rhode Island ('44') are the only states absent from every published year, and North Dakota
+  ('38') joins them in effect: its single appearance carries a null employment, which INV-003
+  drops rather than reading as zero. Enumerating the rest here would be a measurement a CBP
+  vintage moves, so the own/fallback split is reported per estimator in the run manifest
+  (`baseline_manifest.json`'s `weight_basis_counts`) rather than written into this docstring --
+  the same rule §10.3's family follows.
 - Rows carrying a null employment under CBP suppression are dropped, never read as zero (INV-003).
 
 CBP IS A MEASUREMENT, NOT A CONSTRAINT. SRC-CBP-004 enters CBP employment as an

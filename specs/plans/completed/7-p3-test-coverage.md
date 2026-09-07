@@ -1,6 +1,6 @@
 # P3 Test-Coverage Batch — Implementation Plan
 
-**Status: COMPLETE (2026-09-06)** — executed via executing-plans; five new items deferred in specs/deferred_items.md
+**Status: COMPLETE (2026-09-06)** — executed via executing-plans; six new items deferred in specs/deferred_items.md (corrected 2026-09-07: this said "five", the count of SOURCE items the plan closed, while its own completion section is titled "Six new deferred items to append" and all six landed)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: **executing-plans** — inline execution was chosen at
 > the handoff on 2026-09-05, so run the tasks yourself in plan order rather than dispatching

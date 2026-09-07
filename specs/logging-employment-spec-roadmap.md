@@ -206,7 +206,7 @@ Content changes the reviews forced, relative to the spec read alone:
       Exit: the §17.2 property tests pass on generated toy tables — parent equals children, one missing child exactly recoverable, two only partially identified under nonnegativity, overlapping margins identifying despite two suppressions per row, rounding intervals blocking false exact recovery, integrality tightening bounds, mixed-vintage conflict detected, components solving independently; an injected infeasible component halts the run with the §9.7 diagnostic rather than silently relaxing; on the D1 fixture every suppressed state-month carries a `bound_status` and every exact or narrow cell carries a flag; **and a test proves no constraint derived from an assumed disclosure threshold can be admitted with `is_hard=true`** (§9.3 final bullets — the Gemini review's §7 item 5 is the concrete form to reject).
       ROUTING: writing-plans
 
-- [x] Stage 3: Exact reconciliation and transparent baselines (Phase 2b)
+- [x] Stage 3: Exact reconciliation and transparent baselines (Phase 2b) — COMPLETE 2026-09-05, plan 4
       Objective: Ship the reconciliation layer and every required transparent baseline, each emitting coherent point estimates inside the Stage 2 feasible set.
       Spec: §10.1–10.6, §10.8, §12 (all), §16.1 (`run-baselines`, `reconcile`), §16.2 (`reconcile_draws`), §17.1 rows 8–10, §17.3, §17.4 row 4, §17.6 (baseline predictions, reconciliation), §19 Phase 2 (baseline half); Appendix A `reconciliation:` block.
       Gap closed: REQ-013 (point estimates), REQ-018 (layer), REQ-020; INV-002 (layer); SRC-CBP-004 (intensity baseline).

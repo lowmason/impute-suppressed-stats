@@ -51,6 +51,35 @@ def test_the_assertion_names_the_level_when_a_state_size_row_appears() -> None:
         qcew_size.assert_no_state_industry_size(doctored, constants.INDUSTRY_CODE)
 
 
+def test_a_state_row_at_the_all_sizes_code_is_not_a_cross_tabulation() -> None:
+    """The `!= "0"` half of the predicate, which nothing else in this file pins.
+
+    §2.2 row 3 rests on there being no state x industry x SIZE table. A state row at the
+    all-establishment-sizes code is NOT one -- it is the same industry total the slice file
+    publishes -- and the function's docstring says exactly that: "the by-size file does carry
+    non-national areas at some aggregation levels. What §2.2 row 3 rests on is that none of those
+    levels ALSO carries the six-digit industry with a size breakout."
+
+    The sibling test above uses `size_code = "3"`, which is offending under any all-sizes code, so
+    it cannot see this half. Measured: changing `!= "0"` to any other code left all 491 tests
+    green before this test existed.
+    """
+    all_sizes_state_row = pl.DataFrame(
+        {
+            "area_fips": ["01000"],
+            "agglvl_code": ["58"],
+            "industry_code": [constants.INDUSTRY_CODE],
+            "size_code": [constants.QCEW_ALL_SIZES_CODE],
+            "qtrly_estabs": ["5"],
+            "month1_emplvl": ["50"],
+            "year": ["2017"],
+            "qtr": ["1"],
+            "disclosure_code": [""],
+        }
+    )
+    qcew_size.assert_no_state_industry_size(all_sizes_state_row, constants.INDUSTRY_CODE)
+
+
 def test_parsed_output_matches_the_declared_schema() -> None:
     validate_frame(_parsed(), QCEW_NATIONAL_SIZE_SCHEMA, "qcew_national_size")
 

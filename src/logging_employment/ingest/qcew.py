@@ -22,6 +22,8 @@ from ..constants import (
     NATIONAL_AREA,
     PRIVATE_OWN_CODE,
     QCEW_DISCLOSURE_CODES,
+    QCEW_NATIONAL_AGGLVL,
+    QCEW_STATE_AGGLVL,
     STATE_AREAS,
 )
 from ..contracts import QCEW_MONTHLY_SCHEMA
@@ -268,9 +270,9 @@ def parse_qcew_monthly(
             # so every real row is `unknown`. The labelled types belong to Stage 4's synthetic
             # masks, where the answer is known because the mask created it.
             pl.lit("unknown").alias("suppression_type"),
-            pl.when(pl.col("agglvl_code") == "18")
+            pl.when(pl.col("agglvl_code") == QCEW_NATIONAL_AGGLVL)
             .then(pl.lit("national"))
-            .when(pl.col("agglvl_code") == "58")
+            .when(pl.col("agglvl_code") == QCEW_STATE_AGGLVL)
             .then(pl.lit("state"))
             .otherwise(pl.lit("other"))
             .alias("area_type"),

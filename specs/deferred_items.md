@@ -915,7 +915,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       §7.8/§9.3 currently has no home. Needs a ruling on which stage owns it, or the bounds
       docstring corrected to stop naming a stage that has passed.
 
-- [ ] **A `stage3-plan-audit` DEFECT was only half discharged: `intensity.py`'s "MEASURED" coverage
+- [x] **A `stage3-plan-audit` DEFECT was only half discharged: `intensity.py`'s "MEASURED" coverage
       enumeration names two states where five take the fallback.** Task 13 `[DEFECT] plan:3235,
       plan:3366` makes two claims; the Disposition table discharges only (a), the magnitude
       figures. Claim (b) — "HI and RI are not the only states without a CBP row" — appears in no
@@ -933,6 +933,13 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       split from the run manifest, as `historical.py:28-32` already does — not a corrected literal.
       Why it survived is recorded in this file already: the ticked plan-7 Task 18 item states its
       uncovered scope as including "`src/` docstrings beyond a targeted regex".
+      **→ done 2026-09-07 (/deferred quick fix).** Took the remedy the item names rather than
+      correcting the literal: the bullet no longer enumerates a state set at all. It now says
+      coverage is per state-YEAR, that the missing set moves between years, that HI/RI (and ND in
+      effect, via its null-employment row) are the only never-usable states, and that the
+      own/fallback split is reported in `baseline_manifest.json`'s `weight_basis_counts` — the same
+      rule `historical.py` follows. A docstring that names no measurement cannot go stale against
+      a CBP vintage.
 
 - [ ] **`state_universe_report` has no caller, and a live guard's docstring delegates an obligation
       to it.** `harmonize/universe.py:18 state_universe_report` is called from nowhere in `src/`
@@ -987,7 +994,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       `scripts/audit/`, but with no CI it runs only when a human or a plan step invokes it, and
       `interrogate` is explicitly scoped to `src/`.
 
-- [ ] **Three QCEW code constants are declared and then bypassed by inline literals in the
+- [x] **Three QCEW code constants are declared and then bypassed by inline literals in the
       parser.** `constants.py:22-24` declares `QCEW_NATIONAL_AGGLVL = "18"`, `QCEW_STATE_AGGLVL =
       "58"` and `QCEW_ALL_SIZES_CODE = "0"`, each with its BLS title in a trailing comment. None is
       imported anywhere. The values are typed as bare literals at the two sites that need them:
@@ -996,8 +1003,16 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       (`INDUSTRY_CODE`, `QCEW_DISCLOSURE_CODES`, `STATE_AREAS`, `NATIONAL_AREA`), so this is three
       constants that lost their single source of truth rather than a deliberate style. Plan 2 lists
       all three among the constants Stage 1 was to define.
+      **→ done 2026-09-07 (/deferred quick fix), and it was not purely mechanical.** Before
+      substituting, each literal was mutation-tested to confirm the line was guarded. Two were:
+      `qcew.py`'s `"18"` and `"58"` each kill two tests in `test_universe.py`. The third was NOT —
+      changing `qcew_size.py`'s `!= "0"` to any other code left all 491 tests green, because the
+      only test using a state row picks `size_code = "3"`, which is offending under the original
+      AND the mutant. So the `!= "0"` EXEMPTION — the case the predicate exists to allow — was
+      unpinned. `test_a_state_row_at_the_all_sizes_code_is_not_a_cross_tabulation` was added first,
+      confirmed to die under the mutation, and only then were all three literals replaced.
 
-- [ ] **The two §5 concept guards are never called, and unlike the repo's other inert seams nothing
+- [x] **The two §5 concept guards are never called, and unlike the repo's other inert seams nothing
       says so.** `harmonize/concepts.py` defines `reject_enterprise_size` (INV-010, SRC-OTH-001)
       and `reject_nonemployer_in_core_total` (SRC-OTH-004); neither is called anywhere in `src/`,
       both are exercised only by unit tests. The substance is defensible — Stage 7 owns
@@ -1008,8 +1023,14 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       "SRC-OTH-001/004 (guards)" under "Gap closed", which reads as wired. Compare
       `errors.py:81-89`'s `NoHarvestFactorError` — same Stage-7 shape, carries the note, and is
       recorded at `:600`. One-line docstring fix, filed so it is not re-found as a live defect.
+      **→ done 2026-09-07 (/deferred quick fix).** `harmonize/concepts.py`'s module docstring now
+      states that neither guard is called today and that this is correct rather than a gap: both
+      refuse an input from a source with no ingest module yet, Stage 7 owns those halves and is
+      where the call sites appear, and until then they are reserved. Written in the same form as
+      `errors.NoHarvestFactorError`, and for the reason the item gives — an uncalled guard reads as
+      a gap unless it says it is waiting.
 
-- [ ] **Stage 3 completed without the completion stamp the roadmap mandates in the spec's
+- [x] **Stage 3 completed without the completion stamp the roadmap mandates in the spec's
       Rollout.** The roadmap's "Stage-spec stamp" section requires that on completion the stamp
       becomes authoritative: "Stage N: COMPLETE (YYYY-MM-DD) — implemented by plan <id> (path)."
       The spec's Rollout "Stage stamps" section carries exactly three pairs — Stage 0 (plan 1),
@@ -1020,8 +1041,14 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       are added at planning time. Ranked last here because the substance is not lost, only filed in
       the wrong place: the roadmap's Stage 3 block carries a SHIPPED paragraph with the date, the
       retired plan and the inherited contract changes. Remediation is a stamp, not code.
+      **→ done 2026-09-07 (/deferred quick fix).** Both halves: the `- Roadmap: ... Stage 3` /
+      `> Stage 3: COMPLETE (2026-09-05) — implemented by plan 4` pair now closes the spec's Rollout
+      "Stage stamps" section, and the roadmap's Stage 3 heading carries the "— COMPLETE 2026-09-05,
+      plan 4" suffix Stages 0-2 have. The stamp deliberately does NOT restate what Stage 3 shipped:
+      that lives in the roadmap's Stage 3 block, which plan 9 has already amended once, and a
+      second copy is precisely how the two would drift.
 
-- [ ] **Two retired plans' status headers misstate their own deferral disposition.** Neither is
+- [x] **Two retired plans' status headers misstate their own deferral disposition.** Neither is
       missing work; both are record defects in the field this kind of audit reads first.
       (1) `specs/plans/completed/2-stage1-logging-employment-spec.md` is the only one of the nine
       with no `**Status: COMPLETE (...)**` line at all, so it is the one plan where a reader cannot
@@ -1037,3 +1064,10 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       deferred"; its own completion section is titled "**Six new deferred items to append**" and
       all six landed in the `## 7-p3-test-coverage` section. The "five" is the count of SOURCE
       items plan 7 was assigned to close, collapsed into the wrong sentence.
+      **→ done 2026-09-07 (/deferred quick fix).** Plan 2 now carries a status header naming the
+      completion date and its deferral disposition, with a note that the header was added after
+      the fact. Which execution skill ran is recorded in neither the file nor its retirement
+      commit `5969bd9`, so the header does not name one rather than guessing — and the note keeps
+      the caveat that the plan's deviation convention began at Task 7, so Tasks 1-6 cannot be
+      distinguished between "nothing raised" and "no convention to raise it under". Plan 7's
+      header now reads six with the miscount explained inline.

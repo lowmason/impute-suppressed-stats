@@ -2396,3 +2396,14 @@ Other §21 rows keep their Appendix A defaults until a stage's plan or finding c
 >   `specs/findings/source-audit.md` records `simultaneous_state_industry_size: false`
 >   and `stage6_reroute_required: false`, so §2.2's premise holds and Stage 6 keeps
 >   its `writing-plans` routing.
+
+- Roadmap: specs/logging-employment-spec-roadmap.md, Stage 3 — on plan completion, tick the stage and re-validate later stages against what shipped.
+> Stage 3: COMPLETE (2026-09-05) — implemented by plan 4 (specs/plans/completed/4-stage3-logging-employment-spec.md).
+> Next: resume the roadmap.
+>
+> Stamped 2026-09-07, after the fact. Plan 4 completed without writing this pair; `/deferred`
+> recorded the omission and this closes it. **The substance is deliberately not duplicated here.**
+> What Stage 3 shipped, the four contract changes later stages inherit, and the D1 measurements
+> all live in the roadmap's Stage 3 block — and that block has already been amended once (plan 9
+> superseded its `MAX_SCALE_RATIO` contract). A second copy is how the two would drift, which is
+> the failure this stamp exists to prevent rather than commit.

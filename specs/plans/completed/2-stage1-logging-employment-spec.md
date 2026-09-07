@@ -1,5 +1,17 @@
 # Stage 1: Foundation, Ingestion, and Harmonization — Implementation Plan
 
+**Status: COMPLETE (2026-09-05)** — deferred items in specs/deferred_items.md
+
+> Header added 2026-09-07 by a `/deferred` quick fix, not at completion — this was the only one of
+> the nine retired plans carrying no status line, so it was the one plan where a reader could not
+> tell from the file whether anything was deferred. The completion facts are the file's own: all
+> sixteen tasks complete 2026-09-05, 131 of 131 steps ticked, exit criteria ticked against named
+> witness tests, retired by commit `5969bd9`. **Which execution skill ran is recorded nowhere** —
+> not in this file, not in that commit — so it is not asserted here rather than guessed. One scope
+> caveat the record cannot settle: this plan's deviation convention began at Task 7 ("Deviations
+> from Task 8 on are annotated inline"), so for Tasks 1-6 the file cannot distinguish "nothing was
+> raised" from "no convention to raise it under".
+
 > **For agentic workers:** REQUIRED SUB-SKILL: implement this plan task-by-task via
 > subagent-driven-development (the default) — or executing-plans when your human partner
 > chose inline execution at the handoff. Steps use checkbox (`- [ ]`) syntax for tracking.

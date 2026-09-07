@@ -7,7 +7,11 @@ import zipfile
 
 import polars as pl
 
-from ..constants import INDUSTRY_CODE, QCEW_DISCLOSURE_CODES
+from ..constants import (
+    INDUSTRY_CODE,
+    QCEW_ALL_SIZES_CODE,
+    QCEW_DISCLOSURE_CODES,
+)
 from ..contracts import QCEW_NATIONAL_SIZE_SCHEMA
 from ..errors import (
     MissingCrossTabulationError,
@@ -71,7 +75,7 @@ def assert_no_state_industry_size(frame: pl.DataFrame, industry: str) -> None:
     """
     industry_rows = frame.filter(pl.col("industry_code") == industry)
     offending = industry_rows.filter(
-        (~pl.col("area_fips").str.starts_with("US")) & (pl.col("size_code") != "0")
+        (~pl.col("area_fips").str.starts_with("US")) & (pl.col("size_code") != QCEW_ALL_SIZES_CODE)
     )
     if offending.height:
         levels = sorted(offending["agglvl_code"].unique().to_list())

@@ -1,4 +1,14 @@
-"""Concept guards that halt a run before a statistical unit is silently relabeled."""
+"""Concept guards that halt a run before a statistical unit is silently relabeled.
+
+NEITHER GUARD IS CALLED TODAY, AND THAT IS CORRECT RATHER THAN A GAP. Each refuses an input from a
+source this stage does not ingest: `reject_enterprise_size` guards SUSB (INV-010, SRC-OTH-001) and
+`reject_nonemployer_in_core_total` guards the nonemployer series (SRC-OTH-004), and neither
+`ingest/susb.py` nor `ingest/nonemployer.py` exists. Roadmap Stage 7 owns those ingest halves and
+is where the call sites appear; until then both are reserved and are exercised only by their unit
+tests. Written down because the alternative reading -- a guard the build path forgot to call -- is
+indistinguishable from this one without the note. Same shape, and same reason, as
+`errors.NoHarvestFactorError`.
+"""
 
 from __future__ import annotations
 
