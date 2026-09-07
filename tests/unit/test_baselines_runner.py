@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from unittest import mock
-
 import polars as pl
 import pytest
 
-from logging_employment.baselines import runner
 from logging_employment.baselines.runner import (
     FALLBACK_ORDER,
     REGISTRY,
@@ -280,8 +277,11 @@ def test_a_reconciliation_refusal_is_recorded_as_a_reconciliation_failure(
                 basis=dict.fromkeys(anchor.missing_cells[:-1], "own_estimator"),
             )
 
-    with mock.patch.object(runner, "REGISTRY", (_WrongDomain(),)):
-        results, _ = run_baselines(harmonized_toy, appendix_a_config)
+    # Injected through the `estimators` keyword rather than by patching `runner.REGISTRY`: the
+    # default is bound at definition time into `run_baselines.__defaults__`, so rebinding the
+    # module attribute no longer reaches the loop. The keyword is the seam the patch was
+    # reaching for, and it needs no mock.
+    results, _ = run_baselines(harmonized_toy, appendix_a_config, estimators=(_WrongDomain(),))
     assert set(results["decline_kind"].unique().to_list()) == {"reconciliation_failure"}
 
 
@@ -300,3 +300,15 @@ def test_no_declined_row_reaches_the_output_without_a_kind(
     declined = results.filter(pl.col("reconciliation_status") == "declined")
     assert declined.height > 0
     assert declined["decline_kind"].null_count() == 0
+
+
+def test_run_baselines_accepts_an_estimator_subset(harmonized_toy, appendix_a_config) -> None:
+    """§16.2 hands `run_pseudo_suppression` an estimator sequence; the runner must accept one."""
+    subset = REGISTRY[:2]
+    results, _audit = run_baselines(harmonized_toy, appendix_a_config, estimators=subset)
+    assert set(results["estimator_id"].unique().to_list()) == {e.estimator_id for e in subset}
+
+
+def test_run_baselines_defaults_to_the_full_registry(harmonized_toy, appendix_a_config) -> None:
+    results, _audit = run_baselines(harmonized_toy, appendix_a_config)
+    assert results["estimator_id"].n_unique() == len(REGISTRY)

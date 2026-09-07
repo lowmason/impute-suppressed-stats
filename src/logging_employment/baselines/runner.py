@@ -23,6 +23,8 @@ preferred.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import polars as pl
 
 from ..config import Config
@@ -98,7 +100,11 @@ def _cell_ids(partition, anchor) -> dict[str, str]:
 
 
 def run_baselines(
-    data: HarmonizedData, config: Config, *, constraint_set_hash: str | None = None
+    data: HarmonizedData,
+    config: Config,
+    *,
+    constraint_set_hash: str | None = None,
+    estimators: Sequence[Estimator] = REGISTRY,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Every estimator, every month. Returns `(baseline_results, anchor_audit)`.
 
@@ -106,6 +112,10 @@ def run_baselines(
     these estimates sit beside, and §18.1's reproducibility check needs the two to agree. The CLI
     reads it from `schema_manifest.json`, which is the same file `solve-bounds` gates on. It stays
     optional so a unit test can build a toy `HarmonizedData` without a Stage 2 run.
+
+    `estimators` defaults to the full `REGISTRY` and exists so §13's harness can restrict a regime
+    to the rungs it needs: measured, ten estimators cost ~30 s per call against ~0.4 s for one, and
+    the harness pays that per mask replicate.
     """
     partitions = observed_partition(data.qcew_monthly)
     audit = closure_audit(data.qcew_monthly, partitions)
@@ -120,7 +130,7 @@ def run_baselines(
         if not anchor.missing_cells:
             continue
         ids = _cell_ids(partitions[month], anchor)
-        for estimator in REGISTRY:
+        for estimator in estimators:
             try:
                 outcome = estimator.weights(context, anchor)
             except WeightDomainError as exc:

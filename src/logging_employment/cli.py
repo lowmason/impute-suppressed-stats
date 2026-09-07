@@ -378,3 +378,47 @@ def reconcile_command(
     typer.echo(f"max residual drift {worst:.3e}")
     if not within_tolerance:
         raise typer.Exit(code=1)
+
+
+@app.command("validate")
+def validate_command(
+    config: Path = typer.Option(..., "--config", exists=True, dir_okay=False),
+) -> None:
+    """Run §13's pseudo-suppression harness and persist its metrics and scoreboard."""
+    import json
+
+    from .baselines.runner import REGISTRY
+    from .build import write_parquet_deterministic
+    from .contracts import VALIDATION_METRIC_SCHEMA, HarmonizedData, validate_frame
+    from .runs import run_dir, run_id
+    from .validate.harness import run_pseudo_suppression
+
+    cfg = load_config(config)
+    data = HarmonizedData.load(Path(cfg.storage.staged_uri))
+    run = run_dir(cfg, run_id(cfg, _input_digests(cfg)))
+    run.mkdir(parents=True, exist_ok=True)
+
+    result = run_pseudo_suppression(data, REGISTRY, cfg)
+
+    # The declared schema is made load-bearing here rather than left as documentation: Task 2
+    # declares VALIDATION_METRIC_SCHEMA and §15.1 item 5 names the file, but nothing gated the
+    # write. `validation_scores` is deliberately NOT gated — it carries `baseline_results`' columns
+    # plus the joined ones, a superset of VALIDATION_SCORE_SCHEMA, and narrowing it is a deferred
+    # decision rather than something to do silently on the way out.
+    validate_frame(result.metrics, VALIDATION_METRIC_SCHEMA, "validation_metrics")
+
+    hashes = {
+        "validation_scores": write_parquet_deterministic(
+            result.scores, run / "validation_scores.parquet"
+        ),
+        "validation_metrics": write_parquet_deterministic(
+            result.metrics, run / "validation_metrics.parquet"
+        ),
+        "validation_scoreboard": write_parquet_deterministic(
+            result.scoreboard, run / "validation_scoreboard.parquet"
+        ),
+    }
+    manifest = {**result.manifest, "output_hashes": hashes}
+    (run / "validation_manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True))
+    for regime, entry in sorted(result.manifest["regimes"].items()):
+        typer.echo(f"{regime} {entry['disposition']} scored={entry['n_scored']}")

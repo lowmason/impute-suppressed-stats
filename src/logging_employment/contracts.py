@@ -240,6 +240,7 @@ def assert_declared_provenance(frame: pl.DataFrame) -> None:
         ("weight_basis", WEIGHT_BASES),
         ("anchor_basis", ANCHOR_BASES),
         ("decline_kind", DECLINE_KINDS),
+        ("suppression_type", SUPPRESSION_TYPES),
     ):
         if column not in frame.columns:
             continue
@@ -359,6 +360,100 @@ ANCHOR_AUDIT_SCHEMA: dict[str, pl.DataType] = {
     "missing_set_size": pl.Int64,
     "anchored": pl.Boolean,
     "implied_intensity": pl.Float64,
+}
+
+
+HOLDOUT_REGIMES: tuple[str, ...] = (
+    "small_cell_biased",
+    "concentration_proxy",
+    "clustered_states_within_month",
+    "long_consecutive_runs",
+    "whole_state_year_blocks",
+    "regional_blocks",
+    "whole_seasonal_blocks",
+    "rolling_origin",
+    "retrospective_smoothing",
+    "structural_break",
+    "naics_transition",
+    "preliminary_to_final_vintage",
+    "cbp_size_gaps",
+)
+
+# Why a regime may not produce scores. `cannot_run_on_d1` is a REFUSAL, not a skip: the harness
+# raises rather than emitting an empty partition that reads as "scored, nothing wrong".
+REGIME_DISPOSITIONS: dict[str, str] = {
+    "small_cell_biased": "feasible",
+    "concentration_proxy": "feasible",
+    "clustered_states_within_month": "feasible",
+    "long_consecutive_runs": "feasible",
+    "whole_state_year_blocks": "feasible",
+    "regional_blocks": "feasible",
+    "whole_seasonal_blocks": "feasible",
+    "rolling_origin": "feasible",
+    # No smoothing estimator exists in the §10 registry to exercise; adding one is a new baseline
+    # outside §10's set and outside this stage.
+    "retrospective_smoothing": "vacuous_on_registry",
+    "structural_break": "feasible",
+    "naics_transition": "feasible",
+    # Measured 2026-09-07: no period in any staged table carries a second snapshot.
+    "preliminary_to_final_vintage": "cannot_run_on_d1",
+    "cbp_size_gaps": "feasible",
+}
+
+MASK_ARMS: tuple[str, ...] = ("state_total", "national_size")
+
+INTERVAL_SOURCES: tuple[str, ...] = ("rolling_residual_ensemble", "none")
+
+# One row per (regime, seed, replicate, estimator, cell): the raw scored observations, including
+# the ones that were declined. Distinct in grain from VALIDATION_METRIC_SCHEMA below, and
+# conflating the two is how R-COMP-10's denominator gets lost.
+VALIDATION_SCORE_SCHEMA: dict[str, pl.DataType] = {
+    "regime": pl.String,
+    "seed": pl.Int64,
+    "replicate": pl.Int64,
+    "mask_arm": pl.String,
+    "estimator_id": pl.String,
+    "cell_id": pl.String,
+    "state_fips": pl.String,
+    "reference_month": pl.String,
+    "suppression_type": pl.String,
+    "truth": pl.Float64,
+    "estimate": pl.Float64,
+    "estimate_integer": pl.Int64,
+    "weight_basis": pl.String,
+    "decline_kind": pl.String,
+    "bound_status": pl.String,
+    "selected_lower": pl.Float64,
+    "selected_upper": pl.Float64,
+    "masked_constraint_set_hash": pl.String,
+    "lookback_months_masked": pl.Int64,
+    "missing_set_size": pl.Int64,
+}
+
+# One row per (regime, seed, estimator, metric_family): the §13.5-13.8 aggregates, each carrying
+# its own denominator.
+VALIDATION_METRIC_SCHEMA: dict[str, pl.DataType] = {
+    "regime": pl.String,
+    "seed": pl.Int64,
+    "mask_arm": pl.String,
+    "estimator_id": pl.String,
+    "metric_family": pl.String,
+    "metric_name": pl.String,
+    "value": pl.Float64,
+    # R-COMP-10: every scored comparison states the base it was computed over.
+    "denominator": pl.Float64,
+    "denominator_basis": pl.String,
+    "n_scored": pl.Int64,
+    "n_declined_by_design": pl.Int64,
+    "n_declined_data_gap": pl.Int64,
+    "n_declined_reconciliation_failure": pl.Int64,
+    # Plan 10's refusals COMPOSE rather than decline, so they never reach the counts above.
+    "n_own_estimator": pl.Int64,
+    "n_establishment_fallback": pl.Int64,
+    "interval_source": pl.String,
+    "calibration_sample_size": pl.Int64,
+    "bound_cells_finite_upper": pl.Int64,
+    "constraint_rows_scored": pl.Int64,
 }
 
 

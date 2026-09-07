@@ -513,7 +513,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       two values were never far apart (disclosed 5.442-6.380, national 5.914-6.139) — this was an
       unexplained divergence in a layer Stage 4 is about to score, not a numerical error.
 
-- [ ] **`disclosed_intensity` reads the partition from the context while the residual comes from
+- [x] **`disclosed_intensity` reads the partition from the context while the residual comes from
       the anchor.** `baselines/simple.py` looks up `context.partitions[anchor.reference_month]`,
       but `national_residual` was handed a `Partition` argument directly. Under a Stage 4
       pseudo-suppression mask the two agree only if the harness rebuilds
@@ -533,6 +533,18 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       the same mask it hands the anchor, or every composing estimator now fails closed on it.
       §10.9 of `specs/logging-employment-spec.md` states that requirement; Stage 4's plan closes
       this item and should record that plan 9 supplied it.
+      **→ done in plan 11 (2026-09-07).** Closed STRUCTURALLY rather than by assertion, which is
+      stronger than the option this item asked for. Plan 11's harness never builds an
+      `EstimatorContext` or a `Partition` at all: `validate/mask.py::apply_mask` masks the FRAME
+      and returns a new `HarmonizedData`, and `run_baselines` derives both the partition and the
+      anchor from that single object (`baselines/runner.py:110-119`). There is no second object to
+      disagree with, so the mismatch is unconstructible rather than merely checked. Plan 11's
+      evidence §3 measured why the alternative fails: a Partition-only mask leaves the constraint
+      system fixing the answer (`bound_status='observed'`, an `eq` row at the held-out value) AND
+      leaves the truth in `context.partitions[m].missing["employment_value"]`, one column read from
+      any estimator — latent today only because none of the ten happens to read it. Pinned by
+      `tests/integration/test_validate_leakage.py::test_the_partition_the_runner_derives_carries_no_held_out_truth`,
+      which fails the moment anything reintroduces a partition built from unmasked data.
 
 - [ ] **The `general_method` guard lives at the CLI, not in the reconciliation layer.**
       `require_supported_method` is exported from `reconcile.projection` but is called only where
@@ -1083,3 +1095,84 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       the caveat that the plan's deviation convention began at Task 7, so Tasks 1-6 cannot be
       distinguished between "nothing raised" and "no convention to raise it under". Plan 7's
       header now reads six with the miscount explained inline.
+
+## 11-stage4-logging-employment-spec — 2026-09-07
+
+- [ ] **Wire `rolling_origin` and `cbp_size_gaps` into the harness scoring loop.**
+      Both regimes are declared `feasible` in `contracts.REGIME_DISPOSITIONS` and both are
+      implemented — `validate/regimes.py` ships `rolling_origin_frames` (frame truncation) and
+      `cbp_size_gap_keys` / `apply_cbp_gap` (CBP state-year removal), each with unit tests. Neither
+      produces a `MaskTarget`, so `select_targets` returns `[]` and
+      `validate/harness.py::run_pseudo_suppression` never reaches them: the D1 acceptance run
+      reports `feasible / scored=0` for both. The plan specified the two mechanisms (Tasks 11 and
+      12) but never specified their wiring into Task 18's loop, and inventing a design during
+      execution was out of scope. The harness now records an explicit `reason` on each so the
+      manifest cannot read as "scored, nothing wrong", and
+      `tests/integration/test_d1_validation.py::test_no_regime_reports_zero_scores_without_saying_why`
+      pins that. To close: decide what each regime scores. `rolling_origin` needs a target
+      selector applied to the TRUNCATED frame (the `assert_no_future_rows` guard already exists);
+      `cbp_size_gaps` needs the CBP gap composed with a QCEW mask, since dropping CBP alone changes
+      only `cbp_intensity`'s availability and produces no scored cell on its own.
+- [ ] **§13.7's CRPS is the harness's dominant cost, not `run_baselines`.**
+      The plan's cost model (evidence §4) attributes ~30 s of a ~30.4 s replicate to
+      `run_baselines`. Measured 2026-09-07 during execution, that is wrong once §13.7 is wired:
+      `crps` is evaluated once per scored cell over an ensemble of the other cells' residuals, so
+      it is O(n^2) per cell and O(n^3) per estimator, and `whole_seasonal_blocks` masks 291 cells.
+      `validate/intervals.py::crps` was changed to the exact sorted-ensemble identity
+      (`sum_i sum_j |x_i - x_j| = 2 * sum_i (2i - n + 1) * x_(i)`), which is O(n log n) and is
+      pinned against the pairwise definition by
+      `tests/unit/test_validate_intervals.py::test_the_closed_form_matches_the_pairwise_matrix`.
+      A full three-seed run is 11:03 after that change. Still open: the per-cell leave-one-out
+      rebuilds the whole ensemble each time, and the pairwise term is shift-invariant except for
+      the zero clip, so an incremental form would remove another factor of n. Revisit if
+      `replicates_per_regime` is raised from 3 seeds toward Appendix A's 20 replicates, where the
+      plan's ~2.2 h estimate applies.
+- [ ] **`validation_scores` / `validation_metrics` are written without `validate_frame`.**
+      `contracts.VALIDATION_SCORE_SCHEMA` and `VALIDATION_METRIC_SCHEMA` are declared (plan Task 2)
+      and the metric emitters' union matches `VALIDATION_METRIC_SCHEMA` exactly — verified during
+      execution and asserted by
+      `tests/integration/test_d1_validation.py::test_the_harness_produces_metrics_that_match_the_declared_schema`.
+      But `cli.py::validate_command` calls `write_parquet_deterministic` directly without a
+      `validate_frame` gate, and `validation_scores` is never checked against
+      `VALIDATION_SCORE_SCHEMA` at all — it carries `baseline_results`' columns plus the joined
+      ones, which is a superset. Either widen the loop that gates the other persisted tables to
+      cover these two, or narrow the scores frame to its declared schema before writing. The plan
+      declared both schemas and wired neither into the writer.
+- [ ] **"Preferred transparent baseline" is undefined against §10.8's rung exclusion.**
+      `validate/scoreboard.py::preferred_baseline` returns the lowest-WAPE estimator that scored
+      anything. On the D1 acceptance run (`runs/f03023ac9f3a`, 2026-09-07) that named
+      `equal_residual` for `long_consecutive_runs` — and §10.8 deliberately leaves equal allocation
+      OUT of its four-rung ordering, calling it a sanity check, because it ignores the
+      establishment counts QCEW publishes for suppressed cells (`baselines/runner.py` module
+      docstring, `FALLBACK_ORDER`). So Stage 4's scoreboard can name as "preferred" an estimator
+      Stage 3 refuses to rank. The plan (Task 17) specifies "the best-scoring estimator that
+      actually scored something" and never addresses the collision. Stage 5's §13.10 promotion gate
+      compares the model against this number, so the ambiguity has to be resolved before the gate
+      is applied: either restrict `preferred_baseline` to `FALLBACK_ORDER`'s members, or state
+      explicitly that scoring and the production fallback ordering answer different questions and
+      let the scoreboard report both. Do not resolve it silently in Stage 5.
+- [ ] **Appendix A's `include_*` switches gate nothing.**
+      `ValidationConfig` declares `include_random_mask_sanity_check`, `include_primary_like`,
+      `include_complementary_like`, `include_long_runs`, `include_rolling_origin`,
+      `include_retrospective_smoothing` and `include_vintage_comparison` (plan Task 1), and
+      `validate/harness.py::run_pseudo_suppression` iterates `contracts.REGIME_DISPOSITIONS`
+      without reading any of them. Turning `include_long_runs` off still runs
+      `long_consecutive_runs`. Only `include_vintage_comparison` is wired, and only in the
+      fail-closed direction the plan specified: asking for regime 12 now raises rather than
+      recording a disposition and continuing
+      (`tests/unit/test_validate_declared_regimes.py::test_asking_for_the_vintage_regime_makes_the_harness_refuse`).
+      The rest were left alone because the flag-to-regime mapping is a design decision the plan
+      never made — six flags do not partition thirteen regimes, and `include_primary_like` /
+      `include_complementary_like` describe MASK LABELS (INV-009) rather than regimes at all. The
+      model validator that refuses a random-mask-only design reads the same flags, so today it
+      refuses a configuration that would in fact have run every regime. Decide the mapping, then
+      either wire it or delete the flags that name nothing.
+- [ ] **The `validate` CLI runs the full REGISTRY with no estimator-subset option.**
+      Task 4 added `estimators` to `run_baselines` and the plan calls it "a 5x lever"; §16.2's
+      `run_pseudo_suppression` takes the sequence and `cli.py::validate_command` hardcodes
+      `REGISTRY`. One CLI pass over one seed is ~3.7 minutes and the shipped three-seed run is
+      11:03 (`runs/f03023ac9f3a`, 2026-09-07), so `tests/integration/test_validate_cli.py` has to
+      share a single invocation across its two tests to stay affordable. An `--estimators` option,
+      or a per-regime declared subset as the plan's Task 18 note suggests ("regimes declare the
+      estimators they need"), would let the CLI test cover the wiring in seconds instead of
+      minutes. Nothing is wrong today; the lever is simply not reachable from the command line.
