@@ -32,6 +32,8 @@ count as its weight: the own arm is `intensity x A` in employees, so merging a r
 2023-06, Hawaii landed at 0.93 against a national 5.9. `national_intensity x A` is the right
 answer and costs nothing, because it is precisely what this estimator's own shrinkage returns in
 the limit: as n -> 0, weight = n/(n+k) -> 0 and the shrunk intensity IS the national intensity.
+That choice is declared as `fallback_intensity = NATIONAL_CBP_MARCH` rather than written into this
+module's body, and `baselines/fallback.py` is the one thing that builds the arm.
 """
 
 from __future__ import annotations
@@ -40,36 +42,16 @@ import polars as pl
 
 from ..reconcile.allocate import Weights
 from ..reconcile.anchor import Anchor
-from .interfaces import Decline, EmployeeWeights, EstimatorContext, compose
+from .fallback import (
+    NATIONAL_CBP_MARCH,
+    compose_with_declared_fallback,
+    intensity_rows,
+    national_march_intensity,
+)
+from .interfaces import Decline, EmployeeWeights, EstimatorContext
 from .simple import establishment_weights
 
 DEFAULT_SHRINK_STRENGTH = 5.0
-ALL_ESTABLISHMENTS_SIZE_CODE = "001"
-
-
-def _intensity_rows(cbp: pl.DataFrame, reference_year: int) -> pl.DataFrame:
-    """The usable CBP rows for one reference year: published, all-establishments, non-empty."""
-    return cbp.filter(
-        (pl.col("reference_year") == reference_year)
-        & (pl.col("size_code") == ALL_ESTABLISHMENTS_SIZE_CODE)
-        & pl.col("employment").is_not_null()
-        & (pl.col("establishments") > 0)
-    )
-
-
-def national_march_intensity(cbp: pl.DataFrame, *, reference_year: int) -> float | None:
-    """The national March employees-per-establishment, and the n -> 0 limit of the shrunk value.
-
-    Returned separately so a state with no CBP row can be weighted at the same limit rather than
-    at a bare establishment count, which would silently assert an intensity of 1.0.
-    """
-    rows = _intensity_rows(cbp, reference_year)
-    if rows.height == 0:
-        return None
-    establishments = float(rows["establishments"].sum())
-    if establishments <= 0.0:
-        return None
-    return float(rows["employment"].sum()) / establishments
 
 
 def march_intensity(
@@ -79,7 +61,7 @@ def march_intensity(
     shrink_strength: float = DEFAULT_SHRINK_STRENGTH,
 ) -> dict[str, float]:
     """Shrunk March employees-per-establishment per state, for one CBP reference year."""
-    rows = _intensity_rows(cbp, reference_year)
+    rows = intensity_rows(cbp, reference_year)
     if rows.height == 0:
         return {}
     national = national_march_intensity(cbp, reference_year=reference_year)
@@ -98,6 +80,10 @@ class CbpIntensity:
     """§10.4. q = shrunk CBP March intensity x QCEW establishment exposure."""
 
     estimator_id = "cbp_intensity"
+    # The national March intensity is exactly this estimator's own shrinkage limit as n -> 0, so
+    # a cell with no CBP row is weighted at what its own model would have returned. §10.3 and
+    # §10.6 have no such limit, which is why they declare a different intensity (R-COMP-7).
+    fallback_intensity = NATIONAL_CBP_MARCH
 
     def weights(self, context: EstimatorContext, anchor: Anchor) -> Weights | Decline:
         """Employees per cell, declining the whole month when CBP has no matching vintage."""
@@ -126,11 +112,4 @@ class CbpIntensity:
             for cell in anchor.missing_cells
             if cell in intensity and cell in exposure
         }
-        # Both arms in employees: the fallback is the shrinkage limit, not a bare exposure count.
-        fallback = {cell: national * value for cell, value in exposure.items()}
-        return compose(
-            EmployeeWeights(own),
-            EmployeeWeights(fallback),
-            anchor,
-            allowed=context.config.baselines.allow_declared_composite,
-        )
+        return compose_with_declared_fallback(self, EmployeeWeights(own), context, anchor)

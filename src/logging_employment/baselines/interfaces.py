@@ -95,6 +95,11 @@ class Estimator(Protocol):
     """A named producer of positive raw weights over one month's missing set."""
 
     estimator_id: str
+    # Which intensity scales this estimator's fallback arm, or None when it builds none. Declared
+    # here rather than chosen inside `weights` so that a run's manifest can report the choice, and
+    # so §10.3's disclosed value and §10.4's national one stay a reviewable difference rather than
+    # an accident (see `specs/estimator-composition.md` R-COMP-6 and R-COMP-7).
+    fallback_intensity: str | None
 
     def weights(self, context: EstimatorContext, anchor: Anchor) -> Weights | Decline:
         """Positive weights for every cell in `anchor.missing_cells`, or a `Decline`."""

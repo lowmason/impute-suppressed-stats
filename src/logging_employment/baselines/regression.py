@@ -27,8 +27,9 @@ import polars as pl
 
 from ..reconcile.allocate import Weights
 from ..reconcile.anchor import Anchor
-from .interfaces import Decline, EmployeeWeights, EstimatorContext, compose
-from .simple import establishment_fallback_in_employees, establishment_weights
+from .fallback import DISCLOSED_QCEW, compose_with_declared_fallback
+from .interfaces import Decline, EmployeeWeights, EstimatorContext
+from .simple import establishment_weights
 
 MINIMUM_TRAINING_ROWS = 3
 
@@ -47,6 +48,8 @@ class ConstrainedRegression:
     """§10.6. q = exp(predicted log intensity) x exposure, reconciled through the shared layer."""
 
     estimator_id = "constrained_regression"
+    # Same choice as §10.3, and for the same reason: no shrinkage limit exists to appeal to.
+    fallback_intensity = DISCLOSED_QCEW
 
     def training_rows(self, context: EstimatorContext, reference_month: str) -> pl.DataFrame:
         """The training-visible cells for a month: disclosed by the partition, with positive inputs."""
@@ -73,12 +76,7 @@ class ConstrainedRegression:
         if training.height < MINIMUM_TRAINING_ROWS:
             # Not a decline: the declared fallback covers it, and a two-point fit would be noise
             # dressed as a model.
-            return compose(
-                EmployeeWeights({}),
-                EmployeeWeights(establishment_fallback_in_employees(context, anchor)),
-                anchor,
-                allowed=context.config.baselines.allow_declared_composite,
-            )
+            return compose_with_declared_fallback(self, EmployeeWeights({}), context, anchor)
         beta, _ = fit_log_intensity(
             training, ridge=context.config.baselines.regression_ridge_penalty
         )
@@ -87,12 +85,6 @@ class ConstrainedRegression:
             log_exposure = float(np.log(exposure_value))
             predicted_intensity = float(np.exp(beta[0] + beta[1] * log_exposure))
             own[cell] = predicted_intensity * exposure_value
-        # The own arm is exp(mu) * A, i.e. employees, so the fallback must be too. On D1 the
-        # exposure covers every missing cell and no gap arises, but a raw-A fallback here would be
-        # the same units bug §10.3 and §10.4 carried, waiting for the first month that has one.
-        return compose(
-            EmployeeWeights(own),
-            EmployeeWeights(establishment_fallback_in_employees(context, anchor)),
-            anchor,
-            allowed=context.config.baselines.allow_declared_composite,
-        )
+        # The own arm is exp(mu) * A, i.e. employees, and `compose_with_declared_fallback` is the
+        # only thing that builds the other arm -- so a raw-A fallback cannot be reintroduced here.
+        return compose_with_declared_fallback(self, EmployeeWeights(own), context, anchor)

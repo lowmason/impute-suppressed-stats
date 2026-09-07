@@ -41,8 +41,8 @@ import polars as pl
 
 from ..reconcile.allocate import Weights
 from ..reconcile.anchor import Anchor, Partition
-from .interfaces import Decline, EmployeeWeights, EstimatorContext, compose
-from .simple import establishment_fallback_in_employees
+from .fallback import DISCLOSED_QCEW, compose_with_declared_fallback
+from .interfaces import Decline, EmployeeWeights, EstimatorContext
 
 
 def _months_before(month: str, count: int) -> str:
@@ -119,6 +119,9 @@ class _ShareBaseline:
     """Shared plumbing: extract each missing cell's share history, reduce it, then compose."""
 
     estimator_id = "historical_share"
+    # §10.3 has no shrinkage limit to appeal to, so its fallback is scaled by the published ratio
+    # of two published sums over the month's disclosed cells (R-COMP-7).
+    fallback_intensity = DISCLOSED_QCEW
 
     def _reduce(self, shares: list[float], anchor: Anchor, history: pl.DataFrame) -> float | None:
         """Collapse one state's share history to a single share, or `None` to take the fallback.
@@ -151,12 +154,7 @@ class _ShareBaseline:
             if reduced is not None and reduced > 0.0:
                 # Share -> employees, so both arms of the composite share a unit.
                 own[cell] = reduced * national
-        return compose(
-            EmployeeWeights(own),
-            EmployeeWeights(establishment_fallback_in_employees(context, anchor)),
-            anchor,
-            allowed=cfg.allow_declared_composite,
-        )
+        return compose_with_declared_fallback(self, EmployeeWeights(own), context, anchor)
 
 
 class LastObservedShare(_ShareBaseline):

@@ -28,6 +28,8 @@ class HarvestProportional:
     """§10.5. Declines until Stage 7 supplies a harvest factor."""
 
     estimator_id = "harvest_proportional"
+    # Declines on this window, so it never reaches a composite.
+    fallback_intensity = None
 
     def weights(self, context: EstimatorContext, anchor: Anchor) -> Weights | Decline:
         """Always a decline on this window, carrying the reason a reader can act on."""
