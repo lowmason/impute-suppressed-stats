@@ -86,6 +86,15 @@ validation:
   replicates_per_regime: 20
   minimum_unmasked_lookback_months: 6
   minimum_missing_set_size: 2
+  # DECLARED, not detected. A per-cell break detector inside a validation stage is a research
+  # project, and the national series does not separate COVID from seasonality cleanly enough.
+  # The second window overlaps naics_transition; a month is scored under ONE label, not both.
+  structural_break_windows:
+    - ["2020-03", "2020-06"]   # COVID; the 2020-04 national move is -5.4%
+    - ["2021-10", "2022-03"]   # the NAICS boundary window
+  # The seam is derived, not source-published: vintage_for_year returns "NAICS 2022" at year >= 2022.
+  naics_seam_month: '2022-01'
+  naics_seam_halfwidth_months: 3
 
 promotion:
   minimum_wape_improvement: 0.05

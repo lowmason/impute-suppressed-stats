@@ -12,13 +12,14 @@ moves every one of them.
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 
 import polars as pl
 
 from ..config import Config
-from ..contracts import HOLDOUT_REGIMES, REGIME_DISPOSITIONS
+from ..contracts import HOLDOUT_REGIMES, REGIME_DISPOSITIONS, HarmonizedData
 from .mask import MaskTarget, eligible_targets
 from .propensity import sample_targets
 
@@ -255,3 +256,112 @@ def rolling_origin_frames(
     """
     for origin in origins:
         yield origin, monthly.filter(pl.col("reference_month") < origin)
+
+
+def _structural_break(monthly: pl.DataFrame, seed: int, config: Config) -> list[MaskTarget]:
+    """Targets inside a DECLARED break window.
+
+    Declared, not detected. A per-cell break detector inside a validation stage is a research
+    project, and the national series does not separate COVID from seasonality cleanly enough to
+    justify one. The second window overlaps `naics_transition`; score a month under ONE label.
+    """
+    windows = config.validation.structural_break_windows
+    pool = eligible_targets(monthly)
+    inside = pool.filter(
+        pl.any_horizontal(
+            [
+                (pl.col("reference_month") >= lo) & (pl.col("reference_month") <= hi)
+                for lo, hi in windows
+            ]
+        )
+    )
+    drawn = inside.sample(
+        n=min(config.validation.replicates_per_regime, inside.height),
+        with_replacement=False,
+        shuffle=True,
+        seed=seed,
+    )
+    return [
+        MaskTarget(r["state_fips"], r["reference_month"], "state_total", "primary_like")
+        for r in drawn.iter_rows(named=True)
+    ]
+
+
+def _naics_transition(monthly: pl.DataFrame, seed: int, config: Config) -> list[MaskTarget]:
+    """Targets straddling the NAICS 2017 -> 2022 seam.
+
+    The seam is 2021-12/2022-01 BY CONSTRUCTION: `harmonize.naics.vintage_for_year` returns
+    "NAICS 2022" at year >= 2022, so `naics_vintage` is a derived column. This regime tests our own
+    vintage rule, not a source-published break, and the scoreboard must say so.
+
+    Scoring note: with `historical_may_cross_naics_vintage: false` and a 24-month lookback the
+    share family has ZERO own-arm rows in 2022-01..03 — all five §10.3 variants emit
+    `establishment_proportional`'s number under five labels. That composition emits no
+    `decline_kind`, so it is invisible to §13.8's decline-by-kind report. Read
+    `weight_basis_counts`.
+    """
+    seam = config.validation.naics_seam_month
+    half = config.validation.naics_seam_halfwidth_months
+    months = sorted(monthly["reference_month"].unique().to_list())
+    if seam not in months:
+        return []
+    centre = months.index(seam)
+    window = set(months[max(0, centre - half) : centre + half + 1])
+    inside = eligible_targets(monthly).filter(pl.col("reference_month").is_in(list(window)))
+    drawn = inside.sample(
+        n=min(config.validation.replicates_per_regime, inside.height),
+        with_replacement=False,
+        shuffle=True,
+        seed=seed,
+    )
+    return [
+        MaskTarget(r["state_fips"], r["reference_month"], "state_total", "primary_like")
+        for r in drawn.iter_rows(named=True)
+    ]
+
+
+def cbp_size_gap_keys(data: HarmonizedData, *, seed: int, config: Config) -> list[tuple[str, int]]:
+    """(state_fips, reference_year) pairs whose CBP size rows this regime removes.
+
+    Returns CBP keys, NOT `MaskTarget`s: no QCEW cell is hidden here. The only consumer of
+    `cbp_state_size` in the estimation path is `intensity_rows`, so removing a state-year turns
+    §10.4 from an own-arm estimator into a declining one for that state-year and leaves every
+    other estimator untouched. That difference IS the metric.
+    """
+    pool = data.cbp_state_size.select("state_fips", "reference_year").unique()
+    drawn = pool.sample(
+        n=min(config.validation.replicates_per_regime, pool.height),
+        with_replacement=False,
+        shuffle=True,
+        seed=seed,
+    )
+    return [(r["state_fips"], r["reference_year"]) for r in drawn.iter_rows(named=True)]
+
+
+def apply_cbp_gap(data: HarmonizedData, keys: Sequence[tuple[str, int]]) -> HarmonizedData:
+    """Drop the named CBP state-years so §10.4 must fall back or decline."""
+    if not keys:
+        return data
+    selector = pl.struct("state_fips", "reference_year").is_in(
+        [{"state_fips": s, "reference_year": y} for s, y in keys]
+    )
+    return dataclasses.replace(data, cbp_state_size=data.cbp_state_size.filter(~selector))
+
+
+_SELECTORS["structural_break"] = _structural_break
+_SELECTORS["naics_transition"] = _naics_transition
+
+# Rebuilt so the two selectors registered above reach the specs. `REGIME_SPECS` is a plain dict
+# built by comprehension, so a late `_SELECTORS` mutation does not propagate on its own; leaving
+# it stale would give `select_targets` a `None` selector and an empty target list -- exactly the
+# silent no-op this stage refuses everywhere else. `preliminary_to_final_vintage` stays out of
+# `_SELECTORS` on purpose, so its disposition raises.
+REGIME_SPECS = {
+    name: RegimeSpec(
+        name=name,
+        disposition=REGIME_DISPOSITIONS[name],
+        grain=_GRAINS.get(name, "single_month"),
+        select=_SELECTORS.get(name),
+    )
+    for name in HOLDOUT_REGIMES
+}

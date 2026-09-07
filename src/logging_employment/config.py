@@ -190,6 +190,15 @@ class ValidationConfig(_Strict):
     replicates_per_regime: int = 20
     minimum_unmasked_lookback_months: int = 6
     minimum_missing_set_size: int = 2
+    # DECLARED, not detected. A per-cell break detector inside a validation stage is a research
+    # project, and the national series does not separate COVID from seasonality cleanly enough to
+    # justify one. The second window overlaps `naics_transition`; score a month under ONE label.
+    structural_break_windows: list[tuple[str, str]] = [
+        ("2020-03", "2020-06"),
+        ("2021-10", "2022-03"),
+    ]
+    naics_seam_month: str = "2022-01"
+    naics_seam_halfwidth_months: int = 3
 
     @model_validator(mode="after")
     def _refuse_a_random_mask_only_design(self) -> ValidationConfig:
