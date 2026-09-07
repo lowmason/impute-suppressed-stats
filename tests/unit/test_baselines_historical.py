@@ -37,8 +37,24 @@ def test_section_10_3_ships_exactly_five_variants() -> None:
 
 
 def _history(make_monthly) -> pl.DataFrame:
+    """State 01 observed in three in-window months plus the anchor month, state 02 suppressed.
+
+    THE HISTORY CARRIES A REAL LEVEL BREAK, AND THAT IS LOAD-BEARING. An arithmetic series --
+    this fixture was `40 + i` -- has nominally equal steps, so `BreakAdjustedShare`'s
+    largest-step argmax is decided by float representation error rather than by the data: on
+    shares 0.40, 0.41, 0.42 the two steps are 0.009999999999999953 and 0.010000000000000009, the
+    cut lands last, and the segment is one point. Under R-BREAK-1 that variant then refuses and
+    this fixture's own test fails for a floating-point reason wearing a coverage reason's
+    clothes. The 10 -> 40 jump gives the cut somewhere real to land.
+
+    THE ANCHOR MONTH STAYS AT 43. `test_a_state_with_no_observed_history_takes_the_declared_
+    fallback` derives its expected weight from this fixture as `6.0 * (43 / 4)`, so 2024-03's
+    employment is not free to move with the rest of the series.
+    """
     rows = []
-    for i, month in enumerate(["2023-01", "2023-02", "2023-03", "2024-03"]):
+    for month, employment in zip(
+        ["2023-01", "2023-02", "2023-03", "2024-03"], [10, 40, 41, 43], strict=True
+    ):
         rows.append(
             {
                 "area_type": "national",
@@ -55,7 +71,7 @@ def _history(make_monthly) -> pl.DataFrame:
                 "state_fips": "01",
                 "area_fips": "01000",
                 "reference_month": month,
-                "employment_value": 40 + i,
+                "employment_value": employment,
                 "qtrly_establishments": 4,
                 "observation_status": "observed",
             }
