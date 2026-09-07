@@ -2403,7 +2403,7 @@ Other §21 rows keep their Appendix A defaults until a stage's plan or finding c
 >
 > Stamped 2026-09-07, after the fact. Plan 4 completed without writing this pair; `/deferred`
 > recorded the omission and this closes it. **The substance is deliberately not duplicated here.**
-> What Stage 3 shipped, the four contract changes later stages inherit, and the D1 measurements
+> What Stage 3 shipped, the contract changes later stages inherit, and the D1 measurements
 > all live in the roadmap's Stage 3 block — and that block has already been amended once (plan 9
 > superseded its `MAX_SCALE_RATIO` contract). A second copy is how the two would drift, which is
 > the failure this stamp exists to prevent rather than commit.
