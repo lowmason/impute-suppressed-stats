@@ -12,7 +12,7 @@ moves every one of them.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 
 import polars as pl
@@ -239,3 +239,19 @@ def select_targets(
                     "black out a state's own history — that is what the blackout regimes are for."
                 )
     return targets
+
+
+def rolling_origin_frames(
+    monthly: pl.DataFrame, *, origins: Sequence[str]
+) -> Iterator[tuple[str, pl.DataFrame]]:
+    """§13.3's rolling-origin design: one past-only frame per origin.
+
+    TRUNCATION, not masking. A mask nulls a value and leaves the row; the exit criterion asks that
+    the run "provably contains no future-period rows", which only removing them can satisfy.
+
+    Reported scope: measured 2026-09-07, no §10 estimator reads a future period, so this regime
+    does not separate any Stage 3 baseline. It is built now because Stage 5's model will, and
+    because the guard is what makes that claim checkable rather than assumed.
+    """
+    for origin in origins:
+        yield origin, monthly.filter(pl.col("reference_month") < origin)
