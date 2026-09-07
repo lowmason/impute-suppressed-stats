@@ -538,6 +538,17 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       `require_supported_method` is exported from `reconcile.projection` but is called only where
       config is read. `reconcile_matrix` takes no config argument, so Stage 6 must call the guard
       itself when it wires the matrix path — nothing in the layer forces it to.
+      **Correction 2026-09-07 (unregistered-work audit): the premise above is false, and the work
+      is larger than it says.** `require_supported_method` is called from NOWHERE — not the CLI,
+      not anywhere. `rg 'require_supported_method' src/` returns the definition
+      (`reconcile/projection.py:41`), two docstring mentions (`projection.py:26`, `draws.py:19`)
+      and the re-export (`reconcile/__init__.py:22,43`), and no call site. Plan 4 created the guard
+      (its deviation note at `specs/plans/completed/4-stage3-logging-employment-spec.md:1611`) and
+      then removed its only caller from `reconcile_draws` (:2139, "The `general_method` guard is
+      removed — this path is §12.3"); a CLI call was never added. `git log -S` over `src/` shows
+      two commits, both in `reconcile/`. So a Stage 6 implementer following this item will search
+      the CLI for a call site that has never existed. The guard is currently dead code, and the
+      ruling needed is where to call it, not where to move it from.
 
 - [x] **`kl_project` returns silently on an infeasible bounded system.**
       Its loop breaks on step size, not on violation, so a fully-clipped update exits on iteration
@@ -811,3 +822,218 @@ which is why none was folded into the batch. See specs/plans/completed/7-p3-test
       historical ("the 1,227 this test used to assert"). What each needs is a ruling on whether the
       claim survives as a derived statement (recompute the share at run time) or as a dated one
       explicitly marked as measured-on-D1 — five decisions, not one rule.
+      **Pointer refresh 2026-09-07:** re-running that grep after plan 9 merged, four of the five
+      are still byte-exact; `tests/unit/test_baselines_runner.py:146` is now `:150`, shifted by
+      plan 9's addition of the required `kind=` argument at that file's `Decline(` sites. The
+      substance is unchanged — all five still carry the raw, undated count, and none acquired
+      either resolution — so the item stays open with five decisions outstanding.
+
+
+## unregistered-work audit — 2026-09-07
+
+Found by a 30-agent read-only sweep run after plan 9 merged, asking two questions the per-plan
+completion protocols do not: is every open item above still true of the tree, and is there
+unimplemented work that reached neither this register nor a plan? All 25 then-open items were
+verified individually and **none was already fixed** — no box should be ticked on that pass. The
+items below are the second question's answer: work that is real, outstanding, and was recorded
+nowhere.
+
+**Sweep scope, so a later re-check knows what was and was not covered.** Covered: all nine retired
+plans (status headers, deviation and skip annotations, descoping prose, checkbox state), `git log
+--all` for follow-up promises, every live spec under `specs/*.md` against `src/`, the roadmap's
+stage blocks, `specs/findings/stage3-plan-audit.md` reconciled finding-by-finding (35 distinct
+non-nit findings; exactly one unaccounted for, recorded below), an AST call-graph over
+`src/logging_employment/` for declared-but-uncalled symbols, and a per-key scan of all 44 config
+keys for consumers. NOT covered: `specs/findings/` beyond a deferral-promise grep, retired specs
+under `specs/completed/`, the 29 nits in the Stage 3 plan audit, and anything requiring network
+access. Live roadmap stages remain out of scope per this file's header rule.
+
+- [ ] **§16.1's manifest MUST is unimplemented for `validate-config` and `registry verify`.**
+      §16.1 says "Every command MUST write a machine-readable manifest and MUST be idempotent for
+      the same inputs", and the roadmap's Stage 1 Produces line names all four Stage 1 commands as
+      "each writing a machine-readable manifest". Two of the four write nothing: `validate_config`
+      (`cli.py:28-38`) is `load_config` plus one `typer.echo`; `registry_verify` (`cli.py:45-59`)
+      is `load_registry`/`verify` plus echoes and an exit code. Neither touches the filesystem.
+      `fetch` and `build-harmonized` both fold rows into `source_manifest.parquet`. This is not a
+      future stage: Stage 1 is ticked COMPLETE (2026-09-05, plan 2), plan 2 records no deviation or
+      exemption for these two commands, and the repo's own reading of the MUST already convicted
+      the same shape elsewhere — `specs/findings/stage3-plan-audit.md` lists "`reconcile` wrote no
+      manifest, against §16.1's MUST" as a confirmed-and-fixed defect, and `cli.py:361` now quotes
+      the sentence verbatim as the justification. Needs either two small writers or an explicitly
+      recorded exemption for read-only check commands — but the roadmap's "each" forecloses
+      assuming the latter. Related and deliberately excluded: `solve-bounds` also writes no
+      manifest of its own, a weaker case because it runs inside a run directory whose
+      `schema_manifest.json` is its own precondition gate.
+
+- [ ] **Three Stage 1 deliverables have builders in `src/` that nothing calls and no artifact on
+      disk.** The roadmap marks Stage 1 COMPLETE and its Produces block names the `source_registry`
+      table, "harmonized versioned dimensions per §8.6", and "the §3.1 classification memo carrying
+      all four fields". All three builders exist and are unit-tested; all three are called from
+      nowhere in `src/`: `registry/loader.py:21 registry_frame`, `harmonize/dimensions.py:28
+      dimension_frame` (with its nine-member `DIMENSIONS` dict), and `classification.py:46
+      classification_memo`. `build_harmonized` (`build.py:154-260`) writes exactly four tables —
+      `qcew_monthly`, `qcew_national_size`, `cbp_state_size`, `bridge` — and
+      `contracts.HarmonizedData` declares those same four, so there is no dimensions table for any
+      downstream stage to read (`ls data/staged/` confirms four files). Plan 2 specified each
+      function and its tests and never specified a wiring step. Needs a ruling per deliverable:
+      wire it into `build_harmonized` and add it to `HarmonizedData`, or amend the roadmap's Stage
+      1 Produces block to stop claiming it.
+
+- [ ] **`build-harmonized` writes no machine-readable manifest, and `BUILDER_VERSION` is stamped
+      nowhere.** `build.py:17` defines `BUILDER_VERSION = "build_harmonized/1"` and nothing in
+      `src/`, `tests/` or `scripts/` references it. The three parser versions beside it
+      (`qcew.PARSER_VERSION`, `qcew_size.PARSER_VERSION`, `cbp.PARSER_VERSION`) are all stamped
+      into `source_snapshot` rows via `fetching.py:132,153,183`, so the omission is specific to the
+      builder. `build_harmonized_command` (`cli.py:77-92`) computes output hashes and only echoes
+      them. Distinct from the item above: that one is about two commands writing nothing at all,
+      this one is about a version constant that exists for stamping and stamps nothing.
+
+- [ ] **The CBP `EMPSZES` values-crosswalk route is dead: `discover_empszes` has no caller and
+      `EMPSZES_URL` is never fetched.** `ingest/cbp.py:92 discover_empszes` implements the two
+      metadata routes SRC-CBP-001 requires — the official `variables/EMPSZES.json` values
+      crosswalk, falling through to the response's `EMPSZES_LABEL` column — and its docstring
+      insists "The second is a different metadata route, not a fallback to hard-coded values."
+      Nothing in `src/` calls it, and `EMPSZES_URL` (`cbp.py:21`) is referenced nowhere at all;
+      `fetching.py:161-172` fetches `VARIABLES_URL` and `CBP_URL` only. `parse_cbp_state_size`
+      reads `frame["EMPSZES_LABEL"]` directly (`cbp.py:243`), so a run only ever exercises the
+      second route, and the official 44-code 2017 crosswalk Stage 0 measured — shipped as
+      `tests/fixtures/cbp/empszes_2017.json` — is never consulted. Same dead-but-declared shape as
+      the recorded `read_bulk_zip` item at `:661`, and unrecorded until now.
+
+- [ ] **`bounds.py`'s soft-row filter cites a schedule that has expired: three of the five
+      `constraint_class` values have no producer.** `constraints/bounds.py:75-76` justifies
+      `_hard_rows` with "Stage 3 adds CBP as `empirical_measurement`, which is when this filter
+      starts doing visible work." Stage 3 shipped and added no such row — and `baselines/
+      intensity.py:17-19`, written by Stage 3, states the opposite intent: "Nothing here builds a
+      constraint row." Every `constraint_class=` literal in `constraints/rows.py` is one of two
+      values (`public_accounting_fact` at :253,:354; `definitional_support` at :282,:305,:438,:484),
+      so `empirical_measurement`, `modeling_assumption` and `sensitivity_assumption` in
+      `contracts.CONSTRAINT_CLASSES` are emitted by nothing, the `is_hard` filter has never
+      discriminated between two populations, and INV-005 is enforced against an empty complement.
+      No remaining roadmap stage Produces a CBP `empirical_measurement` row — Stage 6 owns
+      SRC-CBP-004's measurement *model*, not a constraint row — so the soft-constraint arm of
+      §7.8/§9.3 currently has no home. Needs a ruling on which stage owns it, or the bounds
+      docstring corrected to stop naming a stage that has passed.
+
+- [ ] **A `stage3-plan-audit` DEFECT was only half discharged: `intensity.py`'s "MEASURED" coverage
+      enumeration names two states where five take the fallback.** Task 13 `[DEFECT] plan:3235,
+      plan:3366` makes two claims; the Disposition table discharges only (a), the magnitude
+      figures. Claim (b) — "HI and RI are not the only states without a CBP row" — appears in no
+      fixed-table row, no "Not acted on" bullet, and no item here. `baselines/intensity.py:7-15`
+      still carries the header "WHAT CBP DOES AND DOES NOT COVER ON THIS WINDOW, MEASURED." and
+      under it one fallback bullet naming Hawaii ('15') and Rhode Island ('44') only. The sentence
+      is true in isolation and false by omission under that header: measured on `data/staged/
+      cbp_state_size.parquet` at `size_code='001'`, 45-47 states publish per year, never 51, and
+      the absent-and-therefore-fallback set after dropping CBP-suppressed nulls is 2017
+      {10,15,32,38,44}, 2018 {15,32,38,44}, 2019-2022 {10,15,32,38,44}, 2023 {10,15,38,44}. ND
+      ('38') never has a usable row at all — its only appearance, 2017, carries null employment —
+      so it belongs in the never-usable class the docstring reserves for HI and RI. This is
+      load-bearing: §10.8 ranks this estimator first and the roadmap names it the preferred-baseline
+      slot Stage 4 fills with numbers. The fix is a derived statement — report the own/fallback
+      split from the run manifest, as `historical.py:28-32` already does — not a corrected literal.
+      Why it survived is recorded in this file already: the ticked plan-7 Task 18 item states its
+      uncovered scope as including "`src/` docstrings beyond a targeted regex".
+
+- [ ] **`state_universe_report` has no caller, and a live guard's docstring delegates an obligation
+      to it.** `harmonize/universe.py:18 state_universe_report` is called from nowhere in `src/`
+      (five references in `tests/`). That matters more than an ordinary unused helper: its sibling
+      `assert_definitional_alignment`, which IS on the build path, documents at :61-63 that it
+      deliberately returns without complaint when one geography level is missing, because "the
+      caller that needs a national control is the one that must notice its absence --
+      `state_universe_report` reports it per month." The referral points at a function no caller
+      runs, so the missing-national-row case is noticed by nobody. `identity_evaluable_months` and
+      `months_with_a_complete_state_sum` — the SRC-QCEW-006 per-month facts the module says "Stage
+      2 needs in order to build constraints at all" — are computed only inside tests.
+
+- [ ] **Four config keys govern nothing, and none is recorded as inert.** The repo's convention is
+      to write inertness into the code (`matrix.py:3` "NO REAL INPUT UNTIL STAGE 6"; `rows.py:479`
+      "nothing in the D1 run calls this"; `errors.py:84` "Reserved for Stage 7 and deliberately
+      unraised today"). These four carry no such note, and each lands in
+      `runs/*/config.resolved.yaml` and folds into the run id, so each is a claim in a run's record
+      that no code backs. (1) `baselines.composite_fallback` (`config.yaml:61`, `config.py:148`) —
+      `fallback.py:158 declared_fallback` always builds via `establishment_fallback`, so the key
+      selects nothing; its sibling `allow_declared_composite` IS read, which makes the asymmetry a
+      slip rather than a convention. This is plan-9-era code that merged after the 2026-09-06
+      triage and has never been triaged. (2) `storage.immutable_raw` (`config.py:63`) —
+      `store.py`'s `RawStore` gets immutability from content-addressing alone and never consults
+      the flag; setting it false changes nothing. (3) `reconciliation.max_projection_iterations`
+      (`config.py:130`) — unwired because its only consumers would be `kl_project` and
+      `reconcile_matrix`, neither called from `src/`; both siblings ARE wired via `draws.py:91,94`.
+      (4) `project.analysis_mode`'s `realtime_asof` (`config.py:37`) — validates, changes the run
+      id, and every stage behaves as if `retrospective_final` were set. Stage 9 owns the *mode* as
+      a future extension; what is missing is the refusal. Compare `reconciliation.general_method`,
+      whose unsupported value at least has a written refusal, and `size_concept`, whose second
+      value is at least read.
+
+- [ ] **The `network` pytest marker is registered with a promise it does not keep, and there is no
+      CI at all.** `pyproject.toml:73` registers "network: hits a live source endpoint; excluded
+      from the default run". No test carries `@pytest.mark.network` anywhere — the marker is
+      applied zero times — and `addopts` (`pyproject.toml:71`) contains no `-m 'not network'`, so
+      nothing would deselect it if one did. There is no `.github/` and no workflow file in the
+      repo, so "the default run" is a bare `pytest` that excludes nothing. The `slow` marker beside
+      it is applied at three sites and likewise not deselected, so `tests/integration/
+      test_d1_acceptance.py` and `test_d1_baselines.py` run by default whenever `data/staged/` is
+      populated. Needs a ruling on whether the marker is aspirational (delete it) or load-bearing
+      (apply it and wire the deselection), and a separate one on whether this repo wants CI.
+
+- [ ] **The 24 pre-existing `ruff` violations in `scripts/audit/` are scoped out twice and tracked
+      by no item.** The ticked `ruff I001` item at `:243` closes with "The remaining 24 (ISC004,
+      TRY004, UP037, RUF100, RET501, UP047) are pre-existing and outside this item" — implying a
+      home that does not exist, since no unticked item names any of those six rule codes. Plan 5
+      then made the same scope-out a standing obligation ("those are out of scope for this plan and
+      must be unchanged, not fixed. Confirm the count is still 24") while its own status header
+      says "nothing deferred". So the count-24 invariant is held only by a retired plan file. No
+      gate enforces it: `[tool.ruff]` declares no `exclude`, so `ruff check .` does cover
+      `scripts/audit/`, but with no CI it runs only when a human or a plan step invokes it, and
+      `interrogate` is explicitly scoped to `src/`.
+
+- [ ] **Three QCEW code constants are declared and then bypassed by inline literals in the
+      parser.** `constants.py:22-24` declares `QCEW_NATIONAL_AGGLVL = "18"`, `QCEW_STATE_AGGLVL =
+      "58"` and `QCEW_ALL_SIZES_CODE = "0"`, each with its BLS title in a trailing comment. None is
+      imported anywhere. The values are typed as bare literals at the two sites that need them:
+      `ingest/qcew.py:271,273` for the area-type derivation, and `ingest/qcew_size.py:74` inside
+      `assert_no_state_industry_size`. Every other measured code set in the same module IS imported
+      (`INDUSTRY_CODE`, `QCEW_DISCLOSURE_CODES`, `STATE_AREAS`, `NATIONAL_AREA`), so this is three
+      constants that lost their single source of truth rather than a deliberate style. Plan 2 lists
+      all three among the constants Stage 1 was to define.
+
+- [ ] **The two §5 concept guards are never called, and unlike the repo's other inert seams nothing
+      says so.** `harmonize/concepts.py` defines `reject_enterprise_size` (INV-010, SRC-OTH-001)
+      and `reject_nonemployer_in_core_total` (SRC-OTH-004); neither is called anywhere in `src/`,
+      both are exercised only by unit tests. The substance is defensible — Stage 7 owns
+      "SRC-OTH-001–004 (ingest halves)" and `ingest/{susb,nonemployer}.py` do not exist, so there
+      is no site to call them from. What is missing is the note: the module docstring reads
+      "Concept guards that halt a run before a statistical unit is silently relabeled", describing
+      behaviour no run can currently exhibit, and the roadmap's Stage 1 lists INV-010 and
+      "SRC-OTH-001/004 (guards)" under "Gap closed", which reads as wired. Compare
+      `errors.py:81-89`'s `NoHarvestFactorError` — same Stage-7 shape, carries the note, and is
+      recorded at `:600`. One-line docstring fix, filed so it is not re-found as a live defect.
+
+- [ ] **Stage 3 completed without the completion stamp the roadmap mandates in the spec's
+      Rollout.** The roadmap's "Stage-spec stamp" section requires that on completion the stamp
+      becomes authoritative: "Stage N: COMPLETE (YYYY-MM-DD) — implemented by plan <id> (path)."
+      The spec's Rollout "Stage stamps" section carries exactly three pairs — Stage 0 (plan 1),
+      Stage 1 (plan 2), Stage 2 (plan 3) — and then ends. Stage 3 has neither the pre-plan
+      `- Roadmap: ... Stage 3` line nor the `> Stage 3: COMPLETE` stamp, though it is ticked and
+      shipped 2026-09-05 via plan 4. The roadmap's Stage 3 heading also lacks the "— COMPLETE
+      YYYY-MM-DD, plan N" suffix Stages 0-2 carry. Stages 4-9 having no stamp is correct — theirs
+      are added at planning time. Ranked last here because the substance is not lost, only filed in
+      the wrong place: the roadmap's Stage 3 block carries a SHIPPED paragraph with the date, the
+      retired plan and the inherited contract changes. Remediation is a stamp, not code.
+
+- [ ] **Two retired plans' status headers misstate their own deferral disposition.** Neither is
+      missing work; both are record defects in the field this kind of audit reads first.
+      (1) `specs/plans/completed/2-stage1-logging-employment-spec.md` is the only one of the nine
+      with no `**Status: COMPLETE (...)**` line at all, so it is the one plan where a reader cannot
+      tell from the file whether anything was deferred. It is complete — 131/131 steps ticked, exit
+      criteria ticked with named witness tests, "All sixteen tasks complete, 2026-09-05", and both
+      items its completion protocol assigned it are ticked here at `:63` and `:76`. Its retirement
+      commit `5969bd9` narrates every exit criterion and simply never adds the header. One caveat
+      that cannot be resolved from the record: the plan's deviation convention began at Task 7
+      ("Deviations from Task 8 on are annotated inline"), so for Tasks 1-6 the record cannot
+      distinguish "nothing raised" from "no convention to raise it under" — no commit touched this
+      file between plan 1's completion and `8836ca9`, and the Tasks 1-6 commits fixed their two
+      issues rather than deferring them. (2) `7-p3-test-coverage.md:3` says "five new items
+      deferred"; its own completion section is titled "**Six new deferred items to append**" and
+      all six landed in the `## 7-p3-test-coverage` section. The "five" is the count of SOURCE
+      items plan 7 was assigned to close, collapsed into the wrong sentence.
