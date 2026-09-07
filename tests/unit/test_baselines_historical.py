@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import statistics
+
 import polars as pl
 import pytest
 
@@ -14,6 +16,7 @@ from logging_employment.baselines.historical import (
     observed_share_history,
 )
 from logging_employment.baselines.interfaces import FALLBACK, OWN, EstimatorContext
+from logging_employment.reconcile.allocate import Weights
 from logging_employment.reconcile.anchor import (
     Anchor,
     Partition,
@@ -37,8 +40,24 @@ def test_section_10_3_ships_exactly_five_variants() -> None:
 
 
 def _history(make_monthly) -> pl.DataFrame:
+    """State 01 observed in three in-window months plus the anchor month, state 02 suppressed.
+
+    THE HISTORY CARRIES A REAL LEVEL BREAK, AND THAT IS LOAD-BEARING. An arithmetic series --
+    this fixture was `40 + i` -- has nominally equal steps, so `BreakAdjustedShare`'s
+    largest-step argmax is decided by float representation error rather than by the data: on
+    shares 0.40, 0.41, 0.42 the two steps are 0.009999999999999953 and 0.010000000000000009, the
+    cut lands last, and the segment is one point. Under R-BREAK-1 that variant then refuses and
+    this fixture's own test fails for a floating-point reason wearing a coverage reason's
+    clothes. The 10 -> 40 jump gives the cut somewhere real to land.
+
+    THE ANCHOR MONTH STAYS AT 43. `test_a_state_with_no_observed_history_takes_the_declared_
+    fallback` derives its expected weight from this fixture as `6.0 * (43 / 4)`, so 2024-03's
+    employment is not free to move with the rest of the series.
+    """
     rows = []
-    for i, month in enumerate(["2023-01", "2023-02", "2023-03", "2024-03"]):
+    for month, employment in zip(
+        ["2023-01", "2023-02", "2023-03", "2024-03"], [10, 40, 41, 43], strict=True
+    ):
         rows.append(
             {
                 "area_type": "national",
@@ -55,7 +74,7 @@ def _history(make_monthly) -> pl.DataFrame:
                 "state_fips": "01",
                 "area_fips": "01000",
                 "reference_month": month,
-                "employment_value": 40 + i,
+                "employment_value": employment,
                 "qtrly_establishments": 4,
                 "observation_status": "observed",
             }
@@ -487,33 +506,119 @@ def test_the_five_variants_compute_five_different_numbers_on_one_history(
     assert len(set(values.values())) == 5
 
 
-def test_below_four_shares_the_break_adjusted_variant_is_the_rolling_median(
+def _reduce_shares(shares: list[float]) -> float | None:
+    """`BreakAdjustedShare._reduce` on a bare share list.
+
+    The rule is a pure reduction over a list of floats, so it is driven directly rather than
+    through a fixture. The anchor and history arguments are `None` rather than stubs: this variant
+    selects by POSITION and reads neither, so `None` makes that structural -- a future revision
+    that starts reading either raises here instead of quietly agreeing.
+
+    Where a case below admits more than one step, its largest is kept well clear of its second
+    largest, for the reason `_share_rows` gives: two nominally equal steps are separated by float
+    representation error rather than by the data, so a cut chosen between them would pin noise.
+    """
+    return BreakAdjustedShare()._reduce(shares, None, None)
+
+
+def test_a_one_point_history_admits_no_cut_and_is_refused() -> None:
+    """T-1. A one-point history has no steps, so `max(steps)` would raise on an empty sequence --
+    the guard is what makes the reduction total, not a threshold on the history length."""
+    assert _reduce_shares([0.02]) is None
+
+
+def test_a_two_point_history_leaves_a_one_point_segment_and_is_refused() -> None:
+    """T-2. The only cut a two-point history admits puts one point in the recent segment, and the
+    median of one point is that point -- which is `LastObservedShare`, not this variant."""
+    assert _reduce_shares([0.02, 0.05]) is None
+
+
+def test_a_short_history_cut_in_the_middle_keeps_its_two_point_segment() -> None:
+    """T-3. The keep half of R-BREAK-2: three points is not too few when the cut falls inside.
+
+    The contrast is DERIVED rather than asserted in prose -- `statistics.median` is called on the
+    same list, so if this variant ever collapsed back to the plain median the second assert would
+    equal the first instead of differing from it."""
+    shares = [0.10, 0.50, 0.52]
+    assert _reduce_shares(shares) == pytest.approx(0.51)
+    assert statistics.median(shares) == pytest.approx(0.50)
+
+
+def test_a_short_history_cut_at_the_end_is_refused() -> None:
+    """T-4. The refuse half of R-BREAK-2, on a history the same length as T-3's: length decides
+    nothing, the cut decides. These are the numbers the deleted `<4` test used to reduce to 0.11,
+    so the second assert names the value this variant no longer emits."""
+    shares = [0.10, 0.11, 0.90]
+    assert _reduce_shares(shares) is None
+    assert statistics.median(shares) == pytest.approx(0.11)
+
+
+def test_a_long_history_whose_largest_step_is_its_last_is_refused() -> None:
+    """T-5. The case no length threshold can catch and no previous test reached: twelve points,
+    far past any plausible minimum, and still no evidence of a segment. Under the `<4` rule this
+    returned the median of the one-point segment -- the last observation, i.e. variant 1."""
+    shares = [10.0, 11.0, 9.0, 10.0, 11.0, 9.0, 10.0, 11.0, 9.0, 10.0, 11.0, 90.0]
+    assert len(shares) == 12
+    assert _reduce_shares(shares) is None
+
+
+def test_a_long_history_with_an_interior_break_follows_the_recent_segment() -> None:
+    """T-6. The variant still does its job where the evidence supports it.
+
+    The same twelve values `_breaking_history` uses, so the unit rule and the all-variants fixture
+    cannot drift apart. The inequality below is a property of THIS fixture, not an invariant:
+    a recent segment may agree with the whole-history median by coincidence, which §2 permits."""
+    shares = [20.0, 10.0, 11.0, 9.0, 10.0, 11.0, 9.0, 10.0, 30.0, 31.0, 29.0, 34.0]
+    # The largest single step is 10 -> 30, so the segment is [30, 31, 29, 34], median (30 + 31) / 2.
+    assert _reduce_shares(shares) == pytest.approx(30.5)
+    assert statistics.median(shares) == pytest.approx(11.0)
+
+
+def test_a_refused_cell_takes_the_establishment_fallback_rather_than_declining(
     make_monthly, appendix_a_config
 ) -> None:
-    """Documents the degeneracy rather than hiding it, and takes no position on whether it is
-    right: with three shares there is no segment to split, so the variant returns the whole-history
-    median and ignores a violent break at the most recent observation. The deferred item that
-    revisits the threshold must change this test."""
-    monthly = make_monthly(*_share_rows(["2023-12", "2024-01", "2024-02"], [10, 11, 90]))
-    context = _context(monthly, appendix_a_config)
-    anchor = Anchor("2024-03", 50.0, ("01",), "declared_national_total")
+    """T-7. R-BREAK-3: refusal reuses the existing `None` path, so the cell is COMPOSED, not
+    declined -- no new decline reason and no new config key.
 
-    broken = BreakAdjustedShare().weights(context, anchor).values["01"]
-    median = RollingMedianShare().weights(context, anchor).values["01"]
-    assert broken == median
-    assert broken == pytest.approx(11.0)
-    # The break this variant exists to follow is derived, not asserted in prose: the most recent
-    # observation is 90, and a variant that segmented on it would return that instead of 11.
-    assert LastObservedShare().weights(context, anchor).values["01"] == pytest.approx(90.0)
+    The anchor comes from `national_residual` rather than being typed, because R-COMP-8 requires
+    the intensity and the residual to come from one partition and refuses them when they do not:
+    a hand-typed residual raises `ConceptViolationError` here the moment a fallback arm is built.
+    State 02 is disclosed at the anchor so the fallback has an intensity to be scaled by."""
+    rows = _share_rows(["2023-12", "2024-01", "2024-02"], [10, 11, 90])
+    rows.append(
+        {
+            "state_fips": "02",
+            "area_fips": "02000",
+            "reference_month": "2024-03",
+            "employment_value": 800,
+            "qtrly_establishments": 80,
+            "observation_status": "observed",
+        }
+    )
+    monthly = make_monthly(*rows)
+    partitions = observed_partition(monthly)
+    anchor = national_residual(monthly, partitions["2024-03"], reference_month="2024-03")
+    assert anchor.missing_cells == ("01",)
+
+    out = BreakAdjustedShare().weights(_context(monthly, appendix_a_config), anchor)
+
+    assert isinstance(out, Weights), "a refused cell is composed, not declined"
+    assert out.basis["01"] == FALLBACK
+    # Derived from the fixture: 2024-03's only disclosed cell is state 02, 800 employees over 80
+    # establishments, and state 01 brings 4 establishments of exposure to that intensity.
+    assert out.values["01"] == pytest.approx(4 * (800 / 80))
 
 
-def test_the_break_adjusted_docstring_scopes_its_own_claim() -> None:
-    """The sentence half of the pair: the two tests above hold that the claim is TRUE, this holds
-    that the claim is still MADE. Before this batch the docstring said a plain median "is what this
-    variant exists NOT to be", full stop, which is false on every history shorter than four.
+def test_the_break_adjusted_docstring_declares_its_refusal() -> None:
+    """The sentence half of the pair: the seven tests above hold that the claim is TRUE, this holds
+    that the claim is still MADE. It asserts the sentences EXIST, not that they are accurate --
+    T-3, T-4 and T-5 are what make them accurate, and this test would pass over a false docstring.
 
     Whitespace-normalized so that re-wrapping the docstring does not redden this: the claim is the
     sentence, not the line breaks."""
     doc = " ".join(BreakAdjustedShare.__doc__.split())
-    assert "At four or more shares this is not a plain median over the whole lookback" in doc
-    assert "below four it is exactly that" in doc
+    assert "A cut leaving fewer than two points in the recent segment is not evidence" in doc
+    assert "THE THRESHOLD IS A PROPERTY OF THE SELECTED CUT, NOT OF THE HISTORY LENGTH" in doc
+    assert "THE EARLIEST TIED STEP WINS" in doc
+    # R-BREAK-4: the replaced claim named a threshold of four, and both its halves are now false.
+    assert "below four" not in doc

@@ -685,7 +685,7 @@ which is why none was folded into the batch. See specs/plans/completed/7-p3-test
       `sorted(listed)` returns four times (INV-007 stacking). This is a delete-or-fix decision on
       dead code, not a condition to wait on. Touches `build.py` and `fetching.py`.
 
-- [ ] **`BreakAdjustedShare`'s `<4` fallback is a design choice nobody chose.** The audit's own two
+- [x] **`BreakAdjustedShare`'s `<4` fallback is a design choice nobody chose.** The audit's own two
       options (`specs/findings/stage3-plan-audit.md:451`): scope the docstring — done in plan 7
       Task 4 — or return `None` below a minimum segment length so the cell takes the declared §10.2
       fallback. Whoever takes it needs a new fixture: `tests/fixtures/baselines/` has only three
@@ -694,6 +694,18 @@ which is why none was folded into the batch. See specs/plans/completed/7-p3-test
       own-weight cells from `OWN` to `FALLBACK`. Plan 7's
       `test_below_four_shares_the_break_adjusted_variant_is_the_rolling_median` is deliberately
       silent on intent and is the test that must change.
+      **→ done in plan 10, and the new fixture this item asked for was not needed.** The second
+      option shipped: `_reduce` returns `None` unless the selected cut leaves at least two points
+      in the recent segment. Two corrections to the item. First, the threshold is NOT a minimum
+      segment length applied below a history length — it reads the CUT, so a length-3 history cut
+      in the middle is kept and a length-12 history cut at its end is refused, a case `<4` cannot
+      see and which this item did not know about (28 D1 cells, six of them length 12). Second, the
+      frozen golden needed no new cell and was not re-pinned: all three of its cells with a history
+      are length 6 with the cut at position 3, so every one is kept and
+      `baseline_results_golden.parquet` is byte-identical. The rule is pinned directly on `_reduce`
+      over bare share lists (T-1…T-6) instead, with T-7 driving the full `weights` path to hold
+      that a refused cell is COMPOSED onto the §10.2 fallback rather than declined. The item's
+      "roughly a third" was right: 101 of 342 own-weight cells, 29.5%.
 
 - [x] **`historical.py:227`'s `segment = shares[cut:] or shares` — the `or shares` arm is
       unreachable.** For n ≥ 4, `steps` has n−1 entries so `cut ∈ [1, n-1]` and the slice always has
