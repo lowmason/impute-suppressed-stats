@@ -20,21 +20,27 @@ ones and looks perfectly well-formed. So composition is permitted, and every com
 own rank-1 phrasing -- "employee-per-establishment with robust historical adjustment" -- is the
 spec's precedent that a composed estimator is legitimate.
 
-BOTH ARMS MUST BE IN THE SAME UNIT, AND THE GUARD ENFORCES IT. `allocate` normalizes the merged
-vector as a whole (E = R * q / sum q), so a union of arms in different units is decided entirely by
+BOTH ARMS ARE IN EMPLOYEES, AND THE TYPE IS WHAT SAYS SO. `allocate` normalizes the merged vector
+as a whole (E = R * q / sum q), so a union of arms in different units is decided entirely by
 whichever arm is numerically larger. Measured on 2024-03 with §10.3's shares against raw
 establishment counts: nine states holding full observed histories received 0.58 of 1,589 employees
 between them -- 0.037% of the residual -- while one fallback state took 1,257. Nothing about that
-output looks wrong; it is positive everywhere and sums exactly to R_t, which is precisely why the
-check has to be mechanical. Each baseline therefore supplies both arms in EMPLOYEES, and
-`_assert_comparable_scales` is the tripwire that catches a regression rather than a statistical
-test of anything.
+output looks wrong; it is positive everywhere and sums exactly to R_t.
+
+A MAGNITUDE TRIPWIRE WAS TRIED AND REMOVED, AND NO THRESHOLD REPLACES IT. `MAX_SCALE_RATIO = 100`
+compared the two arms' medians over 495 of 660 `compose` calls and caught the four-orders-of-
+magnitude shape. It could not catch the case its own callers were written to prevent: substituting
+a raw establishment count for the scaled fallback produced ratios of 0.182-0.811 for the share
+family and 0.160-0.316 for §10.4, inside the honest 0.947-4.996 range, and reintroduced on D1 that
+bug tripped the guard zero times while shipping own-cell estimates up to 6.12x too large. The
+honest range and the bug's range overlap, so the unit is carried by `EmployeeWeights` instead --
+a claim made once, where the vector is built, that a plain dict cannot impersonate at a call site.
+(Measured 2026-09-06 on the D1 window and `tests/fixtures/baselines/`; see
+`specs/estimator-composition.md` §2.)
 """
 
 from __future__ import annotations
 
-import math
-import statistics
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -47,10 +53,6 @@ from ..reconcile.anchor import Anchor, Partition
 
 OWN = "own_estimator"
 FALLBACK = "establishment_fallback"
-
-# A units tripwire, not a statistical threshold. Arms that genuinely share a unit sit within a
-# small factor of each other; the failure this exists to catch was four orders of magnitude.
-MAX_SCALE_RATIO = 100.0
 
 
 @dataclass(frozen=True)
@@ -97,31 +99,6 @@ class Estimator(Protocol):
     def weights(self, context: EstimatorContext, anchor: Anchor) -> Weights | Decline:
         """Positive weights for every cell in `anchor.missing_cells`, or a `Decline`."""
         ...
-
-
-def _assert_comparable_scales(
-    own: dict[str, float], fallback: dict[str, float], anchor: Anchor
-) -> None:
-    """Refuse a composite whose two arms are not plausibly in the same unit.
-
-    Compared over the cells where both arms are defined and positive, using medians so one
-    outlying state cannot mask a genuine mismatch. With no overlapping cell there is nothing to
-    compare and nothing to get wrong: the merged vector is then all-fallback, and normalization
-    makes its scale irrelevant.
-    """
-    shared = [c for c in own if c in fallback and own[c] > 0.0 and fallback[c] > 0.0]
-    if not shared:
-        return
-    own_scale = statistics.median(own[c] for c in shared)
-    fallback_scale = statistics.median(fallback[c] for c in shared)
-    ratio = fallback_scale / own_scale
-    if not math.isfinite(ratio) or ratio > MAX_SCALE_RATIO or ratio < 1.0 / MAX_SCALE_RATIO:
-        raise WeightDomainError(
-            f"{anchor.reference_month}: the two arms of the composite differ in scale by a factor "
-            f"of {ratio:.4g} (own median {own_scale:.6g}, fallback median {fallback_scale:.6g}); "
-            "`allocate` normalizes the union, so the larger arm would absorb nearly the whole "
-            "residual. Supply both arms in employees"
-        )
 
 
 def usable_own(own: EmployeeWeights, anchor: Anchor) -> dict[str, float]:
@@ -182,7 +159,6 @@ def compose(
             f"{anchor.reference_month}: the establishment fallback cannot weight {sorted(uncovered)}"
         )
 
-    _assert_comparable_scales(usable, fallback.values, anchor)
     values = dict(usable) | {cell: fallback.values[cell] for cell in gaps}
     basis = dict.fromkeys(usable, OWN) | dict.fromkeys(gaps, FALLBACK)
     return Weights(values=values, basis=basis)
