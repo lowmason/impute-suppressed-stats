@@ -1,5 +1,7 @@
 # Stage 4: Pseudo-Suppression Validation Harness and Baseline Scoreboard — Implementation Plan
 
+**Status: COMPLETE (2026-09-07)** — executed via executing-plans; deferred items in specs/deferred_items.md
+
 > **For agentic workers:** REQUIRED SUB-SKILL: implement this plan task-by-task via
 > **subagent-driven-development** (the default) — or **executing-plans** when your human partner
 > chose inline execution at the handoff. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -287,7 +289,7 @@ data cannot support it (evidence §6). §13.2's opening line — "Random masking
 the only validation design" — is enforced as a **model validator on the config object**, not as a
 runtime check, so an invalid configuration cannot be constructed at all.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/test_config_validation_block.py
@@ -324,12 +326,12 @@ def test_promotion_gates_carry_appendix_a_defaults():
     assert p.nominal_coverage_tolerance == 0.05
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/unit/test_config_validation_block.py -v`
 Expected: FAIL with `ImportError: cannot import name 'ValidationConfig'`
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 # src/logging_employment/config.py  — append near the other block models
@@ -387,7 +389,7 @@ Add `from pydantic import model_validator` to the imports if absent, and the two
     promotion: PromotionConfig = PromotionConfig()
 ```
 
-- [ ] **Step 4: Add the blocks to `config.yaml`**
+- [x] **Step 4: Add the blocks to `config.yaml`**
 
 ```yaml
 validation:
@@ -412,12 +414,12 @@ promotion:
   nominal_coverage_tolerance: 0.05
 ```
 
-- [ ] **Step 5: Run the tests and the config validator**
+- [x] **Step 5: Run the tests and the config validator**
 
 Run: `uv run pytest tests/unit/test_config_validation_block.py -v && uv run logging-estimates validate-config --config config.yaml`
 Expected: 3 passed; `validate-config` exits 0.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/logging_employment/config.py config.yaml tests/unit/test_config_validation_block.py
@@ -449,7 +451,7 @@ gets lost:
 - `validation_metrics` — **one row per (regime, seed, estimator, metric_family)**: the aggregates
   §13.5–13.8 require, each carrying its own denominator.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/test_contracts_validation.py
@@ -485,13 +487,13 @@ def test_the_two_validation_schemas_are_distinct_and_fingerprinted():
     assert "denominator_basis" in contracts.VALIDATION_METRIC_SCHEMA
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/unit/test_contracts_validation.py -v`
 Expected: FAIL — `assert_declared_provenance` does not yet check `suppression_type`; the new names
 do not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 # src/logging_employment/contracts.py
@@ -597,12 +599,12 @@ Extend the provenance loop — one added pair:
     ):
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/unit/test_contracts_validation.py -v`
 Expected: 4 passed.
 
-- [ ] **Step 5: Prove the new guard did not break the shipped layer**
+- [x] **Step 5: Prove the new guard did not break the shipped layer**
 
 The staged frame carries `suppression_type` on all 4,812 rows; if any value were outside the
 declared set the whole pipeline would now fail closed. Confirm it does not:
@@ -618,12 +620,12 @@ print('staged layer passes the extended guard')
 ```
 Expected: `staged layer passes the extended guard`
 
-- [ ] **Step 6: Run the full suite** — the guard now fires on a column many frames carry.
+- [x] **Step 6: Run the full suite** — the guard now fires on a column many frames carry.
 
 Run: `uv run pytest -q`
 Expected: all pass (1,181 at the time of writing, plus the new ones).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/logging_employment/contracts.py tests/unit/test_contracts_validation.py
@@ -657,7 +659,7 @@ bullet forbids.
 `source_row_hash` is deliberately **left alone**: it hashes identity columns only (`ingest/qcew.py`
 builds it from no value column), so retaining it does not retain the held-out value.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/test_validate_mask.py
@@ -787,12 +789,12 @@ def test_eligible_targets_excludes_true_zero_and_already_suppressed():
     assert eligible.filter(pl.col("area_type") != "state").height == 0
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/unit/test_validate_mask.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'logging_employment.validate'`
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 # src/logging_employment/validate/mask.py
@@ -934,12 +936,12 @@ from .mask import MaskTarget, apply_mask, eligible_targets
 __all__ = ["MaskTarget", "apply_mask", "eligible_targets"]
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/unit/test_validate_mask.py -v`
 Expected: 8 passed.
 
-- [ ] **Step 5: Prove the mask reaches the constraint layer**
+- [x] **Step 5: Prove the mask reaches the constraint layer**
 
 This is the claim the whole harness rests on; assert it by running, not by reading.
 
@@ -963,12 +965,17 @@ print('mask suppressed:', b.cells.filter(__import__('polars').col('observation_s
 Expected: `truth withheld : 5147`, `hashes differ  : True`, and the masked suppressed count exactly
 one higher than the base.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/logging_employment/validate tests/unit/test_validate_mask.py
 git commit -m "feat(validate): apply_mask, the single frame-level mask constructor"
 ```
+
+> Deviation: added a duplicate-target guard. The label join is on (state_fips, reference_month),
+> so a target set naming one cell twice emits two rows for it; the height check does not catch
+> that because `set(keys)` dedups before comparing. Also added the size-arm leak test, which the
+> state-arm one cannot cover — it reads only `qcew_monthly`.
 
 ---
 
@@ -995,7 +1002,7 @@ import annotations` stringifies the annotation — but fails `ruff` with `F821 U
 would reintroduce the two-object pairing whose mismatch plan 9's `ConceptViolationError` exists to
 catch, and which the frame mask makes unconstructible.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/test_baselines_runner.py  — append
@@ -1018,12 +1025,12 @@ def test_run_baselines_defaults_to_the_full_registry(tiny_harmonized, tiny_confi
 Reuse whatever fixtures the existing tests in this file already use for a toy `HarmonizedData` and
 `Config`; do not invent new ones.
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/unit/test_baselines_runner.py -k estimator_subset -v`
 Expected: FAIL with `TypeError: run_baselines() got an unexpected keyword argument 'estimators'`
 
-- [ ] **Step 3: Implement — three edits**
+- [x] **Step 3: Implement — three edits**
 
 ```python
 # src/logging_employment/baselines/runner.py
@@ -1052,22 +1059,27 @@ Extend the docstring with the reason:
     the harness pays that per mask replicate.
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/unit/test_baselines_runner.py -v`
 Expected: all pass, including the two new ones.
 
-- [ ] **Step 5: Lint — the import is the point**
+- [x] **Step 5: Lint — the import is the point**
 
 Run: `uv run ruff check src/logging_employment/baselines/runner.py`
 Expected: `All checks passed!` (without the import this reports `F821 Undefined name 'Sequence'`).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/logging_employment/baselines/runner.py tests/unit/test_baselines_runner.py
 git commit -m "feat(baselines): run_baselines takes an estimator subset, per §16.2"
 ```
+
+> Deviation: `test_a_reconciliation_refusal_is_recorded_as_a_reconciliation_failure` injected its
+> stub via `mock.patch.object(runner, "REGISTRY", ...)`. A default argument binds at definition
+> time, so the patch no longer reaches the loop; the test now passes the stub through the new
+> keyword, which is the seam it was reaching for and needs no mock.
 
 ---
 
@@ -1096,7 +1108,7 @@ Step 6's predicate is `bound_status == 'exactly_recoverable'` and nothing else. 
 is not the predicate** — it is True on the 3,534 published cells, so filtering on it is a silent
 3,534-row false positive. Do not import `disclosure.flags`; the harness needs no `DisclosureConfig`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/test_validate_recover.py
@@ -1140,12 +1152,12 @@ def test_exactly_identified_is_not_the_step_six_predicate():
     assert system.bounds.filter(pl.col("bound_status") == "exactly_recoverable").height == 0
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/unit/test_validate_recover.py -v`
 Expected: FAIL — `No module named 'logging_employment.validate.recover'`
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 # src/logging_employment/validate/recover.py
@@ -1221,12 +1233,12 @@ def is_exactly_recoverable(bounds: pl.DataFrame, cell_id: str) -> bool:
     return row["bound_status"].item() == "exactly_recoverable"
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/unit/test_validate_recover.py -v`
 Expected: 2 passed.
 
-- [ ] **Step 5: Record the timing in the module, measured not guessed**
+- [x] **Step 5: Record the timing in the module, measured not guessed**
 
 Run:
 ```bash
@@ -1245,7 +1257,7 @@ print('one mask+rebuild+solve: %.2fs' % (time.time()-t))
 Expected: well under 1 s (0.36 s at the time of writing). If it is seconds, stop and re-scope the
 harness before continuing — the whole design assumes this arm is cheap.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/logging_employment/validate/recover.py tests/unit/test_validate_recover.py
@@ -1274,7 +1286,7 @@ The propensity MUST be built from public predictors only: it may read establishm
 are published even for employment-suppressed cells) and the *disclosed* employment history, never
 the target's own held-out value.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/test_validate_propensity.py
@@ -1330,12 +1342,12 @@ def test_no_predictor_reads_the_targets_own_employment_value():
     assert base.filter(key)["propensity"].item() == after.filter(key)["propensity"].item()
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/unit/test_validate_propensity.py -v`
 Expected: FAIL — module does not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 # src/logging_employment/validate/propensity.py
@@ -1430,18 +1442,25 @@ def sample_targets(
     ]
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/unit/test_validate_propensity.py -v`
 Expected: 4 passed. If `test_no_predictor_reads_the_targets_own_employment_value` fails, a
 predictor entered the score that must not have — fix the score, never the test.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/validate/propensity.py tests/unit/test_validate_propensity.py
 git commit -m "feat(validate): §13.2 propensity over public predictors, parent share omitted"
 ```
+
+> Deviation: the plan's `sample_targets` drew UNIFORMLY and then sorted by propensity, which
+> reorders the output without changing which cells were drawn. Measured on D1: pool median 192
+> establishments, uniform draw 188, weighted draw 32 — so `small_cell_biased`, whose only
+> selector this is, would have been statistically identical to the random sanity check that
+> §13.2 prohibits as the only design. `pl.DataFrame.sample` takes no weights, so the draw routes
+> through `numpy.random.Generator.choice(p=...)` on the same seed.
 
 ---
 
@@ -1464,7 +1483,7 @@ It is implemented anyway, because §13.2 step 8 requires primary-like and comple
 be **scored separately** and INV-009 requires the labels. What the plan MUST NOT do is claim the
 routine prevents recovery of a state total. Task 8 puts the identification claim where it is true.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/test_validate_complementary.py
@@ -1508,12 +1527,12 @@ def test_a_complementary_mask_changes_nothing_about_state_total_identification()
         assert row["bound_status"] == "unbounded"
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/unit/test_validate_complementary.py -v`
 Expected: FAIL — `cannot import name 'complementary_partners'`
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 # src/logging_employment/validate/propensity.py  — append
@@ -1544,12 +1563,12 @@ def complementary_partners(
     ]
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/unit/test_validate_complementary.py -v`
 Expected: 2 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/validate/propensity.py tests/unit/test_validate_complementary.py
@@ -1584,7 +1603,7 @@ suppressed classes, so the flip *adds* a hard bounded `size_support` range row. 
 can therefore make a component **infeasible**, and `solve_bounds` raises. Handle the raise; do not
 assume it cannot happen.
 
-- [ ] **Step 1: Confirm the population before writing code**
+- [x] **Step 1: Confirm the population before writing code**
 
 Run:
 ```bash
@@ -1606,7 +1625,7 @@ Expected: eight March months; the month with zero suppressions is the exact-reco
 that month is not 2017-03, use whichever month reports zero** — the plan's 2017-03 is a dated
 measurement, not an invariant (anti-drift rule).
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 ```python
 # tests/integration/test_validate_exact_recovery.py
@@ -1655,12 +1674,12 @@ def test_a_complementary_pair_defeats_exact_recovery():
     assert row["selected_lower"] < row["selected_upper"]
 ```
 
-- [ ] **Step 3: Run it to verify it fails**
+- [x] **Step 3: Run it to verify it fails**
 
 Run: `uv run pytest tests/integration/test_validate_exact_recovery.py -v`
 Expected: FAIL — `cannot import name 'mask_and_solve_size'`
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 ```python
 # src/logging_employment/validate/mask.py  — append
@@ -1741,19 +1760,25 @@ Import `apply_size_mask` from `.mask`. No size-code constant is needed: measured
 margin for 113310 carries only the individual classes (1-6 in 2017-03), and the total enters the
 component as a separate `national_total` cell.
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `uv run pytest tests/integration/test_validate_exact_recovery.py -v`
 Expected: 2 passed. **This pair is Stage 4's exit criterion.** If the first test does not report
 `exactly_recoverable`, the rejection has nothing to reject and the harness cannot claim to satisfy
 §13.2 step 6 — stop and report rather than weakening the assertion.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/logging_employment/validate tests/integration/test_validate_exact_recovery.py
 git commit -m "feat(validate): the national-size arm, where §13.2 step 6's rejection can fire"
 ```
+
+> Deviation: the plan located the masked cell with `str.contains(size_class)` on `cell_id`, a
+> pipe-joined key containing `113310` and `NAICS 2017` — a one-character class matched 6 cells
+> where 1 was wanted and `.item()` raised. Looks the cell up on the cells table's own
+> `size_class` column instead. Verified non-vacuous on 2017-03: k=1 -> exactly_recoverable
+> [12144, 12144] truth 12144; k=2 -> partially_identified [8910, 16038] truth 11823 inside.
 
 ---
 
@@ -1779,7 +1804,7 @@ which touch a masked state value. That is a coincidence of the current registry,
 the design. The first Stage 5 or Stage 7 estimator that reaches for `context.monthly` breaks it, and
 nothing in the suite would notice. This test converts the coincidence into a guard.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/integration/test_validate_leakage.py
@@ -1839,12 +1864,12 @@ def test_every_estimator_is_invariant_to_the_held_out_value():
     assert a.sort(key).select("estimate").equals(b.sort(key).select("estimate"))
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/integration/test_validate_leakage.py -v`
 Expected: FAIL — module does not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 # src/logging_employment/validate/leakage.py
@@ -1894,17 +1919,26 @@ def assert_no_future_rows(frame: pl.DataFrame, *, origin: str) -> None:
     )
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/integration/test_validate_leakage.py -v`
 Expected: 3 passed. The third takes roughly 2 × the four-rung cost (~12 s).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/validate/leakage.py tests/integration/test_validate_leakage.py
 git commit -m "feat(validate): §13.4 leakage guards, including the truth-invariance regression test"
 ```
+
+> Deviation: the Interfaces block names `assert_estimates_invariant_to_truth`; Step 3 defines two
+> functions and the test imports two. The third bullet is a registry property, so it stays a
+> test. The plan's invariance test compares frames that are BYTE-IDENTICAL after masking, so it
+> cannot catch "an estimator read `context.monthly`" — under a frame mask that IS the masked
+> frame. Docstring corrected to what it does catch, and a structural guard added for the
+> partition leak of evidence §3. `assert_no_retained_truth` also fired on real data:
+> `aggregation_level` is the QCEW code '58' and cell 17/2021-06 has 58 employees, so it is scoped
+> to exclude columns QCEW publishes FOR suppressed cells, new columns checked by default.
 
 ---
 
@@ -1948,7 +1982,7 @@ months so no state is masked inside its own lookback. `RegimeSpec.grain` records
 `select_targets` asserts the non-blackout regimes leave at least
 `config.validation.minimum_unmasked_lookback_months` months unmasked.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/test_validate_regimes.py
@@ -2019,12 +2053,12 @@ def test_a_single_month_regime_leaves_lookback_history_unmasked():
     assert max(per_state.values()) <= 96 - cfg.validation.minimum_unmasked_lookback_months
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/unit/test_validate_regimes.py -v`
 Expected: FAIL — module does not exist.
 
-- [ ] **Step 3: Implement the six selectors**
+- [x] **Step 3: Implement the six selectors**
 
 ```python
 # src/logging_employment/validate/regimes.py
@@ -2223,7 +2257,7 @@ def select_targets(
     return targets
 ```
 
-- [ ] **Step 4: Decide the regional scheme — a required, cited decision**
+- [x] **Step 4: Decide the regional scheme — a required, cited decision**
 
 `regional_blocks` needs a region definition, and **the same concept is consumed in four places**:
 this regime, §13.6's state-share error strata, §13.7's required "calibration by ... region", and
@@ -2289,12 +2323,12 @@ def test_the_census_divisions_partition_the_state_universe():
     assert set(flat) == set(STATES_DC_FIPS)
 ```
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `uv run pytest tests/unit/test_validate_regimes.py -v`
 Expected: all pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/logging_employment/validate/regimes.py tests/unit/test_validate_regimes.py
@@ -2328,7 +2362,7 @@ exist first. The scoreboard states this, so a reader does not read "no differenc
 one would be a new baseline outside §10's set and outside this stage. **Surface it as a scope
 decision; do not quietly implement one.**
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/test_validate_temporal_regimes.py
@@ -2357,12 +2391,12 @@ def test_retrospective_smoothing_is_declared_vacuous_not_silently_skipped():
     assert spec.select is None
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/unit/test_validate_temporal_regimes.py -v`
 Expected: FAIL — `cannot import name 'rolling_origin_frames'`
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 # src/logging_employment/validate/regimes.py  — append
@@ -2384,12 +2418,12 @@ def rolling_origin_frames(
 
 Add `from collections.abc import Iterator, Sequence` to the imports.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/unit/test_validate_temporal_regimes.py -v`
 Expected: 2 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/validate/regimes.py tests/unit/test_validate_temporal_regimes.py
@@ -2438,7 +2472,7 @@ empty partition reads as "scored, nothing wrong".
 CBP value enters the constraint system at all. So masking CBP size classes changes `cbp_intensity`'s
 availability and nothing else.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/test_validate_declared_regimes.py
@@ -2478,12 +2512,12 @@ def test_break_windows_are_declared_in_config_not_detected():
     assert all(len(w) == 2 for w in windows)
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/unit/test_validate_declared_regimes.py -v`
 Expected: FAIL — `structural_break_windows` is not on `ValidationConfig`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add to `ValidationConfig` (Task 1):
 
@@ -2597,17 +2631,22 @@ def apply_cbp_gap(data: HarmonizedData, keys: Sequence[tuple[str, int]]) -> Harm
     )
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/unit/test_validate_declared_regimes.py -v`
 Expected: 4 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/validate/regimes.py config.yaml tests/unit/test_validate_declared_regimes.py
 git commit -m "feat(validate): declared break windows, the NAICS seam, and the vintage refusal"
 ```
+
+> Deviation: `REGIME_SPECS` is a dict comprehension over `_SELECTORS.get(name)`, so registering
+> the two selectors afterwards would not have reached the specs — `structural_break` and
+> `naics_transition` would have kept `select=None` and returned `[]` for a regime declared
+> feasible. `REGIME_SPECS` is rebuilt after registration.
 
 ---
 
@@ -2640,7 +2679,7 @@ vacuous one. On the `national_size` arm all five are informative.
 `lower <= truth AND (upper IS NULL OR truth <= upper)`. A naive `truth <= upper` drops every row to
 null; a `fill_null(0)` fails every row. Both are silent.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/test_validate_metrics_bounds.py
@@ -2685,12 +2724,12 @@ def test_a_finite_upper_bound_produces_a_real_width():
     assert width == 425.0
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/unit/test_validate_metrics_bounds.py -v`
 Expected: FAIL — module does not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 # src/logging_employment/validate/metrics.py
@@ -2745,17 +2784,21 @@ def bound_metrics(
     return pl.DataFrame(rows)
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/unit/test_validate_metrics_bounds.py -v`
 Expected: 3 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/validate/metrics.py tests/unit/test_validate_metrics_bounds.py
 git commit -m "feat(validate): §13.5 bound metrics, with vacuity reported rather than hidden"
 ```
+
+> Deviation: the plan's third test asserted a mean feasible width of 425.0 over bounds [0,150]
+> and [0,500], whose widths are 150 and 500 and whose mean is 325. The implementation was right;
+> the expectation is now written as its own derivation rather than as a literal.
 
 ---
 
@@ -2784,7 +2827,7 @@ MAPE is reported only where the truth is safely non-zero; §13.6 says "where den
 On a small-cell regime a truth of 5–8 employees makes WAPE > 1 unremarkable, so the scoreboard
 reports a magnitude-stratified breakdown beside the headline.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/test_validate_metrics_point.py
@@ -2831,12 +2874,12 @@ def test_wape_is_computed_over_the_scored_rows_only():
     assert abs(wape - 0.1) < 1e-12
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/unit/test_validate_metrics_point.py -v`
 Expected: FAIL — `cannot import name 'point_metrics'`
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 # src/logging_employment/validate/metrics.py  — append
@@ -2891,12 +2934,12 @@ def point_metrics(scores: pl.DataFrame, *, regime: str, seed: int, arm: str) -> 
     return pl.DataFrame(rows)
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/unit/test_validate_metrics_point.py -v`
 Expected: 3 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/validate/metrics.py tests/unit/test_validate_metrics_point.py
@@ -2938,7 +2981,7 @@ empirical ensemble puts zero density outside its own range, so log score is `-in
 truth falls outside, which is an artifact of the estimator, not of the model. CRPS is reported
 instead, and the omission is recorded here.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/test_validate_intervals.py
@@ -2968,12 +3011,12 @@ def test_crps_grows_as_the_ensemble_moves_away():
     assert crps(ens, truth=20.0) > crps(ens, truth=12.0)
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/unit/test_validate_intervals.py -v`
 Expected: FAIL — module does not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 # src/logging_employment/validate/intervals.py
@@ -3102,17 +3145,23 @@ def probabilistic_metrics(
     return pl.DataFrame(rows)
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/unit/test_validate_intervals.py -v`
 Expected: 4 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/validate/intervals.py src/logging_employment/validate/metrics.py tests/unit/test_validate_intervals.py
 git commit -m "feat(validate): §10.7 empirical intervals and §13.7 probabilistic metrics"
 ```
+
+> Deviation: the leave-one-out excluded the target's residual by float equality, which also drops
+> every other cell sharing that residual; excluded by position instead. Separately, `crps` was
+> the harness's DOMINANT cost, not `run_baselines` as evidence §4 states — it is O(n^2) per cell
+> and O(n^3) per estimator, and `whole_seasonal_blocks` masks 291 cells. Replaced with the exact
+> sorted-ensemble identity (O(n log n)), pinned against the pairwise definition.
 
 ---
 
@@ -3150,7 +3199,7 @@ alone reports it as fully covered.
 history at all. Do not plan a column that claims to; recompute it from the share history if a later
 item needs the split.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/test_validate_metrics_constraint.py
@@ -3198,12 +3247,12 @@ def test_a_fully_declining_estimator_is_reported_as_declining_not_absent():
     assert row["n_scored"] == 0
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/unit/test_validate_metrics_constraint.py -v`
 Expected: FAIL — `cannot import name 'decline_and_basis_report'`
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 # src/logging_employment/validate/metrics.py  — append
@@ -3282,12 +3331,12 @@ def constraint_metrics(
 `constraint_rows_scored` is added to `VALIDATION_METRIC_SCHEMA` in Task 2 alongside the other
 counters.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/unit/test_validate_metrics_constraint.py -v`
 Expected: 3 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/validate/metrics.py tests/unit/test_validate_metrics_constraint.py
@@ -3326,7 +3375,7 @@ Four rules, each from a measured trap:
 Report a magnitude-stratified breakdown beside the headline WAPE. On a small-cell regime the
 denominator can be 5–8 employees, which makes WAPE > 1 unremarkable and uninformative alone.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/test_validate_scoreboard.py
@@ -3409,12 +3458,12 @@ def test_a_regime_with_no_scoring_estimator_has_no_preferred_baseline():
     assert preferred_baseline(build_scoreboard(empty), regime="small_cell_biased") is None
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/unit/test_validate_scoreboard.py -v`
 Expected: FAIL — module does not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```python
 # src/logging_employment/validate/scoreboard.py
@@ -3482,12 +3531,12 @@ def preferred_baseline(scoreboard: pl.DataFrame, *, regime: str) -> str | None:
     return candidates.sort("wape")["estimator_id"].to_list()[0]
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/unit/test_validate_scoreboard.py -v`
 Expected: 5 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/validate/scoreboard.py tests/unit/test_validate_scoreboard.py
@@ -3530,7 +3579,7 @@ preferred baseline.
 **Do not join a masked cell against the run's shipped `deterministic_bounds.parquet`** — that join
 returns the truth. Bounds for a masked cell come only from `mask_and_solve`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/integration/test_validate_cli.py
@@ -3574,12 +3623,12 @@ def test_validate_is_idempotent_for_identical_inputs():
     assert path.read_bytes() == before
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `uv run pytest tests/integration/test_validate_cli.py -v`
 Expected: FAIL — no `validate` command.
 
-- [ ] **Step 3: Implement `run_pseudo_suppression`**
+- [x] **Step 3: Implement `run_pseudo_suppression`**
 
 ```python
 # src/logging_employment/validate/harness.py
@@ -3745,7 +3794,7 @@ def _anchor_residuals(scored: pl.DataFrame) -> pl.DataFrame:
 The `inner` join on truth is deliberate: it drops every cell the mask did not hide, so a scored
 row that was never masked is impossible by construction rather than by assertion.
 
-- [ ] **Step 4: Add the CLI command**
+- [x] **Step 4: Add the CLI command**
 
 ```python
 # src/logging_employment/cli.py  — append, mirroring `run-baselines`
@@ -3790,17 +3839,31 @@ def validate_command(
 Step 1 meaningful: two runs with identical inputs produce byte-identical files even though the
 in-memory row order depends on `Partition.missing`'s order.
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `uv run pytest tests/integration/test_validate_cli.py -v -m slow`
 Expected: 2 passed. Budget real time — this exercises the full harness.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/logging_employment/validate src/logging_employment/cli.py tests/integration/test_validate_cli.py
 git commit -m "feat(validate): run_pseudo_suppression and the validate CLI command"
 ```
+
+> Deviation, three defects and two additions. (1) `_anchor_residuals(scored)` summed the masked
+> SUBSET against the month's whole-missing-set residual: 4134.4 / 2833.2 employees of apparent
+> violation against a true 4.5e-13, which would have shipped as §13.8's
+> `anchor_adding_up_max_abs` forever. Takes the full frame now. (2) `_join_truth`'s docstring
+> claimed it re-attaches `suppression_type`; it did not, so §13.2 step 8's separation was
+> impossible and a declared schema column was unfilled. (3) `_clustered` and `_state_year`
+> sampled from an UNORDERED frame, so a seeded draw picked differently per PROCESS and broke
+> §16.1's idempotence MUST — caught only by the CLI byte-comparison, invisible to every
+> within-process test. Added: a feasible regime that scores nothing records why (rolling_origin
+> and cbp_size_gaps mask no QCEW cells and never reach the loop), and
+> `include_vintage_comparison` now fails closed as the plan designed. Test cost reduced to a
+> shared one-seed invocation; the plan's form cost ~40 minutes on a suite that runs `slow` by
+> default.
 
 ---
 
@@ -3820,7 +3883,7 @@ missing cells almost all lack a share history, so no refusal fires there. A Stag
 golden, is what moves a refusal count. Record that so a future reader does not assume the golden
 protects the rule.
 
-- [ ] **Step 1: Write the acceptance test**
+- [x] **Step 1: Write the acceptance test**
 
 ```python
 # tests/integration/test_d1_validation.py
@@ -3886,29 +3949,84 @@ def test_one_metric_row_is_reproducible_from_the_scores():
     assert abs(row["value"] - expected) < 1e-9
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run: `uv run pytest tests/integration/test_d1_validation.py -v -m slow`
 Expected: 4 passed.
 
-- [ ] **Step 3: Record the D1 acceptance numbers**
+- [x] **Step 3: Record the D1 acceptance numbers**
 
 Run the full harness and capture, for the Stage 4 completion stamp: regimes run, regimes refused
 with reasons, replicates, cells masked, the preferred baseline per regime, and the own/fallback
 split per estimator. **These are dated measurements** — record them in the stamp and the manifest,
 not in an assertion.
 
-- [ ] **Step 4: Run the whole suite**
+- [x] **Step 4: Run the whole suite**
 
 Run: `uv run pytest -q`
 Expected: all pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/integration/test_d1_validation.py tests/fixtures/validation
 git commit -m "test(validate): §17.4 row 7 integration and the D1 validation acceptance run"
 ```
+
+> Deviation: Task 19 lists a golden in its Files block but no step builds one, so it follows this
+> repo's `test_baseline_golden.py` convention — the in-git `tests/fixtures/baselines/`, at
+> `replicates_per_regime: 3` because at 20 the 12-month fixture trips the single-month lookback
+> guard (`concentration_proxy` would mask 7 of 12 months for state 12). Both integration modules
+> cache their run at module scope on a one-seed config; the plan's per-test three-seed form took
+> 6:29 for four tests.
+
+---
+
+## D1 acceptance run (Task 19 Step 3)
+
+**Dated measurements, 2026-09-07, `runs/f03023ac9f3a`.** Recorded here and in
+`validation_manifest.json`, never asserted — the ANTI-DRIFT RULE binds these as hard as it binds
+the plan's own numbers.
+
+Command: `logging-estimates validate --config config.yaml`, full `REGISTRY` (10 estimators), three
+seeds (1024 / 2048 / 4096). Wall clock **11:03**. Outputs: 12,530 scored rows, 4,536 metric rows,
+27 distinct MASKED `constraint_set_hash` values (one per replicate, per evidence §10).
+
+| regime | disposition | replicates | scored | preferred baseline |
+|---|---|---|---|---|
+| small_cell_biased | feasible | 3 | 600 | cbp_intensity |
+| concentration_proxy | feasible | 3 | 600 | cbp_intensity |
+| clustered_states_within_month | feasible | 3 | 600 | share_last_observed |
+| long_consecutive_runs | feasible | 3 | 360 | equal_residual |
+| whole_state_year_blocks | feasible | 3 | 360 | cbp_intensity |
+| regional_blocks | feasible | 3 | 120 | share_last_observed |
+| whole_seasonal_blocks | feasible | 3 | 8,690 | cbp_intensity |
+| structural_break | feasible | 3 | 600 | cbp_intensity |
+| naics_transition | feasible | 3 | 600 | cbp_intensity |
+| rolling_origin | feasible | 0 | 0 | — (masks no QCEW cell; reason recorded) |
+| cbp_size_gaps | feasible | 0 | 0 | — (masks no QCEW cell; reason recorded) |
+| retrospective_smoothing | vacuous_on_registry | 0 | 0 | — (no smoothing estimator in §10) |
+| preliminary_to_final_vintage | cannot_run_on_d1 | 0 | 0 | — (no second snapshot) |
+
+**Exit criteria.**
+
+- §13.2 step 6's rejection FIRES, on the only arm where it can: masking one size class in 2017-03
+  — the sole fully observed March margin — gives `exactly_recoverable` at [12144, 12144] against a
+  truth of 12144; masking two gives `partially_identified` at [8910, 16038] with the truth (11823)
+  strictly inside. `tests/integration/test_validate_exact_recovery.py`. A state-total test would
+  have passed vacuously forever.
+- A rolling-origin frame provably contains no future rows:
+  `tests/unit/test_validate_temporal_regimes.py` over `assert_no_future_rows`, on the TRUNCATED
+  frame rather than a mask.
+- Every command writes a machine-readable manifest and is idempotent for identical inputs (§16.1):
+  `tests/integration/test_validate_cli.py`. The idempotence half failed on the first run and is
+  the only test that could have — see the Task 18 deviation.
+
+**Read with the denominators.** `equal_residual` heads `long_consecutive_runs` while §10.8
+deliberately leaves equal allocation out of its four-rung ordering; that collision is unresolved
+and deferred, not silently settled here. Two regimes report `feasible / scored=0` because they mask
+no QCEW cell, each with a recorded `reason`. `whole_seasonal_blocks`' 8,690 rows dominate the score
+count and are one calendar month across eight years, not a broader design.
 
 ---
 

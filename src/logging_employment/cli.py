@@ -389,7 +389,7 @@ def validate_command(
 
     from .baselines.runner import REGISTRY
     from .build import write_parquet_deterministic
-    from .contracts import HarmonizedData
+    from .contracts import VALIDATION_METRIC_SCHEMA, HarmonizedData, validate_frame
     from .runs import run_dir, run_id
     from .validate.harness import run_pseudo_suppression
 
@@ -399,6 +399,13 @@ def validate_command(
     run.mkdir(parents=True, exist_ok=True)
 
     result = run_pseudo_suppression(data, REGISTRY, cfg)
+
+    # The declared schema is made load-bearing here rather than left as documentation: Task 2
+    # declares VALIDATION_METRIC_SCHEMA and §15.1 item 5 names the file, but nothing gated the
+    # write. `validation_scores` is deliberately NOT gated — it carries `baseline_results`' columns
+    # plus the joined ones, a superset of VALIDATION_SCORE_SCHEMA, and narrowing it is a deferred
+    # decision rather than something to do silently on the way out.
+    validate_frame(result.metrics, VALIDATION_METRIC_SCHEMA, "validation_metrics")
 
     hashes = {
         "validation_scores": write_parquet_deterministic(
