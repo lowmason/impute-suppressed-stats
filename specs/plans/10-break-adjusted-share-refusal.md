@@ -1,5 +1,7 @@
 # Break-Adjusted Share Refusal Implementation Plan
 
+**Status: COMPLETE (2026-09-07)** — executed via executing-plans; nothing deferred
+
 > **For agentic workers:** REQUIRED SUB-SKILL: implement this plan task-by-task via subagent-driven-development (the default) — or executing-plans when your human partner chose inline execution at the handoff. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make `BreakAdjustedShare` return `None` — taking the declared §10.2 establishment fallback — whenever the cut it selects leaves fewer than two points in the recent segment, so §10.3's variant 5 stops emitting variant 1's and variant 3's numbers under its own name.
@@ -23,6 +25,10 @@
 - **Five distinct numbers is NOT the requirement.** The requirement is that each variant does what it says *or refuses*. Coincidental agreement is permitted; structural impersonation is not. Do not add a distinctness assertion beyond the one `test_the_five_variants_compute_five_different_numbers_on_one_history` already makes on its own fixture.
 - **Line length 100.** Run `uv run ruff check` and `uv run ruff format --check` **before** `pytest` on every task; a lint failure after a green test run wastes a cycle.
 - **Execute in the main checkout, not a worktree.** `data/` is gitignored and large; a worktree turns data-reading tests into silent skips.
+
+> Deviation: honoured, and executed on branch `break-adjusted-share-refusal` within that checkout
+> rather than on `main` — the repo's convention, cf. plan 9's `10d9295`. A branch is not a
+> worktree, so `data/` stays visible and no data-reading test silently skips.
 
 **Commands used throughout:**
 
@@ -87,13 +93,13 @@ The anchor month's value **must stay 43**: the sibling test derives its expected
 - Consumes: nothing from earlier tasks.
 - Produces: `_history(make_monthly) -> pl.DataFrame` — unchanged signature. State 01 is observed at `2023-01`, `2023-02`, `2023-03`, `2024-03` with employment `10, 40, 41, 43` over a national total of 100; state 02 is suppressed in all four months with 6 establishments.
 
-- [ ] **Step 1: Read the current fixture**
+- [x] **Step 1: Read the current fixture**
 
 Run: `sed -n '39,73p' tests/unit/test_baselines_historical.py`
 
 Expected: a `for i, month in enumerate([...])` loop whose state-01 row carries `"employment_value": 40 + i,`.
 
-- [ ] **Step 2: Replace the loop header so employment is an explicit list**
+- [x] **Step 2: Replace the loop header so employment is an explicit list**
 
 In `tests/unit/test_baselines_historical.py`, change the opening of `_history` from:
 
@@ -127,7 +133,7 @@ def _history(make_monthly) -> pl.DataFrame:
     ):
 ```
 
-- [ ] **Step 3: Point the state-01 row at the new variable**
+- [x] **Step 3: Point the state-01 row at the new variable**
 
 In the same function, change:
 
@@ -141,7 +147,7 @@ to:
                 "employment_value": employment,
 ```
 
-- [ ] **Step 4: Lint, then run the file's tests against the UNCHANGED source**
+- [x] **Step 4: Lint, then run the file's tests against the UNCHANGED source**
 
 ```bash
 uv run ruff check src/ tests/ && uv run pytest tests/unit/test_baselines_historical.py -q --no-header
@@ -149,7 +155,7 @@ uv run ruff check src/ tests/ && uv run pytest tests/unit/test_baselines_histori
 
 Expected: PASS, 18 passed. The old `len(shares) < 4` rule reduces `[0.10, 0.40, 0.41]` to the plain median 0.40, which is positive, so every variant still takes `OWN` — the fixture change is behaviour-preserving under the current source. If `test_a_state_with_no_observed_history_takes_the_declared_fallback` fails, the anchor month's 43 was moved; put it back.
 
-- [ ] **Step 5: Confirm the golden fixture is untouched**
+- [x] **Step 5: Confirm the golden fixture is untouched**
 
 ```bash
 git status --short tests/fixtures/baselines/
@@ -157,7 +163,7 @@ git status --short tests/fixtures/baselines/
 
 Expected: no output.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add tests/unit/test_baselines_historical.py
@@ -183,7 +189,7 @@ The plan's centre. R-BREAK-1, R-BREAK-2, R-BREAK-4 and R-BREAK-5 all land here, 
 - Produces: `BreakAdjustedShare._reduce(self, shares: list[float], anchor, history) -> float | None` — returns `None` when `len(shares) < 2` or when the selected cut leaves fewer than two points, and `statistics.median(segment)` otherwise. Task 3 drives this through `BreakAdjustedShare().weights(context, anchor)`.
 - Produces: `_reduce_shares(shares: list[float]) -> float | None`, a module-level test helper calling `_reduce` with `None` for both the anchor and the history. Task 3 does not use it — T-7 drives the full `weights` path instead.
 
-- [ ] **Step 1: Add the `statistics` import**
+- [x] **Step 1: Add the `statistics` import**
 
 At the top of `tests/unit/test_baselines_historical.py`, change:
 
@@ -207,11 +213,11 @@ import pytest
 
 > Task 3 needs a second import (`Weights`). It is added there, not here: ruff's `F401` fires on an import with no use yet, which would fail this task's own lint gate at Step 7.
 
-- [ ] **Step 2: Delete the test whose premise is the defect**
+- [x] **Step 2: Delete the test whose premise is the defect**
 
 Delete `test_below_four_shares_the_break_adjusted_variant_is_the_rolling_median` in its entirety — the `def` line at roughly line 490 through its final `assert`, including the docstring. Spec §5 requires deletion, not adjustment: it asserts `broken == median` and `broken == pytest.approx(11.0)`, and R-BREAK-1 makes both false. Adjusting it would also raise `ConceptViolationError`, because its hand-typed `Anchor("2024-03", 50.0, ...)` disagrees with the residual its partition implies once the refused cell needs a fallback arm.
 
-- [ ] **Step 3: Add the reduction helper and T-1 … T-6**
+- [x] **Step 3: Add the reduction helper and T-1 … T-6**
 
 Insert this immediately after `_breaking_history`'s consumer `test_the_five_variants_compute_five_different_numbers_on_one_history`, where the deleted test used to be:
 
@@ -226,6 +232,13 @@ def _reduce_shares(shares: list[float]) -> float | None:
 
     Integer-valued floats throughout, for the reason `_share_rows` gives: on tenths the
     largest-step argmax is decided by float representation error rather than by the data.
+
+> Deviation: that final docstring paragraph shipped narrowed. "Integer-valued floats throughout"
+> is falsified by T-1…T-4 directly below it, which use 0.02, 0.10, 0.50, 0.52, 0.11 and 0.90 — a
+> docstring contradicted by the code under it is exactly the R-BREAK-4 defect, and shipping one
+> inside the fix for R-BREAK-4 would be self-defeating. The shipped text states the property that
+> does hold across all six cases: where a case admits more than one step, its largest is kept well
+> clear of its second largest. Same reason, true of the cases it governs.
     """
     return BreakAdjustedShare()._reduce(shares, None, None)
 
@@ -283,7 +296,7 @@ def test_a_long_history_with_an_interior_break_follows_the_recent_segment() -> N
     assert statistics.median(shares) == pytest.approx(11.0)
 ```
 
-- [ ] **Step 4: Rewrite the docstring-pinning test**
+- [x] **Step 4: Rewrite the docstring-pinning test**
 
 Replace `test_the_break_adjusted_docstring_scopes_its_own_claim` (the last test in the file) with:
 
@@ -303,7 +316,7 @@ def test_the_break_adjusted_docstring_declares_its_refusal() -> None:
     assert "below four" not in doc
 ```
 
-- [ ] **Step 5: Run the tests to verify they fail**
+- [x] **Step 5: Run the tests to verify they fail**
 
 ```bash
 uv run pytest tests/unit/test_baselines_historical.py -q --no-header
@@ -324,7 +337,7 @@ Expected: **FAIL, 6 failed, 17 passed.** Measured on the current tree, the six a
 
 If any of the six PASSES here, the implementation was written first — revert it and re-run.
 
-- [ ] **Step 6: Replace the docstring and the reduction**
+- [x] **Step 6: Replace the docstring and the reduction**
 
 In `src/logging_employment/baselines/historical.py`, replace the whole `BreakAdjustedShare` class body — from its docstring through the final `return statistics.median(segment)` — with:
 
@@ -374,7 +387,7 @@ class BreakAdjustedShare(_ShareBaseline):
 
 > Do **not** touch `steps.index(max(steps))`. R-BREAK-5 declares the earliest-tied-step rule and forbids changing it in this plan.
 
-- [ ] **Step 7: Lint, then run the file's tests to verify they pass**
+- [x] **Step 7: Lint, then run the file's tests to verify they pass**
 
 ```bash
 uv run ruff check src/ tests/ && uv run ruff format --check src/logging_employment/baselines/historical.py tests/unit/test_baselines_historical.py && uv run pytest tests/unit/test_baselines_historical.py -q --no-header
@@ -382,7 +395,7 @@ uv run ruff check src/ tests/ && uv run ruff format --check src/logging_employme
 
 Expected: `All checks passed!`, `2 files already formatted`, then PASS, 23 passed.
 
-- [ ] **Step 8: Verify the exit-criterion grep and the untouched golden**
+- [x] **Step 8: Verify the exit-criterion grep and the untouched golden**
 
 ```bash
 grep -n "below four" src/logging_employment/baselines/historical.py; echo "grep exit: $?"
@@ -396,7 +409,7 @@ git status --short tests/fixtures/baselines/
 
 Expected: no output.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add src/logging_employment/baselines/historical.py tests/unit/test_baselines_historical.py
@@ -426,7 +439,7 @@ R-BREAK-3 and T-7. Task 2 proved the *reduction* refuses; this proves the refusa
 - Consumes: `BreakAdjustedShare._reduce` from Task 2; the existing `_share_rows(months, employment) -> list[dict]` and `_context(monthly, cfg) -> EstimatorContext` helpers; `national_residual`, `observed_partition`, `FALLBACK` and `pytest`, all already imported at the top of the file.
 - Produces: nothing later tasks consume.
 
-- [ ] **Step 1: Add the `Weights` import**
+- [x] **Step 1: Add the `Weights` import**
 
 In `tests/unit/test_baselines_historical.py`, change:
 
@@ -443,7 +456,7 @@ from logging_employment.reconcile.allocate import Weights
 
 > Add this together with Step 2's test, in one pass. On its own it is an unused import and `uv run ruff check` fails with `F401`.
 
-- [ ] **Step 2: Write the test**
+- [x] **Step 2: Write the test**
 
 Insert after `test_a_long_history_with_an_interior_break_follows_the_recent_segment` and before the docstring test:
 
@@ -485,7 +498,7 @@ def test_a_refused_cell_takes_the_establishment_fallback_rather_than_declining(
 
 > The share history here is `[0.010, 0.011, 0.090]` — its largest step is the last, so the cut leaves one point and Task 2's rule refuses it. That is the same shape as T-4, driven through the full `weights` path.
 
-- [ ] **Step 3: Run the test to verify it passes**
+- [x] **Step 3: Run the test to verify it passes**
 
 ```bash
 uv run ruff check src/ tests/ && uv run pytest tests/unit/test_baselines_historical.py::test_a_refused_cell_takes_the_establishment_fallback_rather_than_declining -q --no-header
@@ -497,7 +510,17 @@ Expected: PASS, 1 passed.
 >
 > **Undo that insertion by deleting the two lines you just typed — by hand.** Do not reach for `git checkout` or `git restore`: your Task 3 test edit is uncommitted at this point, and a checkout that slips past `historical.py` to the test file or the working tree discards it. Re-run the command above and confirm `1 passed` before continuing.
 
-- [ ] **Step 4: Run the full suite**
+> Deviation: the red bar was taken WITHOUT the temporary source edit. This step's own warning is
+> the argument against it — with the Task 3 test edit uncommitted, mutating `historical.py` puts
+> the only copy of that edit one slipped checkout away from gone, for a witness obtainable another
+> way. The old `<4` rule was instead restored by monkeypatching `BreakAdjustedShare._reduce` in a
+> throwaway `uv run python` process: the basis flipped to `own_estimator` with value **11.0** --
+> `RollingMedianShare`'s number, §1's impersonation reproduced end-to-end -- against
+> `establishment_fallback` at 40.0 under the shipped rule. The same process confirmed
+> `RollingMedianShare` takes `own_estimator` on that fixture, ruling out the vacuous pass where an
+> empty history sends the cell to the fallback via `if not shares: continue`. No file was mutated.
+
+- [x] **Step 4: Run the full suite**
 
 ```bash
 uv run pytest tests/ -q --no-header
@@ -505,7 +528,7 @@ uv run pytest tests/ -q --no-header
 
 Expected: **PASS, 1181 passed**, no new skips. Measured on a full prototype run of this exact change: the tree before this plan is `1175 passed`, and the plan deletes one test and adds seven (T-1…T-6 and T-7; the docstring test is renamed, not added), for a net of `+6`. `tests/integration/test_baseline_golden.py` is among the passes — that is T-8.
 
-- [ ] **Step 5: Confirm the golden parquet is byte-identical (T-8)**
+- [x] **Step 5: Confirm the golden parquet is byte-identical (T-8)**
 
 ```bash
 git status --short tests/fixtures/baselines/ && git diff --stat
@@ -513,7 +536,7 @@ git status --short tests/fixtures/baselines/ && git diff --stat
 
 Expected: `git status` prints nothing for the fixtures directory, and `git diff --stat` shows no `tests/fixtures/` entry. If `baseline_results_golden.parquet` appears, **stop and report** — per spec §4 a plan that finds otherwise has changed something the spec did not ask for. Do not regenerate it.
 
-- [ ] **Step 6: Walk the spec's §7 exit criteria explicitly**
+- [x] **Step 6: Walk the spec's §7 exit criteria explicitly**
 
 ```bash
 grep -n "below four" src/logging_employment/baselines/historical.py; echo "grep exit: $? (1 = criterion met)"
@@ -521,7 +544,7 @@ grep -n "below four" src/logging_employment/baselines/historical.py; echo "grep 
 
 Confirm each of §7's bullets: T-5 covers the length-12 refusal; T-3 covers the length-3 keep; the grep returns nothing; the golden is unchanged in the diff; the full suite passes with no new skips. The final bullet — ticking `specs/deferred_items.md` — is the Plan Completion Protocol's job, not this task's.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add tests/unit/test_baselines_historical.py
