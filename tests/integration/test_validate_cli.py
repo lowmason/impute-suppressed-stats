@@ -44,10 +44,25 @@ pytestmark = [
 
 @pytest.fixture(scope="module")
 def one_seed_config(tmp_path_factory) -> Path:
-    """The shipped config with a single seed, so the run is a third of the full harness."""
+    """The shipped config with a single seed, so the run is a third of the full harness.
+
+    `storage.output_uri` is redirected into `tmp_path` the way `conftest.py`'s `staged_repo`
+    redirects it, and for a reason this file learned the hard way: the shipped value is the
+    RELATIVE string `runs`, which `run_dir` resolves against the process CWD, so a suite run
+    from the repo root drove the real CLI into the working checkout's own `runs/` and left a
+    run directory there. `staged_uri` is deliberately NOT redirected -- unlike `staged_repo`,
+    this test wants the real staged layer whose absence skips the module.
+
+    Redirecting MOVES the run id: `run_id` hashes `resolved_dict(cfg)` and `output_uri` is in
+    that payload, so the id is now a function of `tmp_path_factory`'s per-session base directory
+    and differs run to run. That is why `_metrics_path` derives it rather than naming it, and
+    why no literal id may be written down here.
+    """
     raw = yaml.safe_load((REPO / "config.yaml").read_text())
     raw["validation"]["pseudo_suppression_seeds"] = [1024]
-    path = tmp_path_factory.mktemp("validate-cli") / "config.yaml"
+    root = tmp_path_factory.mktemp("validate-cli")
+    raw["storage"]["output_uri"] = str(root / "runs")
+    path = root / "config.yaml"
     path.write_text(yaml.safe_dump(raw, sort_keys=False))
     return path
 
@@ -55,10 +70,10 @@ def one_seed_config(tmp_path_factory) -> Path:
 def _metrics_path(config: Path) -> Path:
     """The run directory this config AND this subset hash to, not whichever run sorts last.
 
-    `max(runs/*/validation_metrics.parquet)` would pick up a run written by a DIFFERENT config --
-    including the three-seed acceptance run -- and then assert against numbers this test never
-    produced. The `--estimators` override has to be applied here for the same reason: it is part
-    of the run id, so a subset run and a full one live in different directories.
+    `max(runs/*/validation_metrics.parquet)` would pick up a run written by a DIFFERENT config
+    and then assert against numbers this test never produced. The `--estimators` override has to
+    be applied here for the same reason: it is part of the run id, so a subset run and a full one
+    live in different directories.
     """
     from logging_employment.cli import _estimator_override, _input_digests
     from logging_employment.config import load_config
@@ -72,11 +87,26 @@ def _metrics_path(config: Path) -> Path:
 @pytest.fixture(scope="module")
 def first_run(one_seed_config) -> tuple[Path, bytes]:
     """One CLI invocation, shared. The subset is what makes a second one affordable."""
+    path = _metrics_path(one_seed_config)
+
+    # Asserted BEFORE the invocation: a regression caught afterwards has already spent the whole
+    # run writing the directory into the checkout, which is the one outcome this guards against.
+    # It went unnoticed for so long because the id is DERIVED and never typed, so searches for the
+    # literal id, for its file digests and for its row counts all returned nothing.
+    #
+    # Two assertions, because they catch different failures. Absoluteness is the real invariant --
+    # the config named where to write rather than inheriting the process CWD -- and it holds no
+    # matter which directory pytest was started from. The second catches a redirect that IS
+    # absolute but still lands inside the checkout, and it must resolve first: `is_relative_to` is
+    # purely lexical, so the relative `runs/<id>/...` this exists to catch is not "under" `REPO`
+    # by that test until the CWD is applied. Both were measured against an unredirected config.
+    assert path.is_absolute(), f"storage.output_uri left relative to the CWD: {path}"
+    assert not path.resolve().is_relative_to(REPO), f"run artifact inside the checkout: {path}"
+
     result = CliRunner().invoke(
         app, ["validate", "--config", str(one_seed_config), "--estimators", SUBSET]
     )
     assert result.exit_code == 0, result.output
-    path = _metrics_path(one_seed_config)
     assert path.exists(), f"no validation_metrics.parquet at {path}"
     return path, path.read_bytes()
 
