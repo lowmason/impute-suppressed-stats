@@ -1296,14 +1296,16 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       `VALIDATION_METRIC_SCHEMA`, add it to the scoreboard, give `preferred_baseline` a label
       argument. (2) If complementary masking is ever wired onto the scoring arm, Stage 5's call
       gains a label argument at that point rather than being final today. (3)
-      `include_complementary_like` still defaults to `true` and still gates nothing, so
-      `config.yaml` continues to claim complementary masking that the harness does not perform.
+      `include_complementary_like` still defaults to `true` and still gates no regime
+      selection — it is an operand of the random-mask-only refusal, not inert; see the item
+      below — so `config.yaml` continues to claim complementary masking that the harness
+      does not perform.
       That flag is NOT touched here on purpose: `runs.run_id` hashes the resolved config, so
       changing a `ValidationConfig` default would renumber every `runs/<id>/` and orphan
       `runs/f03023ac9f3a`. It stays with the `include_*` item below, which now inherits a decided
       question rather than an open one — on the scoring arm the flag names something the harness
       must refuse, not something it should start doing.
-- [ ] **Appendix A's `include_*` switches gate nothing.**
+- [ ] **Appendix A's `include_*` switches gate no regime selection.**
       `ValidationConfig` declares `include_random_mask_sanity_check`, `include_primary_like`,
       `include_complementary_like`, `include_long_runs`, `include_rolling_origin`,
       `include_retrospective_smoothing` and `include_vintage_comparison` (plan Task 1), and
