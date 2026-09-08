@@ -79,22 +79,36 @@ def _best(scoreboard: pl.DataFrame, *, regime: str, eligible: frozenset[str] | N
     `n_scored > 0` is a filter, not a tiebreak: an all-declining estimator has a null WAPE, and a
     sort that treats null as smallest would crown `harvest_proportional`, which declines by design
     in every month of the window.
+
+    THE ARM REFUSAL IS A PRECONDITION ON THE REGIME'S ROWS AND RUNS BEFORE EVERY NARROWING, because
+    the question is whether the SCOREBOARD is single-arm and not whether the subset this call
+    happens to pool is. It used to run last, which made the guarantee conditional on the caller:
+    `best_scoring_baseline` passes `eligible=None` and refused a two-arm regime, while
+    `preferred_baseline` -- the wrapper §13.10 gates on -- did not, whenever §10.8's hierarchy
+    members all sat on one arm and the second arm carried only non-hierarchy estimators. Measured:
+    `cbp_intensity` on `state_total` beside `equal_residual` on `national_size` raised from the
+    first and returned `cbp_intensity` from the second, a name derived from a two-arm board. Two
+    more rows the old order could not see, both now refused: a second arm whose estimators all
+    declined still carries wape rows -- `metrics.point_metrics` emits every point name null rather
+    than emitting nothing -- and `n_scored > 0` dropped the whole arm before the guard looked; and
+    a two-arm regime where nothing scored returned None, the "scored, nothing wrong" reading this
+    harness refuses everywhere else. Only `point_metrics` emits `point`/`wape`, so an arm reaches
+    this frame only by having been scored, and a second one is the ambiguity, not a false alarm.
     """
-    candidates = scoreboard.filter(
-        (pl.col("regime") == regime) & (pl.col("n_scored") > 0) & pl.col("wape").is_not_null()
-    )
+    regime_rows = scoreboard.filter(pl.col("regime") == regime)
+    arms = sorted(str(arm) for arm in regime_rows["mask_arm"].unique().to_list())
+    if len(arms) > 1:
+        raise ConceptViolationError(
+            f"{regime} carries rows on more than one mask arm ({', '.join(arms)}), and pooling "
+            "them would average a state-total WAPE with a national-size one under a single "
+            "number. Score one arm, or give this function an arm argument and decide which "
+            "§13.10 reads -- do not let the two pool."
+        )
+    candidates = regime_rows.filter((pl.col("n_scored") > 0) & pl.col("wape").is_not_null())
     if eligible is not None:
         candidates = candidates.filter(pl.col("estimator_id").is_in(sorted(eligible)))
     if candidates.height == 0:
         return None
-    arms = sorted(str(arm) for arm in candidates["mask_arm"].unique().to_list())
-    if len(arms) > 1:
-        raise ConceptViolationError(
-            f"{regime} carries scored rows on more than one mask arm ({', '.join(arms)}), and "
-            "pooling them would average a state-total WAPE with a national-size one under a "
-            "single number. Score one arm, or give this function an arm argument and decide which "
-            "§13.10 reads -- do not let the two pool."
-        )
     pooled = candidates.group_by("estimator_id").agg(
         ((pl.col("wape") * pl.col("denominator")).sum() / pl.col("denominator").sum()).alias(
             "pooled_wape"
