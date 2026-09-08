@@ -368,3 +368,108 @@ def test_a_single_arm_scoreboard_is_still_ranked():
     """The guard must refuse ambiguity, not the ordinary case."""
     board = _board_with_arms("state_total")
     assert preferred_baseline(board, regime="small_cell_biased") == "cbp_intensity"
+
+
+def _board_with_an_arm_per_estimator(
+    arms: dict[str, dict[str, float | None]], *, regime: str
+) -> pl.DataFrame:
+    """A board whose estimators sit on DIFFERENT arms, which `_board_with_arms` cannot express.
+
+    That helper replicates one estimator set across every arm, so `PREFERRABLE` selects the same
+    names on both and the eligibility filter cannot hide an arm from the guard. The shape that
+    hides one is the asymmetric board: §10.8's hierarchy on one arm, something else on a second.
+    Relabelled rather than emitted through the emitters twice, for `_board_with_arms`' reason --
+    the declines family carries no `mask_arm`, so two arms through the emitters fan the join out.
+    """
+    return pl.concat(
+        [
+            build_scoreboard(
+                _seed_metrics(estimates, regime=regime, seed=1024, n_cells=4)
+            ).with_columns(pl.lit(arm).alias("mask_arm"))
+            for arm, estimates in arms.items()
+        ],
+        how="vertical",
+    )
+
+
+def test_the_arm_refusal_does_not_depend_on_which_wrapper_asks():
+    """The guard ran AFTER the `eligible` narrowing, so it fired for one caller and not the other.
+
+    `best_scoring_baseline` passes `eligible=None` and saw both arms; `preferred_baseline` -- the
+    wrapper roadmap Stage 4 point (3) tells Stage 5 to gate on -- saw only §10.8's members, so a
+    second arm carrying nothing but non-hierarchy estimators was invisible to it. It returned
+    `cbp_intensity`, a name pooled from a board spanning two arms, while its sibling raised on the
+    same frame. The guarantee is a property of the board, not of the caller.
+    """
+    board = _board_with_an_arm_per_estimator(
+        {"state_total": {"cbp_intensity": 110.0}, "national_size": {"equal_residual": 105.0}},
+        regime="small_cell_biased",
+    )
+    with pytest.raises(ConceptViolationError, match="mask arm"):
+        best_scoring_baseline(board, regime="small_cell_biased")
+    with pytest.raises(ConceptViolationError, match="mask arm"):
+        preferred_baseline(board, regime="small_cell_biased")
+
+
+def test_a_second_arm_whose_estimators_all_declined_is_still_a_second_arm():
+    """The discriminator between checking before the eligibility filter and before ALL of them.
+
+    `share_last_observed` is IN `PREFERRABLE`, so eligibility is not what hides this arm --
+    `n_scored > 0` is. An estimator that declined every cell still gets a wape row
+    (`metrics.point_metrics` emits every point name null rather than emitting nothing), and that
+    row carries the arm. Dropping it before the guard looks means a run scored on two arms reads
+    as single-arm whenever the second one happened to decline.
+    """
+    board = _board_with_an_arm_per_estimator(
+        {
+            "state_total": {"cbp_intensity": 110.0},
+            "national_size": {"share_last_observed": None},
+        },
+        regime="small_cell_biased",
+    )
+    with pytest.raises(ConceptViolationError, match="mask arm"):
+        preferred_baseline(board, regime="small_cell_biased")
+    with pytest.raises(ConceptViolationError, match="mask arm"):
+        best_scoring_baseline(board, regime="small_cell_biased")
+
+
+def test_a_two_arm_regime_where_nothing_scored_is_refused_rather_than_read_as_no_comparand():
+    """`None` means "no hierarchy member scored", which §13.10 reads as "no comparand". A two-arm
+    board is a different thing -- a run whose scoring is ambiguous -- and returning `None` for it
+    hands the gate the "scored, nothing wrong" reading this harness refuses everywhere else.
+
+    It took that path because every candidate was filtered out before the guard ran, so the
+    `height == 0` early return fired first.
+    """
+    board = _board_with_an_arm_per_estimator(
+        {
+            "state_total": {"cbp_intensity": None},
+            "national_size": {"equal_residual": None},
+        },
+        regime="small_cell_biased",
+    )
+    with pytest.raises(ConceptViolationError, match="mask arm"):
+        preferred_baseline(board, regime="small_cell_biased")
+
+
+def test_regimes_sitting_on_different_arms_do_not_contaminate_each_other():
+    """Moving the guard up must not widen its SCOPE. Pooling never crosses regimes, so a board
+    carrying two arms across two regimes is not ambiguous and a scoreboard-wide check would refuse
+    a legitimate run the moment a second arm is scored anywhere. The last assertion covers the
+    other edge the move touches: a regime with no rows at all has no arms, so it must still read as
+    "no comparand" rather than raising.
+    """
+    board = pl.concat(
+        [
+            _board_with_an_arm_per_estimator(
+                {"state_total": {"cbp_intensity": 110.0}}, regime="small_cell_biased"
+            ),
+            _board_with_an_arm_per_estimator(
+                {"national_size": {"cbp_intensity": 120.0}}, regime="long_consecutive_runs"
+            ),
+        ],
+        how="vertical",
+    )
+    assert preferred_baseline(board, regime="small_cell_biased") == "cbp_intensity"
+    assert preferred_baseline(board, regime="long_consecutive_runs") == "cbp_intensity"
+    assert preferred_baseline(board, regime="rolling_origin") is None

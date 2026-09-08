@@ -1250,8 +1250,11 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       **→ retired 2026-09-08: the clause is a STANDING PRECONDITION, and the harness now refuses a
       run that violates it.** `validate/scoreboard.py::assert_scored_cells_are_primary_like` runs
       on every scored frame beside `assert_declared_provenance` (`harness.py`), and `_best` refuses
-      a regime whose scored rows span more than one `mask_arm`. Neither the metrics schema nor the
-      scoreboard gained a column.
+      a regime whose rows span more than one `mask_arm`. Neither the metrics schema nor the
+      scoreboard gained a column. (This sentence read "scored rows" until 2026-09-08, and the
+      word was load-bearing: the check ran after the scoring and eligibility filters, so it did
+      not fire for `preferred_baseline` — see the `CORRECTED 2026-09-08` note on the arm guard
+      below.)
 
       WHY A PRECONDITION AND NOT §13.2 STEP 8'S SPLIT, which is the reading the item leaned toward.
       Step 3's complementary cells exist to defeat recovery by subtraction, and ON THE ARM THAT
@@ -1278,7 +1281,12 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       ALSO CLOSED: the sibling silent-pooling path one level up. `mask_arm` was already a
       scoreboard column and `_best` pooled across it, so a second scoring arm would have averaged a
       state-total WAPE with a national-size one under one number — the same shape as the seed
-      argmin retired above. It now raises. This path is more remote than the label path (a second
+      argmin retired above. It now raises. CORRECTED 2026-09-08 — as shipped it raised only for
+      `best_scoring_baseline`. The check sat after the `PREFERRABLE` narrowing and after `n_scored
+      > 0`, so `preferred_baseline` — the GATING wrapper — returned a name off a two-arm board
+      whenever the second arm carried no hierarchy member, and a second arm that scored nothing
+      was invisible to both. It now runs on the regime's rows before any narrowing; see Stage 4
+      SHIPPED point (3) for the measurement. This path is more remote than the label path (a second
       scoring arm needs size-class baselines, which are Stage 6's), which is why it is a guard and
       not a parameter.
 
