@@ -100,9 +100,17 @@ Against the current tree on the D1 window, of 342 own-weight cells:
 | Length-3 cells kept with a genuine break | 0 | **26** |
 
 The cost is within two cells of the blunt rule and lands on a better-chosen set. `BreakAdjustedShare`
-becomes the most fallback-heavy of the five variants — 241 own cells against the other variants' 342
-— which is the honest consequence of it being the most demanding, and is already visible per
-estimator in `baseline_manifest.json`'s `weight_basis_counts`.
+becomes substantially more fallback-heavy — 241 own cells against the 342 it carried before the
+refusal — which is the honest consequence of it being the most demanding, and is already visible per
+estimator in `baseline_manifest.json`'s `weight_basis_counts`. CORRECTED 2026-09-08: this sentence
+used to call it "the most fallback-heavy of the five variants" and to put "the other variants" at
+342. Both overreach, and the manifest this sentence points at is what refutes them. Measured on
+`runs/2fc2c6003e0c` (a SUPERSEDED run id — a dated measurement; see the roadmap's Stage 3 point (8)),
+`weight_basis_counts` gives `share_same_month_prior_year` 129 own / 1,098 fallback against this
+variant's 226 / 1,001, so variant 5 is the SECOND most fallback-heavy of the five, not the first —
+`share_same_month_prior_year` is, for its own reason and not through any refusal. Only THREE of the
+four siblings sit at the comparison count (327 in the manifest frame, 342 in this section's
+share-history frame); the 342 frame was not re-measured per variant.
 
 **The frozen golden does not change.** All three cells with a history in
 `tests/fixtures/baselines/` are length 6 with the cut at position 3, leaving a three-point segment,
