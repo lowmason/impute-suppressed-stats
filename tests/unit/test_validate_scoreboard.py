@@ -1,4 +1,5 @@
 import polars as pl
+import pytest
 
 from logging_employment.baselines.runner import (
     FALLBACK_ORDER,
@@ -6,8 +7,10 @@ from logging_employment.baselines.runner import (
     PREFERRABLE,
     REGISTRY,
 )
+from logging_employment.errors import ConceptViolationError
 from logging_employment.validate.metrics import decline_and_basis_report, point_metrics
 from logging_employment.validate.scoreboard import (
+    assert_scored_cells_are_primary_like,
     best_scoring_baseline,
     build_scoreboard,
     preferred_baseline,
@@ -287,3 +290,81 @@ def test_estimators_that_pool_to_the_same_score_are_broken_by_10_8s_rung_order()
     assert (
         preferred_baseline(board, regime="long_consecutive_runs") == "share_same_month_prior_year"
     )
+
+
+def _board_with_arms(*arms: str) -> pl.DataFrame:
+    """One regime's board replicated across `arms`, which is the shape the guard exists to refuse.
+
+    Built by relabelling a real board rather than by concatenating two `_seed_metrics` calls: the
+    declines family carries no `mask_arm`, so emitting two arms through the emitters would give
+    `build_scoreboard`'s join two basis rows per key and fan the board out. The guard's job is to
+    refuse a multi-arm board however it arose.
+    """
+    board = build_scoreboard(
+        _seed_metrics(
+            {"cbp_intensity": 120.0, "share_last_observed": 130.0},
+            regime="small_cell_biased",
+            seed=1024,
+            n_cells=4,
+        )
+    )
+    return pl.concat(
+        [board.with_columns(pl.lit(arm).alias("mask_arm")) for arm in arms], how="vertical"
+    )
+
+
+def test_a_complementary_like_scored_row_is_refused():
+    """§13.10 gates "on primary-like masks" and the scoreboard carries no label to scope by, so the
+    scoping is a PRECONDITION on what may be scored rather than a split of what was.
+
+    Enforced rather than assumed: it currently holds because every selector in `validate.regimes`
+    emits primary-like targets, and an invariant resting on which selectors happen to be wired is
+    the silent failure this refuses.
+    """
+    scored = pl.DataFrame({"suppression_type": ["primary_like", "complementary_like"]})
+    with pytest.raises(ConceptViolationError):
+        assert_scored_cells_are_primary_like(scored)
+
+
+def test_an_all_primary_like_scored_frame_passes():
+    """The guard must permit the ordinary case; the assertion is that it does not raise."""
+    scored = pl.DataFrame({"suppression_type": ["primary_like"] * 3})
+    assert_scored_cells_are_primary_like(scored)
+
+
+def test_a_scored_frame_missing_the_label_column_is_refused():
+    """Absence must not read as compliance. A frame that dropped `suppression_type` upstream would
+    otherwise satisfy an `is_in` check vacuously, which is how the label got lost in the first
+    place -- the emitters group without it and nothing noticed."""
+    with pytest.raises(ConceptViolationError):
+        assert_scored_cells_are_primary_like(pl.DataFrame({"estimator_id": ["cbp_intensity"]}))
+
+
+def test_the_refusal_names_the_work_that_would_make_it_legal():
+    """A precondition that fires without saying what to do sends the next reader to git blame."""
+    scored = pl.DataFrame({"suppression_type": ["complementary_like"]})
+    with pytest.raises(ConceptViolationError, match="suppression_type"):
+        assert_scored_cells_are_primary_like(scored)
+
+
+def test_preferred_baseline_refuses_a_scoreboard_carrying_two_mask_arms():
+    """The sibling silent-pooling path. `mask_arm` is already a scoreboard column and `_best`
+    pooled across it, so a second scoring arm would mix state totals with national size classes
+    into one WAPE -- the same shape as the seed argmin, one level up."""
+    with pytest.raises(ConceptViolationError):
+        preferred_baseline(
+            _board_with_arms("state_total", "national_size"), regime="small_cell_biased"
+        )
+
+
+def test_best_scoring_baseline_refuses_a_scoreboard_carrying_two_mask_arms():
+    with pytest.raises(ConceptViolationError):
+        best_scoring_baseline(
+            _board_with_arms("state_total", "national_size"), regime="small_cell_biased"
+        )
+
+
+def test_a_single_arm_scoreboard_is_still_ranked():
+    """The guard must refuse ambiguity, not the ordinary case."""
+    board = _board_with_arms("state_total")
+    assert preferred_baseline(board, regime="small_cell_biased") == "cbp_intensity"

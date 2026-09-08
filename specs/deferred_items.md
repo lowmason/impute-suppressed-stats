@@ -1220,7 +1220,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       exact form would need `VALIDATION_METRIC_SCHEMA` to carry the truth mass. (4) §13.10 scopes
       its comparison to "primary-like masks" and `preferred_baseline` takes a REGIME; that gap is
       separate and is filed below rather than absorbed here.
-- [ ] **§13.10's "on primary-like masks" scoping is unreachable from the scoreboard.**
+- [x] **§13.10's "on primary-like masks" scoping is unreachable from the scoreboard.**
       §13.10 gates on WAPE improvement "over the preferred transparent baseline ON PRIMARY-LIKE
       MASKS", and neither `validate/scoreboard.py::preferred_baseline` nor `best_scoring_baseline`
       takes a mask label — both take a REGIME. The label exists upstream and is dropped: INV-009's
@@ -1246,6 +1246,55 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       STANDING PRECONDITION, in which case the harness must assert that every scored row is
       primary-like and fail closed when one is not, rather than leaving the guarantee resting on
       which selectors happen to be wired. Do not leave it resting on that.
+
+      **→ retired 2026-09-08: the clause is a STANDING PRECONDITION, and the harness now refuses a
+      run that violates it.** `validate/scoreboard.py::assert_scored_cells_are_primary_like` runs
+      on every scored frame beside `assert_declared_provenance` (`harness.py`), and `_best` refuses
+      a regime whose scored rows span more than one `mask_arm`. Neither the metrics schema nor the
+      scoreboard gained a column.
+
+      WHY A PRECONDITION AND NOT §13.2 STEP 8'S SPLIT, which is the reading the item leaned toward.
+      Step 3's complementary cells exist to defeat recovery by subtraction, and ON THE ARM THAT
+      PRODUCES WAPE THERE IS NO SUBTRACTION TO DEFEAT: every one of the 4,716 state cells is a
+      single-cell component, so a masked state total is `unbounded` with and without partners —
+      already pinned by
+      `tests/unit/test_validate_complementary.py::test_a_complementary_mask_changes_nothing_about_state_total_identification`,
+      and a consequence of Stage 0's SRC-QCEW-006 `decline`. The arm where steps 3 and 6 do bind is
+      the national-size March margin (`recover.mask_and_solve_size`), and it produces NO WAPE at
+      all: the §10 baselines estimate state totals, not size classes, so its content is §13.5
+      bound metrics and the exactly-recoverable rejection, not a scoring comparand. A
+      complementary-like cell admitted to the scoring arm would therefore be, for scoring purposes,
+      the same kind of thing as a primary-like one — it would dilute §13.10's comparand rather than
+      sharpen it. The split is a real spec obligation on the national-size arm; it is not the
+      question §13.10's clause asks.
+
+      THE FAILURE IT REPLACES IS MEASURED, not argued. A frame carrying one perfect primary-like
+      estimate and one doubled complementary-like estimate emits ONE wape row with no
+      `suppression_type` column and a value of 0.5, where the primary-like number alone is 0.0.
+      §13.10 would have read 0.5 and still reported itself as a primary-like comparison. Against
+      the shipped D1 scores (`runs/f03023ac9f3a`, 12,530 rows) the guard passes; doctoring a single
+      row of those 12,530 to `complementary_like` makes it refuse.
+
+      ALSO CLOSED: the sibling silent-pooling path one level up. `mask_arm` was already a
+      scoreboard column and `_best` pooled across it, so a second scoring arm would have averaged a
+      state-total WAPE with a national-size one under one number — the same shape as the seed
+      argmin retired above. It now raises. This path is more remote than the label path (a second
+      scoring arm needs size-class baselines, which are Stage 6's), which is why it is a guard and
+      not a parameter.
+
+      The cost of the choice, stated. (1) §13.2 step 8's split remains unimplemented for the WAPE
+      path. It already was; this makes the gap loud instead of silent, and the refusal message
+      names the work — carry `suppression_type` into the emitters' grouping and
+      `VALIDATION_METRIC_SCHEMA`, add it to the scoreboard, give `preferred_baseline` a label
+      argument. (2) If complementary masking is ever wired onto the scoring arm, Stage 5's call
+      gains a label argument at that point rather than being final today. (3)
+      `include_complementary_like` still defaults to `true` and still gates nothing, so
+      `config.yaml` continues to claim complementary masking that the harness does not perform.
+      That flag is NOT touched here on purpose: `runs.run_id` hashes the resolved config, so
+      changing a `ValidationConfig` default would renumber every `runs/<id>/` and orphan
+      `runs/f03023ac9f3a`. It stays with the `include_*` item below, which now inherits a decided
+      question rather than an open one — on the scoring arm the flag names something the harness
+      must refuse, not something it should start doing.
 - [ ] **Appendix A's `include_*` switches gate nothing.**
       `ValidationConfig` declares `include_random_mask_sanity_check`, `include_primary_like`,
       `include_complementary_like`, `include_long_runs`, `include_rolling_origin`,

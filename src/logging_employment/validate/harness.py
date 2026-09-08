@@ -42,7 +42,7 @@ from .metrics import (
 )
 from .recover import MaskedSystem, mask_and_solve
 from .regimes import REGIME_SPECS, select_targets
-from .scoreboard import build_scoreboard
+from .scoreboard import assert_scored_cells_are_primary_like, build_scoreboard
 
 
 @dataclass(frozen=True)
@@ -128,6 +128,9 @@ def run_pseudo_suppression(
             results, _audit = run_baselines(masked, config, estimators=estimators)
             scored = _join_truth(results, truth, system, regime=name, seed=seed)
             assert_declared_provenance(scored)
+            # §13.10 gates "on primary-like masks" and nothing downstream carries the label to
+            # scope by, so this is the only place the guarantee can be made. See the function.
+            assert_scored_cells_are_primary_like(scored)
             all_scores.append(scored)
             all_metrics.append(point_metrics(scored, regime=name, seed=seed, arm="state_total"))
             all_metrics.append(bound_metrics(scored, regime=name, seed=seed, arm="state_total"))
