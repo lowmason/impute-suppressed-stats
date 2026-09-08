@@ -29,8 +29,9 @@ class UnsupportedReferenceYearError(LoggingEmploymentError):
     Deliberately not an "unknown vintage": BLS publishes a vintage for every year back to 1990,
     and `harmonize/naics.py` quotes the table. What is missing is downstream support, not the
     classification -- the vendored 113310 crosswalk carries only the 2017 and 2022 vintages,
-    `validate/regimes.py` asserts a single vintage seam by construction, and
-    `baselines/historical.py` filters its lookback on vintage equality. Emitting a third vintage
+    `validate/regimes.py` documents a single vintage seam and derives its targets from it, and
+    `baselines/historical.py` filters its lookback on vintage equality -- that filter is the
+    enforcing one; the seam is prose. Emitting a third vintage
     string would compose it into `cell_id` and five `contracts.py` schemas, so the year is
     refused rather than labelled with a vintage nothing else in the package can consume.
     """

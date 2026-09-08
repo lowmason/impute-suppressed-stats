@@ -55,11 +55,12 @@ _CROSSWALK = Path(__file__).parent / "naics_113310.csv"
 # A pre-2017 year is REFUSED rather than classified from the table below, because this package can
 # name a pre-2017 vintage but cannot consume one. `crosswalk_113310` vendors only the 2017 and
 # 2022 rows and `assert_113310_survives_the_window` requires exactly that pair; `validate/regimes`
-# asserts the single seam 2021-12/2022-01 BY CONSTRUCTION; `baselines/historical` filters its
-# lookback on `naics_vintage` equality, so a third string would quietly shrink every lookback
-# rather than fail. `naics_vintage` also composes into `cell_id` (`constraints/cells.py`) and is
-# declared by five `contracts.py` schemas. Emitting "NAICS 2012" would therefore be right as a
-# BLS fact and wrong as a pipeline value -- the same trade `build.py` already makes when it
+# DOCUMENTS the single seam 2021-12/2022-01 and derives its targets from it -- prose and a derived
+# column, not an assertion, so it would not fail on a third vintage; `baselines/historical`
+# filters its lookback on `naics_vintage` equality, so a third string would quietly shrink every
+# lookback rather than fail. `naics_vintage` also composes into `cell_id` (`constraints/cells.py`)
+# and is declared by five `contracts.py` schemas. Emitting "NAICS 2012" would therefore be right
+# as a BLS fact and wrong as a pipeline value -- the same trade `build.py` already makes when it
 # refuses to let an unestablished CBP disclosure regime reach a harmonized table.
 #
 # ONLY THE LOWER END IS GUARDED. BLS says "2022-forward", so "NAICS 2022" is source-justified for

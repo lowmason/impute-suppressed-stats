@@ -1427,17 +1427,41 @@ that was skipped — work the close itself uncovered.
       Size: plan. Done when: the note carries the BLS citation (the quotation lives at
       `harmonize/naics.py`) and the three copies are byte-identical again — or the chain gains an
       offline path that leaves `retrieved_utc` untouched, and the note is updated through it.
-- [ ] **`vintage_for_year` mislabels every reference year below 2017, against BLS's own table.**
+- [x] **`vintage_for_year` mislabels every reference year below 2017, against BLS's own table.**
       `harmonize/naics.py:34-36` is `return "NAICS 2022" if year >= 2022 else "NAICS 2017"`, so
       `vintage_for_year(2016)` returns "NAICS 2017" where the BLS table cited at
       `_VINTAGE_BOUNDARY_YEAR` says NAICS 2012 (and 2007-2010 says NAICS 2007). Found 2026-09-08
       by the citation search — the source that closed the premise is the same source that refutes
-      the rule's tail. LATENT, not live: `constants.py:5` pins `WINDOW_START = "2017-01"`, so no
-      current input reaches the wrong branch, and the six call sites
-      (`fetching.py:130,151,181`, `build.py:180,194,223`) only ever stamp window years. It goes
-      live the moment the window extends backward. Note the emitted strings for 2017-2024 must not
+      the rule's tail. LATENT, not live — but **CORRECTED 2026-09-08: the reason first recorded
+      here was wrong.** This used to read "`constants.py:5` pins `WINDOW_START = "2017-01"`, so no
+      current input reaches the wrong branch". `WINDOW_START` is never consulted on the fetch or
+      build path — it appears in `src/` only at its own definition, and `fetching.py:98` builds
+      its years from `cfg.project.start_month`, which `ProjectConfig` validates for `YYYY-MM` shape
+      only. The gate is a `config.yaml` value, not a code constant, so the defect was one YAML edit
+      from live rather than one code change away. Note the emitted strings for 2017-2024 must not
       change: `constraints/cells.py:67` composes `naics_vintage` into `cell_id`, and five
       `contracts.py` schemas declare the column.
       Size: quick-fix. Done when: a year outside the range the repo can justify either classifies
       per BLS's published table or raises, rather than silently returning "NAICS 2017", with the
       pins at `tests/unit/test_harmonize.py:86-90` updated deliberately.
+      → done 2026-09-08 (commit `41e17cf`): refuses below 2017 with
+      `UnsupportedReferenceYearError` rather than classifying per BLS's table, because this
+      package can NAME a pre-2017 vintage but
+      cannot CONSUME one — `baselines/historical.py:103` filters the lookback on `naics_vintage`
+      equality, so a third string would silently shrink every baseline window rather than fail.
+      BLS's table is recorded as `_BLS_VINTAGE_ERAS` and wired only to the refusal message. Emitted
+      values for 2017-2024 are unchanged and the `:86-90` pins are byte-identical, so no `cell_id`
+      and no persisted fingerprint moves.
+- [ ] **Three of `vintage_for_year`'s six call sites raise after a side effect.**
+      Found by the code review of `41e17cf`, which made the function raise. In `fetching.py` the
+      order per year is fetch → status check → `store.put` → `snapshot_row(...,
+      vintage_for_year(year), ...)` (`:130`, `:151`, `:181`). A pre-2017 `cfg.project.start_month`
+      therefore writes one blob to the immutable raw store and then raises before
+      `merge_source_manifest` runs, so NO manifest rows are recorded for any year in that fetch. A
+      later `build-harmonized` globs the manifest-less orphan (`build.py:133-137` fallback) and
+      raises again, persistently, until someone hand-deletes from a store the design calls
+      immutable. Not reachable on the shipped config, and not a defect in `41e17cf` — the raise is
+      correct, the ordering predates it. Validating `window_years` once before the loop makes the
+      refusal cost a message instead of an orphan.
+      Size: quick-fix. Done when: `fetch_source` refuses an out-of-range window before its first
+      `store.put`, with a test that asserts the store is untouched after the refusal.

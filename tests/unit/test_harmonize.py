@@ -120,6 +120,11 @@ def test_the_bls_table_still_names_the_vintages_the_refused_years_carry() -> Non
     assert naics.bls_vintage_for_year(2011) == "NAICS 2012"
     assert naics.bls_vintage_for_year(2010) == "NAICS 2007"
     assert naics.bls_vintage_for_year(2006) == "NAICS 2002"
+    # The FIRST year of each era, not only a mid-era year: asserting 2010 and 2006 alone leaves
+    # the 2007 boundary free to slide. Moving `(2007, ...)` to `(2008, ...)` keeps every other
+    # assertion here passing while 2007 silently becomes "NAICS 2002".
+    assert naics.bls_vintage_for_year(2007) == "NAICS 2007"
+    assert naics.bls_vintage_for_year(1990) == "NAICS 2002"
     assert "no NAICS vintage" in naics.bls_vintage_for_year(1989)
 
 
