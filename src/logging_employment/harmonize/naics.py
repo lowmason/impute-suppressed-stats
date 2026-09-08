@@ -20,6 +20,8 @@ from pathlib import Path
 
 import polars as pl
 
+from ..errors import UnsupportedReferenceYearError
+
 _CROSSWALK = Path(__file__).parent / "naics_113310.csv"
 
 # The QCEW vintage boundary Stage 0 recorded: NAICS 2017 for reference years 2017-2021, NAICS 2022
@@ -46,15 +48,72 @@ _CROSSWALK = Path(__file__).parent / "naics_113310.csv"
 # this module rests on -- no NAICS-vintage-to-NAICS-vintage recode -- is the one BLS supports, and
 # BLS says so plainly when it does retabulate, which is why the silence elsewhere carries weight.
 #
-# SCOPE. The rule below is correct only at or above WINDOW_START (2017-01). BLS's table puts
-# 2011-2016 on NAICS 2012 and 2007-2010 on NAICS 2007, where `vintage_for_year` returns
-# "NAICS 2017" for every year below 2022. Latent today -- no input reaches those years -- and it
-# would become live the moment the window extends backward.
+# SCOPE, and the guard below. The two-branch rule is correct only at or above 2017. BLS's table
+# puts 2011-2016 on NAICS 2012 and 2007-2010 on NAICS 2007, so before this guard existed every
+# year below 2017 was stamped "NAICS 2017" -- a year BLS classifies otherwise.
+#
+# A pre-2017 year is REFUSED rather than classified from the table below, because this package can
+# name a pre-2017 vintage but cannot consume one. `crosswalk_113310` vendors only the 2017 and
+# 2022 rows and `assert_113310_survives_the_window` requires exactly that pair; `validate/regimes`
+# DOCUMENTS the single seam 2021-12/2022-01 and derives its targets from it -- prose and a derived
+# column, not an assertion, so it would not fail on a third vintage; `baselines/historical`
+# filters its lookback on `naics_vintage` equality, so a third string would quietly shrink every
+# lookback rather than fail. `naics_vintage` also composes into `cell_id` (`constraints/cells.py`)
+# and is declared by five `contracts.py` schemas. Emitting "NAICS 2012" would therefore be right
+# as a BLS fact and wrong as a pipeline value -- the same trade `build.py` already makes when it
+# refuses to let an unestablished CBP disclosure regime reach a harmonized table.
+#
+# ONLY THE LOWER END IS GUARDED. BLS says "2022-forward", so "NAICS 2022" is source-justified for
+# every year above the window. NAICS 2027 will end that, but nothing published contradicts the
+# rule yet, and guarding forward would refuse a window extension BLS's own table supports.
+#
+# THE BOUND IS NOT DERIVED FROM `constants.WINDOW_START`, though both read 2017 today. It is the
+# first year of BLS's NAICS 2017 era -- a fact about BLS's table, where the window is a fact about
+# D1. Deriving it from the window would make widening the window widen the accepted range in the
+# same edit, silently restoring the defect this guard exists to stop. Reachability is why that
+# matters: `fetching.py` builds its years from `cfg.project.start_month`, which `ProjectConfig`
+# validates only as `YYYY-MM`, so the window is a config value and not this constant.
+_NAICS_2017_ERA_START = 2017
 _VINTAGE_BOUNDARY_YEAR = 2022
+
+# BLS's published table, recorded so a widening does not have to re-source it. Each pair is the
+# first reference year of that vintage's era. Used ONLY to tell a refused caller what BLS says --
+# never to emit a value. Wiring it to the return is not a one-line change: it also needs crosswalk
+# rows for the new vintage, a `validate/regimes` seam that is no longer single, and a decision
+# about `cell_id` values that have never existed. A test pins it equal to the live rule across
+# 2017-2024 so the documentation cannot drift from the behaviour where both apply.
+_BLS_VINTAGE_ERAS: tuple[tuple[int, str], ...] = (
+    (1990, "NAICS 2002"),  # 1990-2000 reclassified from SIC by the NAICS reconstruction project
+    (2007, "NAICS 2007"),
+    (2011, "NAICS 2012"),
+    (2017, "NAICS 2017"),
+    (2022, "NAICS 2022"),
+)
+
+
+def bls_vintage_for_year(year: int) -> str:
+    """What BLS's published table calls `year`, including years this package refuses to process.
+
+    Documentation of the source, not a pipeline value: `vintage_for_year` is what stamps the
+    `naics_vintage` column, and it refuses every year this returns a pre-2017 vintage for.
+    """
+    eras = [vintage for start, vintage in _BLS_VINTAGE_ERAS if year >= start]
+    return eras[-1] if eras else "no NAICS vintage (BLS's table starts at 1990)"
 
 
 def vintage_for_year(year: int) -> str:
-    """The NAICS vintage a QCEW reference year's rows carry."""
+    """The NAICS vintage a QCEW reference year's rows carry.
+
+    Raises `UnsupportedReferenceYearError` below 2017 rather than classifying the year from BLS's
+    table; the note above records why naming a vintage and being able to consume one differ here.
+    """
+    if year < _NAICS_2017_ERA_START:
+        raise UnsupportedReferenceYearError(
+            f"QCEW reference year {year} predates the NAICS 2017 era; BLS classifies it under "
+            f"{bls_vintage_for_year(year)}, which this package vendors no crosswalk for and no "
+            "downstream stage consumes. Extending the window backward is a deliberate change to "
+            "the crosswalk, the vintage seam, and cell_id -- not a change to this bound"
+        )
     return "NAICS 2022" if year >= _VINTAGE_BOUNDARY_YEAR else "NAICS 2017"
 
 

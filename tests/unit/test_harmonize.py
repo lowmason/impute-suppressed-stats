@@ -10,7 +10,7 @@ import pytest
 
 from logging_employment.constants import STATES_DC_FIPS
 from logging_employment.contracts import BRIDGE_SCHEMA, validate_frame
-from logging_employment.errors import ConceptViolationError
+from logging_employment.errors import ConceptViolationError, UnsupportedReferenceYearError
 from logging_employment.harmonize import bridge, concepts, dimensions, disclosure, naics
 
 BRIDGE_ROW = {
@@ -88,6 +88,44 @@ def test_the_window_spans_two_naics_vintages() -> None:
     assert naics.vintage_for_year(2021) == "NAICS 2017"
     assert naics.vintage_for_year(2022) == "NAICS 2022"
     assert naics.vintage_for_year(2024) == "NAICS 2022"
+
+
+def test_a_reference_year_below_the_naics_2017_era_fails_closed() -> None:
+    # BLS puts 2011-2016 on NAICS 2012 and 2007-2010 on NAICS 2007, so the two-branch rule above
+    # is correct only at or above 2017; below it the rule returned "NAICS 2017" for a year BLS
+    # classifies otherwise. Refusing rather than classifying per BLS's table is the same choice
+    # `build.py` already makes for an unestablished CBP disclosure regime, and for the same
+    # reason: this repo can LABEL a pre-2017 year from BLS's table but cannot PROCESS one.
+    # `assert_113310_survives_the_window` requires exactly {2017, 2022}, `validate/regimes.py`
+    # asserts a single vintage seam by construction, and `baselines/historical.py` filters its
+    # lookback on vintage equality -- so a third label would silently shrink every baseline
+    # window rather than fail, after composing itself into `cell_id`.
+    for year in (2016, 2011, 2006):
+        with pytest.raises(UnsupportedReferenceYearError, match=str(year)):
+            naics.vintage_for_year(year)
+
+
+def test_the_recorded_bls_table_does_not_drift_from_the_live_rule() -> None:
+    # `_BLS_VINTAGE_ERAS` documents BLS's published mapping but never emits one, so nothing else
+    # would catch it disagreeing with the rule that does emit. Pinned across the supported range
+    # only -- below 2017 the two deliberately differ, which is the whole point of the guard.
+    for year in range(2017, 2025):
+        assert naics.bls_vintage_for_year(year) == naics.vintage_for_year(year)
+
+
+def test_the_bls_table_still_names_the_vintages_the_refused_years_carry() -> None:
+    # The refusal message quotes this, so a wrong entry would send someone widening the window
+    # after the wrong crosswalk. Values are BLS's, quoted at `_BLS_VINTAGE_ERAS`.
+    assert naics.bls_vintage_for_year(2016) == "NAICS 2012"
+    assert naics.bls_vintage_for_year(2011) == "NAICS 2012"
+    assert naics.bls_vintage_for_year(2010) == "NAICS 2007"
+    assert naics.bls_vintage_for_year(2006) == "NAICS 2002"
+    # The FIRST year of each era, not only a mid-era year: asserting 2010 and 2006 alone leaves
+    # the 2007 boundary free to slide. Moving `(2007, ...)` to `(2008, ...)` keeps every other
+    # assertion here passing while 2007 silently becomes "NAICS 2002".
+    assert naics.bls_vintage_for_year(2007) == "NAICS 2007"
+    assert naics.bls_vintage_for_year(1990) == "NAICS 2002"
+    assert "no NAICS vintage" in naics.bls_vintage_for_year(1989)
 
 
 def test_113310_survives_the_window_mechanically() -> None:
