@@ -1138,7 +1138,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       ones, which is a superset. Either widen the loop that gates the other persisted tables to
       cover these two, or narrow the scores frame to its declared schema before writing. The plan
       declared both schemas and wired neither into the writer.
-- [ ] **"Preferred transparent baseline" is undefined against §10.8's rung exclusion.**
+- [x] **"Preferred transparent baseline" is undefined against §10.8's rung exclusion.**
       `validate/scoreboard.py::preferred_baseline` returns the lowest-WAPE estimator that scored
       anything. On the D1 acceptance run (`runs/f03023ac9f3a`, 2026-09-07) that named
       `equal_residual` for `long_consecutive_runs` — and §10.8 deliberately leaves equal allocation
@@ -1151,6 +1151,101 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       is applied: either restrict `preferred_baseline` to `FALLBACK_ORDER`'s members, or state
       explicitly that scoring and the production fallback ordering answer different questions and
       let the scoreboard report both. Do not resolve it silently in Stage 5.
+
+      **→ retired 2026-09-07: `preferred_baseline` ranks §10.8's hierarchy members only, and
+      `best_scoring_baseline` reports the unrestricted best beside it.** The register named two
+      options; the resolution takes both, because they answer different halves of one question.
+      §13.10's failure branch is "deploy the simpler method" — §10.8's hierarchy — so the gate's
+      comparand MUST be an estimator that would actually ship, or the gate can block a model in
+      favour of something no one would deploy. That decides which number Stage 5 reads. But §10.1
+      out-scoring every rung is a finding about the DATA — it says the establishment counts QCEW
+      publishes for suppressed cells are not earning their place on that regime, which is the use
+      §10.1 puts equal allocation to — so it is reported rather than discarded.
+      `best_scoring_baseline` gates nothing and its docstring says so.
+
+      THE TEXTUAL BASIS IS CONVERGENCE, NOT A DEFINITION. §10.4 line 1015 calls `cbp_intensity`
+      "the preferred transparent STRUCTURAL baseline" and §13.10 line 1572 says "the preferred
+      transparent baseline"; the qualifier differs and §10.1 does sit under §10's "Required
+      transparent baselines", so §10.4 is not a definition of §13.10's term and is not cited as
+      one. What settles it is that every §10 passage bearing on eligibility disqualifies the same
+      two estimators: §10.1 "Use only as a sanity check", §10.5 "a benchmark, not a preferred
+      standalone estimator", §10.8's ordering, and `baselines/runner.py`'s own "it is just never
+      preferred" — which was aspirational prose until this change gave it an enforcer.
+
+      NOT `FALLBACK_ORDER`, WHICH IS THE OBVIOUS IMPLEMENTATION AND IS WRONG. Eligibility is rung
+      MEMBERSHIP (`baselines/runner.py::FALLBACK_RUNGS`, with `PREFERRABLE` its union), because
+      §10.8 rung 3 is "reconciled historical shares" — all five §10.3 variants — and
+      `FALLBACK_ORDER` names one representative of it. Restricting to the literal four-tuple would
+      rank `share_last_observed` above its own siblings, which §10.8 does not do: on D1's
+      `whole_state_year_blocks`, `share_rolling_median` pools to 0.1342 against
+      `share_last_observed`'s 0.1403, so the four-tuple would have named the worse of two
+      estimators the hierarchy ranks equally.
+      `test_a_10_3_share_variant_outside_the_four_rungs_can_still_be_preferred` is the guard
+      against re-introducing that fix, and `test_every_registry_estimator_is_classified_against_10_8s_hierarchy`
+      pins the whole set so a `REGISTRY` addition fails until someone places it.
+
+      THE WITNESS THE REGISTER RECORDED WAS CONTAMINATED, and the contamination was a second
+      defect. The scoreboard is one row per (regime, seed, estimator), and `preferred_baseline`
+      filtered on regime alone and sorted rows — an argmin over seeds × estimators, an order
+      statistic that rewards VARIANCE rather than accuracy. `equal_residual` on
+      `long_consecutive_runs` scores 0.1106 / 2.0258 / 2.0452 across the three seeds: it holds
+      both the best single row in the regime and the two worst. Ranking rows crowned it on one
+      lucky seed. `_best` now pools across seeds weighted by `denominator` (masked cell-rows)
+      before ranking, and pooled it is last of nine at 1.3939 against `cbp_intensity`'s 0.2308.
+      Ties are broken by rung, because the tie is real and bit-exact rather than hypothetical:
+      `establishment_proportional` and `share_same_month_prior_year` both pool to
+      0.4228995374421378 on that regime, and `group_by` order would otherwise decide it.
+
+      MEASURED, AND THE RESULT IS THAT ELIGIBILITY CHANGED NO D1 NUMBER. `run_id(cfg,
+      _input_digests(cfg))` re-derives `f03023ac9f3a`, so these are current. After pooling,
+      `preferred_baseline` and `best_scoring_baseline` name the SAME estimator in 9 of 9 scored
+      regimes and `None` occurs in 0 of 9 — every regime has hierarchy members scoring. The
+      collision the register recorded was produced entirely by the argmin. The restriction is
+      therefore a coherence guarantee for §13.10 rather than a correction to this run's numbers,
+      and it is still the right resolution because equal allocation's disqualification is
+      STRUCTURAL, not seed-dependent: at Appendix A's 20 replicates or on a different seed set
+      nothing prevents a pooled `equal_residual` from winning a regime again. Pooling did move two
+      regimes on its own — `concentration_proxy` from `cbp_intensity` to `share_last_observed`,
+      and `whole_state_year_blocks` from `cbp_intensity` to `share_rolling_median`.
+
+      The cost of the choice, stated. (1) `preferred_baseline` can now return `None` where no
+      hierarchy member scored; §13.10 must read that as "no comparand" rather than falling through
+      to a sanity check. Reachable, but 0 of 9 on D1. (2) Stage 5 reads two functions where it read
+      one, and must not gate on the wrong one — the docstrings carry that, nothing enforces it.
+      (3) The pooling weight is the masked cell-row count, NOT WAPE's own denominator: WAPE is
+      `sum|err| / sum|truth|` (`validate/metrics.py`) and the scoreboard does not carry
+      `sum|truth|`, so this is cell-weighted pooling and not an exact pooled WAPE. Measured, the
+      approximation does not bind — unweighted, cell-weighted and `n_scored`-weighted pooling pick
+      the same estimator in 9 of 9 regimes, and only the row-argmin differs from all three — but an
+      exact form would need `VALIDATION_METRIC_SCHEMA` to carry the truth mass. (4) §13.10 scopes
+      its comparison to "primary-like masks" and `preferred_baseline` takes a REGIME; that gap is
+      separate and is filed below rather than absorbed here.
+- [ ] **§13.10's "on primary-like masks" scoping is unreachable from the scoreboard.**
+      §13.10 gates on WAPE improvement "over the preferred transparent baseline ON PRIMARY-LIKE
+      MASKS", and neither `validate/scoreboard.py::preferred_baseline` nor `best_scoring_baseline`
+      takes a mask label — both take a REGIME. The label exists upstream and is dropped: INV-009's
+      `suppression_type` rides every row of `validation_scores` (`harness.py::_join_truth`), and
+      both metric emitters group by estimator without it, so it is absent from
+      `VALIDATION_METRIC_SCHEMA`, from `validation_metrics.parquet`, and from the scoreboard. There
+      is no way to ask the shipped scoreboard for a primary-like-only number.
+      Today this is VACUOUSLY satisfied rather than wrong, which is why it was not caught: all
+      12,530 scored rows on D1 (`runs/f03023ac9f3a`, run id re-derived 2026-09-07) carry
+      `suppression_type = primary_like`, because every regime selector in `validate/regimes.py`
+      emits `primary_like` targets and the sole producer of `complementary_like` —
+      `validate/propensity.py::complementary_partners` — has unit tests
+      (`tests/unit/test_validate_complementary.py`) and NO caller in `src/`. It is implemented and
+      unwired, the same shape as the `rolling_origin` / `cbp_size_gaps` item above. The roadmap's
+      Stage 4 Exit criterion "scores primary-like and complementary-like cells separately" is
+      therefore met by the absence of the second label, not by the scoreboard separating anything.
+      The failure is latent and silent: the first regime to emit complementary-like targets pools
+      both labels into one WAPE per estimator, and §13.10 reads a mixed number while still
+      reporting itself as a primary-like comparison. Nothing would raise.
+      To close, decide which of two things §13.10's clause is. Either it is a REAL SPLIT — carry
+      `suppression_type` into the emitters' grouping and out to the scoreboard, widening
+      `VALIDATION_METRIC_SCHEMA` and giving `preferred_baseline` a mask-label argument — or it is a
+      STANDING PRECONDITION, in which case the harness must assert that every scored row is
+      primary-like and fail closed when one is not, rather than leaving the guarantee resting on
+      which selectors happen to be wired. Do not leave it resting on that.
 - [ ] **Appendix A's `include_*` switches gate nothing.**
       `ValidationConfig` declares `include_random_mask_sanity_check`, `include_primary_like`,
       `include_complementary_like`, `include_long_runs`, `include_rolling_origin`,
