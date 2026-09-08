@@ -32,10 +32,34 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
 
 ### Open questions routed to later stages
 
-- [ ] **The no-retabulation premise is carried by no cited source.** All eight
+- [x] **The no-retabulation premise is carried by no cited source.** All eight
       `naics_vintage_by_year` entries in `data/raw/audit/qcew_codes/summary.json`
       rest on it, and it is honestly marked as uncited rather than asserted. A
       real BLS citation would close it. Touches `scripts/audit/qcew_codes.py`.
+      → done 2026-09-08 (/deferred quick fix): BLS publishes the reference-year-to-vintage
+      mapping and still places 2017-2021 on NAICS 2017 four years after NAICS 2022 arrived
+      (`https://www.bls.gov/cew/questions-and-answers.htm`, Q "What versions of NAICS and SIC
+      does the QCEW program use?", last modified 2026-02-13; the same mapping appears at
+      `https://www.bls.gov/cew/classifications/industry/home.htm`, last modified 2026-01-28), so
+      all eight entries are validated by direct observation rather than by inference from an
+      introduction quarter. Applied to the two live `src/` sites — `harmonize/naics.py`'s
+      `_VINTAGE_BOUNDARY_YEAR` comment carries the quotation and the source, and
+      `baselines/historical.py`'s docstring records that the citation CONFIRMS its
+      stop-at-the-break default rather than flipping it.
+      TWO THINGS THE CITATION CHANGED that the item did not anticipate. (1) The premise AS WORDED
+      here is false: the same BLS answer records that 1990-2000 "had been reclassified under the
+      NAICS 2002" as a one-time reconstruction across classification SYSTEMS, so QCEW has
+      retabulated history once. The operative claim — no NAICS-vintage-to-vintage recode — is what
+      is cited, and both `src/` sites now say so. (2) The item's "Touches
+      `scripts/audit/qcew_codes.py`" understated the blast radius by an order of magnitude: four
+      live prose sites, two generated artifacts, six `vintage_for_year` call sites and
+      `config.py:151`. Two follow-ons are recorded under the /deferred triage section at the end
+      of this file.
+      SEARCH SCOPE, so a re-check knows what was covered: bls.gov only, read through the live
+      browser DOM. `curl` is WAF-blocked on www.bls.gov (HTTP 403) and a WebSearch snippet drifted
+      the key sentence's tense, so neither was used for a quotation; every quoted string was read
+      character-for-character out of the rendered page, including collapsed accordion content that
+      `innerText` hides.
 - [ ] **Appendix A vs the forest-source verdicts.**
       `specs/logging-employment-spec.md` Appendix A ships `tpo.enabled: false` and
       `fia.enabled: false`; Stage 0 measured both `access.status: verified`. These
@@ -1101,10 +1125,18 @@ access. Live roadmap stages remain out of scope per this file's header rule.
 - [ ] **Wire `rolling_origin` and `cbp_size_gaps` into the harness scoring loop.**
       Both regimes are declared `feasible` in `contracts.REGIME_DISPOSITIONS` and both are
       implemented — `validate/regimes.py` ships `rolling_origin_frames` (frame truncation) and
-      `cbp_size_gap_keys` / `apply_cbp_gap` (CBP state-year removal), each with unit tests. Neither
-      produces a `MaskTarget`, so `select_targets` returns `[]` and
-      `validate/harness.py::run_pseudo_suppression` never reaches them: the D1 acceptance run
-      reports `feasible / scored=0` for both. The plan specified the two mechanisms (Tasks 11 and
+      `cbp_size_gap_keys` / `apply_cbp_gap` (CBP state-year removal). Neither produces a
+      `MaskTarget`, so `validate/harness.py::run_pseudo_suppression` never reaches them: the D1
+      acceptance run reports `feasible / scored=0` for both.
+      **CORRECTED 2026-09-08, twice.** (a) This used to say the two mechanisms ship "each with unit
+      tests". `rolling_origin_frames` is tested (`tests/unit/test_validate_temporal_regimes.py:11`);
+      the CBP pair is not. `cbp_size_gap_keys` and `apply_cbp_gap` have no test AND no caller
+      anywhere in `src/`, `tests/` or `scripts/` — both halves are dead, so "implemented" means
+      "defined" for that regime and wiring it is the larger of the two jobs. (b) This used to say
+      `select_targets` returns `[]` for them. It is never called: `harness.py:112-119` short-circuits
+      on `spec.select is None` BEFORE the `select_targets` call at `:122`, because neither name is in
+      `regimes._SELECTORS`. `select_targets`' own `return []` is latent, reachable only by a direct
+      caller — so a fix aimed at `select_targets` alone would never run. The plan specified the two mechanisms (Tasks 11 and
       12) but never specified their wiring into Task 18's loop, and inventing a design during
       execution was out of scope. The harness now records an explicit `reason` on each so the
       manifest cannot read as "scored, nothing wrong", and
@@ -1300,9 +1332,15 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       selection — it is an operand of the random-mask-only refusal, not inert; see the item
       below — so `config.yaml` continues to claim complementary masking that the harness
       does not perform.
-      That flag is NOT touched here on purpose: `runs.run_id` hashes the resolved config, so
+      That flag is NOT touched here on purpose — but CORRECTED 2026-09-08, because the reason
+      first recorded is false. This used to read "`runs.run_id` hashes the resolved config, so
       changing a `ValidationConfig` default would renumber every `runs/<id>/` and orphan
-      `runs/f03023ac9f3a`. It stays with the `include_*` item below, which now inherits a decided
+      `runs/f03023ac9f3a`". Measured: `config.yaml:74-97` pins all fourteen `ValidationConfig`
+      keys, so NO default participates in the resolved config and changing one re-hashes to the
+      SAME run id. What does orphan the run is REMOVING a field. The flag stays untouched because
+      it names a decided question, not because touching it is expensive — which inverts the cost
+      of the "delete the flags that name nothing" option below. It stays with the `include_*`
+      item below, which now inherits a decided
       question rather than an open one — on the scoring arm the flag names something the harness
       must refuse, not something it should start doing.
 - [ ] **Appendix A's `include_*` switches gate no regime selection.**
@@ -1368,3 +1406,38 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       ("~30 s per replicate, essentially all of it `run_baselines`") and read
       `replicates_per_regime` as the loop's trip count when it sizes the MASK; both are corrected
       there against these measurements.
+
+## /deferred triage — 2026-09-08
+
+Residue of the `/deferred` pass that closed the NAICS-vintage citation item above. Not plan work
+that was skipped — work the close itself uncovered.
+
+- [ ] **The audit script's NAICS note still reads "uncited", now that the citation exists.**
+      `scripts/audit/qcew_codes.py:543-544` states "Unquoted premise, and the load-bearing one:
+      QCEW does not retabulate prior reference years onto a new NAICS vintage", and that string is
+      serialized into `data/raw/audit/qcew_codes/summary.json` and from there into the TRACKED
+      `specs/findings/source-audit.md:3042`. Verified 2026-09-08: all three are byte-identical, so
+      editing the source string alone breaks a property that currently holds. Deliberately left
+      when the citation landed rather than half-done. Closing it means re-running `qcew_codes.py`
+      → `assemble_finding` → `verify_extracts`, and unlike the `qcew_panel` chain the register
+      calls "offline", this one is NOT: `main()` unconditionally fetches five BLS titles URLs with
+      no `--offline` flag or env switch, and `record_extract` / `write_summary` both call
+      `_utcnow()`, so even a no-op re-run churns `retrieved_utc` on five rows of the tracked
+      `specs/findings/source-audit-extracts.csv`.
+      Size: plan. Done when: the note carries the BLS citation (the quotation lives at
+      `harmonize/naics.py`) and the three copies are byte-identical again — or the chain gains an
+      offline path that leaves `retrieved_utc` untouched, and the note is updated through it.
+- [ ] **`vintage_for_year` mislabels every reference year below 2017, against BLS's own table.**
+      `harmonize/naics.py:34-36` is `return "NAICS 2022" if year >= 2022 else "NAICS 2017"`, so
+      `vintage_for_year(2016)` returns "NAICS 2017" where the BLS table cited at
+      `_VINTAGE_BOUNDARY_YEAR` says NAICS 2012 (and 2007-2010 says NAICS 2007). Found 2026-09-08
+      by the citation search — the source that closed the premise is the same source that refutes
+      the rule's tail. LATENT, not live: `constants.py:5` pins `WINDOW_START = "2017-01"`, so no
+      current input reaches the wrong branch, and the six call sites
+      (`fetching.py:130,151,181`, `build.py:180,194,223`) only ever stamp window years. It goes
+      live the moment the window extends backward. Note the emitted strings for 2017-2024 must not
+      change: `constraints/cells.py:67` composes `naics_vintage` into `cell_id`, and five
+      `contracts.py` schemas declare the column.
+      Size: quick-fix. Done when: a year outside the range the repo can justify either classifies
+      per BLS's published table or raises, rather than silently returning "NAICS 2017", with the
+      pins at `tests/unit/test_harmonize.py:86-90` updated deliberately.

@@ -24,10 +24,32 @@ _CROSSWALK = Path(__file__).parent / "naics_113310.csv"
 
 # The QCEW vintage boundary Stage 0 recorded: NAICS 2017 for reference years 2017-2021, NAICS 2022
 # from 2022 on. QCEW publishes no per-row vintage column, so this mapping is documented rather than
-# measured, and it rests on one premise no source cited in the audit supports -- that QCEW does not
-# retabulate prior reference years onto a new vintage. Stage 0 carried it as uncited and routed a
-# citation to a later stage; it is uncited still. Treat a contradiction here as evidence about the
-# premise, not as a parser bug.
+# measured. CITED 2026-09-08 -- Stage 0 carried the supporting premise as uncited and routed a
+# citation to a later stage; this is that citation. BLS publishes the reference-year-to-vintage
+# mapping directly, and states it in the present tense, which is what makes it load-bearing here:
+# 2017-2021 are STILL on NAICS 2017 four years after NAICS 2022 was introduced, so prior reference
+# years are not recoded onto a new vintage.
+#
+#   "Data from 2011-2016 are classified under the NAICS 2012 system. Data from 2017-2021 are
+#    classified under the NAICS 2017 system. Data from 2022-forward will be classified under the
+#    NAICS 2022 system."
+#   -- BLS QCEW Q&A, "What versions of NAICS and SIC does the QCEW program use?",
+#      https://www.bls.gov/cew/questions-and-answers.htm (last modified 2026-02-13). The same
+#      mapping appears on https://www.bls.gov/cew/classifications/industry/home.htm (last modified
+#      2026-01-28), so it does not rest on a single page.
+#
+# ONE QUALIFICATION, from that same BLS answer, recorded because omitting it would make the
+# citation cherry-picked: QCEW HAS retabulated history, once. For 1990-2000, "As a NAICS
+# reconstruction project, the data had been reclassified under the NAICS 2002" -- a one-time bridge
+# across classification SYSTEMS (SIC to NAICS), announced as its own project. So the unqualified
+# claim "QCEW does not retabulate prior reference years" is false as stated. The operative claim
+# this module rests on -- no NAICS-vintage-to-NAICS-vintage recode -- is the one BLS supports, and
+# BLS says so plainly when it does retabulate, which is why the silence elsewhere carries weight.
+#
+# SCOPE. The rule below is correct only at or above WINDOW_START (2017-01). BLS's table puts
+# 2011-2016 on NAICS 2012 and 2007-2010 on NAICS 2007, where `vintage_for_year` returns
+# "NAICS 2017" for every year below 2022. Latent today -- no input reaches those years -- and it
+# would become live the moment the window extends backward.
 _VINTAGE_BOUNDARY_YEAR = 2022
 
 

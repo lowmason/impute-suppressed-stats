@@ -8,9 +8,17 @@ number, which is the whole reason they belong in one module.
 CLASSIFICATION-CONSISTENT PERIODS. §10.3 requires them and does not define them. The D1 window
 carries a NAICS vintage break at 2022-01 -- NAICS 2017 through 2021-12, NAICS 2022 from 2022-01 --
 so a 24-month lookback from 2022-06 would otherwise mix two classifications. The default is to stop
-at the break. It is a config key rather than a constant because whether 113310 was actually
-retabulated at that break is an UNCITED premise in this repo (see `specs/deferred_items.md`), and a
-key can be flipped by whoever finds the citation; a constant would have to be argued with.
+at the break, and CITED 2026-09-08 that default is the right one: BLS still places reference years
+2017-2021 on NAICS 2017 four years after NAICS 2022 arrived, so the break is real and prior years
+were not recoded. The quotation, its source and its one qualification live at
+`harmonize/naics.py`'s `_VINTAGE_BOUNDARY_YEAR`.
+
+The behaviour stays a config key rather than becoming a constant, but for a narrower reason than
+this docstring used to give. It used to say the premise was UNCITED and that "a key can be flipped
+by whoever finds the citation". The citation is now found and it CONFIRMS the default rather than
+changing it; what stays open is the estimator question of whether crossing a real break is ever
+preferable to a shorter history, which is a §10.3 judgement and not a sourcing one. Flipping the
+key is also not free: `runs.run_id` hashes the resolved config, so a flip re-numbers the run.
 
 THE LOOKBACK IS BOUNDED IN MONTHS, NOT ROWS. `historical_lookback_months` names a span of calendar
 time, so taking the last N rows of an observed-only series is a different estimator: a state
