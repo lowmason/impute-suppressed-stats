@@ -104,3 +104,13 @@ def test_no_regime_reports_zero_scores_without_saying_why(four_rung_run):
     for name, entry in four_rung_run.manifest["regimes"].items():
         if entry["n_scored"] == 0:
             assert entry.get("reason"), f"{name} scored nothing and gave no reason"
+
+
+def test_every_scored_cell_on_a_real_run_is_primary_like(four_rung_run):
+    """The precondition §13.10 rests on, witnessed on a real run rather than only in a unit test.
+
+    The harness refuses a non-primary-like scored cell, so this fixture completing is already
+    evidence; asserting the property makes it legible and would catch a guard wired somewhere the
+    scores frame does not flow through.
+    """
+    assert four_rung_run.scores["suppression_type"].unique().to_list() == ["primary_like"]

@@ -25,6 +25,7 @@ from __future__ import annotations
 import polars as pl
 
 from ..baselines.runner import FALLBACK_RUNGS, PREFERRABLE, RUNG_OF
+from ..errors import ConceptViolationError
 
 
 def build_scoreboard(metrics: pl.DataFrame) -> pl.DataFrame:
@@ -86,6 +87,14 @@ def _best(scoreboard: pl.DataFrame, *, regime: str, eligible: frozenset[str] | N
         candidates = candidates.filter(pl.col("estimator_id").is_in(sorted(eligible)))
     if candidates.height == 0:
         return None
+    arms = sorted(str(arm) for arm in candidates["mask_arm"].unique().to_list())
+    if len(arms) > 1:
+        raise ConceptViolationError(
+            f"{regime} carries scored rows on more than one mask arm ({', '.join(arms)}), and "
+            "pooling them would average a state-total WAPE with a national-size one under a "
+            "single number. Score one arm, or give this function an arm argument and decide which "
+            "§13.10 reads -- do not let the two pool."
+        )
     pooled = candidates.group_by("estimator_id").agg(
         ((pl.col("wape") * pl.col("denominator")).sum() / pl.col("denominator").sum()).alias(
             "pooled_wape"
@@ -131,3 +140,52 @@ def best_scoring_baseline(scoreboard: pl.DataFrame, *, regime: str) -> str | Non
     It is NOT a promotion comparand. Nothing may gate on it.
     """
     return _best(scoreboard, regime=regime, eligible=None)
+
+
+def assert_scored_cells_are_primary_like(scored: pl.DataFrame) -> None:
+    """§13.10's "on primary-like masks" as a PRECONDITION, because the scoreboard cannot express it.
+
+    The clause is not a split of what was scored -- it is a constraint on what may be. Neither
+    `preferred_baseline` nor the scoreboard carries a mask label: `suppression_type` rides
+    `validation_scores` and both metric emitters group without it, so a run mixing labels would
+    pool them into one WAPE per estimator and the gate would read a mixed number while still
+    reporting itself as a primary-like comparison. Measured on a two-cell frame, a perfect
+    primary-like estimate pooled with a doubled complementary-like one reads 0.5 rather than 0.0.
+
+    WHY A PRECONDITION IS THE HONEST READING RATHER THAN A GAP. §13.2 step 3's complementary cells
+    exist to defeat recovery by subtraction, and on the arm that produces WAPE there is no
+    subtraction to defeat: every one of the 4,716 state cells is a single-cell component, so a
+    masked state total is `unbounded` with and without partners
+    (`test_a_complementary_mask_changes_nothing_about_state_total_identification`, SRC-QCEW-006).
+    The arm where steps 3 and 6 do bind -- the national-size March margin, `recover.mask_and_solve_size`
+    -- produces no WAPE at all, because the §10 baselines estimate state totals and not size
+    classes. So a complementary-like cell on the scoring arm would be, for scoring purposes, the
+    same kind of thing as a primary-like one, and admitting it would dilute the comparand rather
+    than sharpen it.
+
+    Enforced rather than assumed: it holds today only because every selector in `validate.regimes`
+    emits primary-like targets and `propensity.complementary_partners` has no caller, and an
+    invariant resting on which selectors happen to be wired fails silently the moment one changes.
+    """
+    if "suppression_type" not in scored.columns:
+        raise ConceptViolationError(
+            "scored rows carry no `suppression_type`, so the primary-like precondition §13.10 "
+            "depends on cannot be checked. Absence is not compliance: the label is dropped by the "
+            "metric emitters already, which is how it went missing from the scoreboard."
+        )
+    # Nulls are offending too. Every masked row is labelled by `mask.apply_mask`, so a null is a
+    # bug in the labelling rather than a cell that is merely unlabelled.
+    offending = sorted(
+        str(label)
+        for label in scored["suppression_type"].unique().to_list()
+        if label != "primary_like"
+    )
+    if offending:
+        raise ConceptViolationError(
+            f"scored cells carry non-primary-like `suppression_type` values ({', '.join(offending)}) "
+            "and §13.10 gates on primary-like masks, but neither the metrics table nor the "
+            "scoreboard carries the label to scope by -- so the two would pool into one WAPE. To "
+            "score a second label, carry `suppression_type` into the metric emitters' grouping and "
+            "into VALIDATION_METRIC_SCHEMA, add it to the scoreboard, and give `preferred_baseline` "
+            "a label argument. Until then this run is refused rather than silently mixed."
+        )
