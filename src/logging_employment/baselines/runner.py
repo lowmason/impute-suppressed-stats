@@ -19,6 +19,12 @@ implementation's.
 sanity check and leaves it out of the ordering on purpose -- it ignores the establishment counts
 that QCEW publishes even for suppressed cells. It still runs and is still scored; it is just never
 preferred.
+
+THAT LAST CLAUSE IS NOW ENFORCED RATHER THAN MERELY STATED. `PREFERRABLE` below is the set
+`validate/scoreboard.py::preferred_baseline` ranks over, and that function is §13.10's promotion
+comparand -- so an estimator outside the hierarchy cannot become the number the full model is
+gated against. It stays visible through `best_scoring_baseline`, which reports the best scorer of
+any kind and gates nothing.
 """
 
 from __future__ import annotations
@@ -73,6 +79,43 @@ FALLBACK_ORDER: tuple[str, ...] = (
     "share_last_observed",
     "establishment_proportional",
 )
+
+# THE HIERARCHY ADMITS MORE ESTIMATORS THAN IT NAMES. `FALLBACK_ORDER` names one representative
+# per rung; rung 3 is "reconciled historical shares", which is all five §10.3 variants. Testing
+# membership in that four-tuple would rank `share_last_observed` above its own siblings, which
+# §10.8 does not do: measured on D1's `whole_state_year_blocks`, `share_rolling_median` pools to
+# 0.1342 against `share_last_observed`'s 0.1403. So eligibility is rung MEMBERSHIP, spelled out.
+#
+# The rungs are also the tie-break, and the tie is real rather than hypothetical: on D1's
+# `long_consecutive_runs`, `establishment_proportional` and `share_same_month_prior_year` pool to
+# the same 0.4229. §10.8 is a preference order, so the higher rung wins; `group_by` order is not
+# guaranteed and would otherwise decide it.
+#
+# Exactly two estimators sit in no rung, each excluded by its own section's words: §10.1 "Use only
+# as a sanity check" and §10.5 "a benchmark, not a preferred standalone estimator". They still run
+# and are still scored -- they are just never preferred.
+FALLBACK_RUNGS: tuple[tuple[str, ...], ...] = (
+    ("cbp_intensity",),
+    ("constrained_regression",),
+    (
+        "share_last_observed",
+        "share_same_month_prior_year",
+        "share_rolling_median",
+        "share_exponentially_weighted",
+        "share_break_adjusted",
+    ),
+    ("establishment_proportional",),
+)
+
+PREFERRABLE: frozenset[str] = frozenset(
+    estimator_id for rung in FALLBACK_RUNGS for estimator_id in rung
+)
+
+# Rung index per estimator, for the tie-break. An estimator in no rung sorts after every rung --
+# it is only ever reachable through `best_scoring_baseline`, which does not gate anything.
+RUNG_OF: dict[str, int] = {
+    estimator_id: index for index, rung in enumerate(FALLBACK_RUNGS) for estimator_id in rung
+}
 
 
 def resolve_estimators(declared: Sequence[str] | None) -> tuple[Estimator, ...]:
