@@ -97,13 +97,22 @@ def test_no_regime_reports_zero_scores_without_saying_why(four_rung_run):
     """The plan's own rule, applied to every regime rather than only the refused one.
 
     `rolling_origin` and `cbp_size_gaps` are declared feasible and score nothing here, because
-    neither masks QCEW cells: one truncates the frame and the other drops CBP state-years. Before
-    this guard the manifest recorded them as `feasible, scored=0` with no explanation, which is
-    indistinguishable from a regime that ran and found nothing wrong.
+    neither masks QCEW cells: one truncates the frame and the other drops CBP state-years. The
+    guard now also refuses a reason that defers the question to a later plan rather than answering
+    it.
     """
+    deferrals = ("deferred", "not yet", "unwired", "to be wired", "future plan")
     for name, entry in four_rung_run.manifest["regimes"].items():
-        if entry["n_scored"] == 0:
-            assert entry.get("reason"), f"{name} scored nothing and gave no reason"
+        if entry["n_scored"] != 0:
+            continue
+        reason = entry.get("reason")
+        assert reason, f"{name} scored nothing and gave no reason"
+        # R-S4C-2: a measurement or a declaration, never a deferral. This test used to accept any
+        # non-empty string, including "Wiring it into the loop is a deferred item" — a sentence
+        # that describes the plan's state rather than the regime's.
+        lowered = reason.lower()
+        for phrase in deferrals:
+            assert phrase not in lowered, f"{name}'s reason defers rather than explains: {reason}"
 
 
 def test_every_scored_cell_on_a_real_run_is_primary_like(four_rung_run):

@@ -42,15 +42,94 @@ CENSUS_DIVISIONS: dict[str, tuple[str, ...]] = {
 }
 
 
+# WHY a regime produces no `MaskTarget`, declared per regime rather than inferred from
+# `select is None`. That test conflates three unrelated situations — a regime that uses a different
+# mechanism entirely, one that is vacuous on the §10 registry, and one that refuses on this window
+# — and the harness templated ONE sentence on `{name}` across all of them. Measured 2026-09-08, the
+# sentence was true of `rolling_origin` and false of `cbp_size_gaps`, whose named entry points have
+# no caller and no test anywhere in the package, and the false version shipped verbatim in
+# `runs/f03023ac9f3a/validation_manifest.json`.
+REGIME_MECHANISMS: tuple[str, ...] = (
+    "qcew_mask",
+    "frame_truncation",
+    "cbp_gap",
+    "no_registry_estimator",
+    "no_second_vintage",
+)
+
+_MECHANISMS: dict[str, str] = {
+    "rolling_origin": "frame_truncation",
+    "cbp_size_gaps": "cbp_gap",
+    "retrospective_smoothing": "no_registry_estimator",
+    "preliminary_to_final_vintage": "no_second_vintage",
+}
+
+# Each regime's own sentence, a MEASUREMENT or a DECLARATION and never a deferral (R-S4C-2). The
+# two measured ones carry the date and the registry they were measured against, so that adding an
+# estimator invalidates them rather than letting them be silently inherited.
+_NO_SCORE_REASONS: dict[str, str] = {
+    "rolling_origin": (
+        "rolling_origin truncates the frame rather than masking a QCEW cell, so it produces no "
+        "MaskTarget. Measured 2026-09-08 against the ten-estimator §10 registry: truncation moves "
+        "no estimator's pre-origin estimate — rolling_origin_frames removes 1,788 of 4,812 rows "
+        "at origin 2022-01, and every estimator returns what it returned unmasked — so this "
+        "regime separates ZERO baselines on THIS registry. The scope is the registry: adding a "
+        "smoothing or autoregressive estimator invalidates this reason rather than inheriting it. "
+        "A scoreboard entry that cannot discriminate would read as evidence, so the regime records "
+        "the §13.4 future-row guard instead of a score; the origins it was checked at are recorded "
+        "beside this reason."
+    ),
+    "cbp_size_gaps": (
+        "cbp_size_gaps removes CBP state-year rows rather than masking a QCEW cell, so it "
+        "produces no MaskTarget and scores no cell on its own: it changes cbp_intensity's weight "
+        "basis, not the set of masked cells. Measured 2026-09-08: removal causes ZERO additional "
+        "declines (147 declined rows before and after) and moves the cell to the declared fallback "
+        "arm, and because national_march_intensity pools over surviving rows the effect reaches "
+        "every state in the year rather than only the holed state-year."
+    ),
+    "retrospective_smoothing": "no smoothing estimator in the §10 registry",
+    "preliminary_to_final_vintage": "no second snapshot in any staged table",
+}
+
+
 @dataclass(frozen=True)
 class RegimeSpec:
-    """One §13.3 regime: how it selects, at what grain, and whether it can run at all."""
+    """One §13.3 regime: how it selects, at what grain, whether it can run, and by what mechanism."""
 
     name: str
     disposition: str
     # "blackout" regimes INTEND to erase a state's history; "single_month" regimes must not.
     grain: str
     select: Callable[[pl.DataFrame, int, Config], list[MaskTarget]] | None
+    mechanism: str
+    no_score_reason: str | None
+
+    def __post_init__(self) -> None:
+        """Refuse a spec whose mechanism, selector and reason disagree.
+
+        Enforced rather than conventional because this module MUTATES `_SELECTORS` after the
+        module body has run past the point a comprehension would read it. A regime that gained a
+        selector without gaining `qcew_mask` — or lost one without gaining a reason — would
+        otherwise reach the harness as a silent no-op, which is the failure this stage refuses
+        everywhere else.
+        """
+        if self.mechanism not in REGIME_MECHANISMS:
+            raise ConceptViolationError(
+                f"{self.name}: mechanism {self.mechanism!r} is not declared; the set is "
+                f"{list(REGIME_MECHANISMS)}"
+            )
+        if (self.mechanism == "qcew_mask") != (self.select is not None):
+            raise ConceptViolationError(
+                f"{self.name}: mechanism {self.mechanism!r} and "
+                f"select={'a callable' if self.select else 'None'} disagree. A qcew_mask regime "
+                "has a selector and every other mechanism has none."
+            )
+        if (self.mechanism == "qcew_mask") != (self.no_score_reason is None):
+            raise ConceptViolationError(
+                f"{self.name}: a qcew_mask regime declares no no_score_reason and every other "
+                "mechanism must declare one — a regime that scores nothing must say why "
+                "(R-S4C-2), and the reason must be its own rather than a shared template."
+            )
 
 
 def _small_cell(monthly: pl.DataFrame, seed: int, config: Config) -> list[MaskTarget]:
@@ -225,16 +304,6 @@ _GRAINS: dict[str, str] = {
     "whole_state_year_blocks": "blackout",
     "whole_seasonal_blocks": "blackout",
     "regional_blocks": "blackout",
-}
-
-REGIME_SPECS: dict[str, RegimeSpec] = {
-    name: RegimeSpec(
-        name=name,
-        disposition=REGIME_DISPOSITIONS[name],
-        grain=_GRAINS.get(name, "single_month"),
-        select=_SELECTORS.get(name),
-    )
-    for name in HOLDOUT_REGIMES
 }
 
 
@@ -439,17 +508,20 @@ def apply_cbp_gap(data: HarmonizedData, keys: Sequence[tuple[str, int]]) -> Harm
 _SELECTORS["structural_break"] = _structural_break
 _SELECTORS["naics_transition"] = _naics_transition
 
-# Rebuilt so the two selectors registered above reach the specs. `REGIME_SPECS` is a plain dict
-# built by comprehension, so a late `_SELECTORS` mutation does not propagate on its own; leaving
-# it stale would give `select_targets` a `None` selector and an empty target list -- exactly the
-# silent no-op this stage refuses everywhere else. `preliminary_to_final_vintage` stays out of
-# `_SELECTORS` on purpose, so its disposition raises.
-REGIME_SPECS = {
+# Built ONCE, at the foot of the module, after every selector is registered. There used to be a
+# second comprehension above `select_targets` and a rebuild here, because `_structural_break` and
+# `_naics_transition` are registered late; the first dict was always stale and only the rebuild was
+# ever read. `RegimeSpec.__post_init__` now refuses a mechanism/selector mismatch, so the stale
+# first pass would raise at import — which is the check working, and the reason there is one dict.
+# `preliminary_to_final_vintage` stays out of `_SELECTORS` on purpose, so its disposition raises.
+REGIME_SPECS: dict[str, RegimeSpec] = {
     name: RegimeSpec(
         name=name,
         disposition=REGIME_DISPOSITIONS[name],
         grain=_GRAINS.get(name, "single_month"),
         select=_SELECTORS.get(name),
+        mechanism=_MECHANISMS.get(name, "qcew_mask"),
+        no_score_reason=_NO_SCORE_REASONS.get(name),
     )
     for name in HOLDOUT_REGIMES
 }

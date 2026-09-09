@@ -103,18 +103,17 @@ def run_pseudo_suppression(
             regimes[name] = entry
             continue
 
-        # A `feasible` regime that scores nothing MUST say why. Two of the thirteen do not mask
-        # QCEW cells at all: `rolling_origin` TRUNCATES the frame (`regimes.rolling_origin_frames`)
-        # and `cbp_size_gaps` drops CBP state-years (`regimes.apply_cbp_gap`), so neither produces
-        # a `MaskTarget` and neither reaches this loop. Without this note the manifest reads
-        # `feasible, scored=0` with no explanation — the empty partition that reads as "scored,
-        # nothing wrong", which this stage refuses everywhere else.
+        # A `feasible` regime that scores nothing MUST say why, in ITS OWN words. The reason used
+        # to be templated on `{name}` across every selectorless regime, which asserted of both that
+        # the regime "is exercised through its own entry point in `validate.regimes`" — true for
+        # `rolling_origin`, false for `cbp_size_gaps`, whose entry points have no caller and no
+        # test. The false version shipped in `runs/f03023ac9f3a/validation_manifest.json`. The
+        # reason now comes from `RegimeSpec.no_score_reason`, which is PROVABLY non-None here:
+        # `__post_init__` ties `select is None` to a non-`qcew_mask` mechanism and every one of
+        # those must declare a reason. Do not add an `or "..."` fallback — that fallback would be
+        # a shared template, which is the defect this replaced.
         if spec.select is None:
-            entry["reason"] = (
-                f"{name} does not mask QCEW cells and so produces no MaskTarget; it is exercised "
-                "through its own entry point in `validate.regimes`, not through this scoring loop. "
-                "Wiring it into the loop is a deferred item."
-            )
+            entry["reason"] = spec.no_score_reason
             regimes[name] = entry
             continue
 
