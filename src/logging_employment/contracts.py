@@ -515,6 +515,31 @@ VALIDATION_METRIC_SCHEMA: dict[str, pl.DataType] = {
     "constraint_rows_scored": pl.Int64,
 }
 
+# One row per (regime, seed, estimator): §13.10's comparand, with the provenance that makes it
+# readable. Declared 2026-09-08; the artifact has been persisted by `cli.py::validate_command`
+# since plan 11 with no schema anywhere, and §15.1's release-table list does not name it either —
+# the roadmap is the only place it appears.
+#
+# `wape` is the one column that may be NULL: an estimator that declined every cell has no error,
+# not zero error, and `scoreboard._best` filters on that rather than sorting nulls first. Every
+# other column is non-null by construction — measured on the committed golden, zero nulls in all
+# twelve.
+VALIDATION_SCOREBOARD_SCHEMA: dict[str, pl.DataType] = {
+    "regime": pl.String,
+    "seed": pl.Int64,
+    "mask_arm": pl.String,
+    "estimator_id": pl.String,
+    "wape": pl.Float64,
+    "denominator": pl.Float64,
+    "denominator_basis": pl.String,
+    "n_scored": pl.Int64,
+    "n_declined_by_design": pl.Int64,
+    "n_declined_data_gap": pl.Int64,
+    "n_declined_reconciliation_failure": pl.Int64,
+    "n_own_estimator": pl.Int64,
+    "n_establishment_fallback": pl.Int64,
+}
+
 
 _HARMONIZED_TABLES = ("qcew_monthly", "qcew_national_size", "cbp_state_size", "bridge")
 

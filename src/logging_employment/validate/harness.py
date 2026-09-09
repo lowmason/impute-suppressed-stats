@@ -29,7 +29,13 @@ import polars as pl
 from ..baselines.interfaces import Estimator
 from ..baselines.runner import REGISTRY, run_baselines
 from ..config import Config
-from ..contracts import REGIME_SWITCHES, HarmonizedData, assert_declared_provenance
+from ..contracts import (
+    REGIME_SWITCHES,
+    VALIDATION_METRIC_SCHEMA,
+    VALIDATION_SCORE_SCHEMA,
+    HarmonizedData,
+    assert_declared_provenance,
+)
 from ..errors import ConceptViolationError
 from .leakage import assert_no_future_rows, assert_no_retained_truth
 from .mask import MaskTarget, apply_mask
@@ -182,8 +188,20 @@ def run_pseudo_suppression(
 
     manifest: dict[str, object] = {"regimes": regimes}
     scores = pl.concat(all_scores, how="vertical") if all_scores else pl.DataFrame()
+    if scores.width == 0:
+        scores = pl.DataFrame(schema=VALIDATION_SCORE_SCHEMA)
     metrics = pl.concat(all_metrics, how="diagonal") if all_metrics else pl.DataFrame()
-    board = build_scoreboard(metrics) if metrics.height else pl.DataFrame()
+    if metrics.width == 0:
+        # WIDTH, NOT LIST-TRUTHINESS. Writing this as
+        # `pl.concat(...) if all_metrics else pl.DataFrame(schema=...)` NEVER FIRES: measured
+        # 2026-09-09, an empty-estimator run leaves `all_metrics` holding 35 frames of shape
+        # (0, 0) — one per regime x emitter — because every emitter loops
+        # `for (estimator,), group in scores.group_by("estimator_id")` and zero estimator groups
+        # makes `rows == []`, i.e. `pl.DataFrame([])`. The list is truthy, `pl.concat` of
+        # thirty-five (0, 0) frames is (0, 0), and the shaped branch is skipped. The emptiness
+        # that matters is the RESULT's, not the accumulator's.
+        metrics = pl.DataFrame(schema=VALIDATION_METRIC_SCHEMA)
+    board = build_scoreboard(metrics)
     return ValidationResult(scores, metrics, board, manifest)
 
 

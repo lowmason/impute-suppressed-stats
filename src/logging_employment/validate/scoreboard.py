@@ -25,6 +25,7 @@ from __future__ import annotations
 import polars as pl
 
 from ..baselines.runner import FALLBACK_RUNGS, PREFERRABLE, RUNG_OF
+from ..contracts import VALIDATION_SCOREBOARD_SCHEMA
 from ..errors import ConceptViolationError
 
 
@@ -36,7 +37,15 @@ def build_scoreboard(metrics: pl.DataFrame) -> pl.DataFrame:
     `n_own_estimator` is null on every point row. Selecting it straight off the filtered point rows
     returns null for all of them — silently dropping the one column that makes §10.3 variant 5's
     composed refusals visible, which is the whole reason the report exists.
+
+    The declared shape is `contracts.VALIDATION_SCOREBOARD_SCHEMA`; a column added here must be
+    added there, and `cli.py::validate_command` refuses the write when the two disagree.
     """
+    if metrics.is_empty():
+        # SHAPED, not bare. An empty `pl.DataFrame()` carries no columns, so a `validate_frame`
+        # gate on it reports thirteen missing columns rather than an empty board — a schema
+        # failure where the truth is "this run scored nothing", which are different findings.
+        return pl.DataFrame(schema=VALIDATION_SCOREBOARD_SCHEMA)
     headline = metrics.filter(
         (pl.col("metric_family") == "point") & (pl.col("metric_name") == "wape")
     ).select(

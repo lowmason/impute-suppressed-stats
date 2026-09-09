@@ -9,6 +9,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
+from logging_employment import contracts
 from logging_employment.baselines.runner import REGISTRY
 from logging_employment.config import Config, load_config
 from logging_employment.contracts import (
@@ -187,3 +188,27 @@ def test_the_three_new_columns_are_derived_rather_than_constant(fixture_run):
     blackout = scores.filter(pl.col("regime") == "long_consecutive_runs")
     single = scores.filter(pl.col("regime") == "small_cell_biased")
     assert blackout["lookback_months_masked"].max() > single["lookback_months_masked"].max()
+
+
+def test_an_empty_run_reads_as_nothing_scored_rather_than_a_schema_failure():
+    """The distinction the gate must preserve: "this run scored nothing" is a RESULT;
+    "thirteen columns missing" is a schema failure, and reporting the second for the first is how
+    an empty run gets mistaken for a broken one.
+
+    An empty estimator list is the cheapest trigger — measured, it leaves `metrics` and
+    `scoreboard` bare while the manifest still carries all thirteen regimes.
+    """
+    result = run_pseudo_suppression(HarmonizedData.load(FIXTURE), [], _fixture_config())
+
+    assert result.metrics.height == 0
+    contracts.validate_frame(
+        result.metrics, contracts.VALIDATION_METRIC_SCHEMA, "validation_metrics"
+    )
+
+    assert result.scoreboard.height == 0
+    contracts.validate_frame(
+        result.scoreboard, contracts.VALIDATION_SCOREBOARD_SCHEMA, "validation_scoreboard"
+    )
+
+    # The run happened; it just scored nothing. That is what the shaped frames must not obscure.
+    assert len(result.manifest["regimes"]) == 13

@@ -740,6 +740,73 @@ reconciliation_failure
 A declining estimator MUST write rows, never omit them: an absent row is indistinguishable from a
 bug.
 
+### 7.14 `validation_score`
+
+One row per estimator, holdout regime, seed, replicate and masked cell — including the cells a
+declining estimator could not weight, which are rows with a null estimate rather than absences.
+The raw observations §13.5-§13.8's metrics are computed from.
+
+```text
+regime
+seed
+replicate
+mask_arm
+estimator_id
+cell_id
+state_fips
+reference_month
+suppression_type
+truth
+estimate
+estimate_integer
+weight_basis
+decline_kind
+bound_status
+selected_lower
+selected_upper
+masked_constraint_set_hash
+lookback_months_masked
+missing_set_size
+raw_weight
+anchor_basis
+reconciliation_status
+decline_reason
+residual
+constraint_set_hash
+```
+
+`replicate` is the index of the seed within `validation.pseudo_suppression_seeds`, not a count of
+masked cells — `replicates_per_regime` sizes the mask and is a different quantity.
+`lookback_months_masked` is the number of months this replicate masked for that row's state.
+`constraint_set_hash` and `masked_constraint_set_hash` are different columns: the first is the
+system the estimators were run against, the second the masked system whose bounds were joined on.
+
+### 7.15 `validation_scoreboard`
+
+One row per holdout regime, seed and estimator: the headline point metric with the provenance
+§13.10's promotion gate needs to read it.
+
+```text
+regime
+seed
+mask_arm
+estimator_id
+wape
+denominator
+denominator_basis
+n_scored
+n_declined_by_design
+n_declined_data_gap
+n_declined_reconciliation_failure
+n_own_estimator
+n_establishment_fallback
+```
+
+`wape` MAY be null: an estimator that declined every cell has no error, not zero error, and a
+ranking that treats null as smallest would crown it. Every other column MUST carry a value. §15.1's
+release-table list does not name this artifact; it is written to the run directory beside
+`validation_metrics.parquet`.
+
 ---
 
 ## 8. Ingestion and harmonization requirements
