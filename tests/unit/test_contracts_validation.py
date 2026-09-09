@@ -65,3 +65,40 @@ def test_an_empty_scoreboard_still_carries_its_columns():
     # The early return. Before it lands this line raises `ColumnNotFoundError`, not
     # `AttributeError` — a bare frame has no `metric_family` for `headline` to filter on.
     assert build_scoreboard(pl.DataFrame()).height == 0
+
+
+def test_a_null_in_a_required_column_is_refused():
+    frame = pl.DataFrame(
+        {
+            "regime": ["small_cell_biased", None],
+            "seed": [1024, 1024],
+            "mask_arm": ["state_total", "state_total"],
+            "estimator_id": ["equal_residual", "equal_residual"],
+            "metric_family": ["point", "point"],
+            "denominator": [1.0, 1.0],
+            "denominator_basis": ["masked_cell_rows", "masked_cell_rows"],
+            "n_scored": [1, 1],
+        }
+    )
+    with pytest.raises(ConceptViolationError, match="regime"):
+        contracts.assert_required_columns_present(frame, "validation_metrics")
+
+
+def test_a_table_with_no_declared_requirement_is_refused_rather_than_waved_through():
+    """A silent pass for an unknown name would make the gate look applied where it was not."""
+    with pytest.raises(ConceptViolationError, match="invented_table"):
+        contracts.assert_required_columns_present(pl.DataFrame(), "invented_table")
+
+
+def test_metric_name_is_not_required_and_the_reason_is_recorded():
+    """Measured: NULL on all 70 `declines` rows, because that family emits counts not one metric.
+
+    Recorded rather than fixed (decided 2026-09-08): naming it would move a second golden column
+    beyond what V3 authorises. If a later plan gives declines rows a metric_name, this test is the
+    one to delete.
+    """
+    assert "metric_name" not in contracts.VALIDATION_REQUIRED_NON_NULL["validation_metrics"]
+
+
+def test_wape_is_not_required_because_an_all_declining_estimator_has_no_error():
+    assert "wape" not in contracts.VALIDATION_REQUIRED_NON_NULL["validation_scoreboard"]

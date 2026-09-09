@@ -540,6 +540,105 @@ VALIDATION_SCOREBOARD_SCHEMA: dict[str, pl.DataType] = {
     "n_establishment_fallback": pl.Int64,
 }
 
+# The columns whose MEANING requires a value, per persisted validation table (R-S4C-19).
+#
+# SCOPE, stated because the obvious reading overreaches. `validate_frame` compares columns and
+# dtypes, and `dict[str, pl.DataType]` has no nullability slot — so this is a second, narrower
+# declaration beside the schemas rather than an extension of them. Adding nullability to every
+# schema in this module is explicitly out of scope.
+#
+# Each list holds only columns that are non-null BY CONSTRUCTION, not columns that merely happen to
+# be non-null on a measured run. The test is whether the join that supplies the column is TOTAL by
+# construction, NOT merely whether it is a LEFT join. `selected_lower` and `bound_status` are absent
+# because they arrive through a LEFT join on `cell_id` from a frame that need not carry every cell,
+# so their nullability is a property of the data. `n_own_estimator` and `n_establishment_fallback`
+# ARE listed even though they too arrive through a LEFT join (`scoreboard.build_scoreboard`, on
+# `regime`/`seed`/`estimator_id`), because the `declines` family emits exactly one row per
+# (regime, seed, estimator_id) — the board's own grain — so that join cannot miss. Corrected
+# 2026-09-09: the earlier wording gave "arrives through a LEFT join" as the criterion, which would
+# have excluded those two as well.
+# `weight_basis` is absent because a declining row has no weight to describe.
+# `metric_name` is absent because the `declines` family emits counts rather than one named metric
+# and writes null there on every row — measured 2026-09-08, 70 of 70 on the committed fixture.
+# That is the same shape as the `mask_arm` defect this table exists to close, and it is RECORDED
+# rather than fixed: naming that metric would move a second column of the golden.
+# `wape` is absent because an estimator that declined every cell has no error, not zero error.
+VALIDATION_REQUIRED_NON_NULL: dict[str, tuple[str, ...]] = {
+    "validation_scores": (
+        "regime",
+        "seed",
+        "replicate",
+        "mask_arm",
+        "lookback_months_masked",
+        "estimator_id",
+        "cell_id",
+        "state_fips",
+        "reference_month",
+        "truth",
+        "suppression_type",
+        "masked_constraint_set_hash",
+    ),
+    "validation_metrics": (
+        "regime",
+        "seed",
+        "mask_arm",
+        "estimator_id",
+        "metric_family",
+        "denominator",
+        "denominator_basis",
+        "n_scored",
+    ),
+    "validation_scoreboard": (
+        "regime",
+        "seed",
+        "mask_arm",
+        "estimator_id",
+        "denominator",
+        "denominator_basis",
+        "n_scored",
+        # The three `n_declined_*` columns ride in on the same total LEFT join as the two below and
+        # are equally non-null by construction — measured 2026-09-09 on the committed golden, 0
+        # nulls in all five. §7.15 and this module's scoreboard schema comment both say they must
+        # carry a value, so leaving them out would make this table disagree with the two
+        # declarations shipped alongside it.
+        "n_declined_by_design",
+        "n_declined_data_gap",
+        "n_declined_reconciliation_failure",
+        "n_own_estimator",
+        "n_establishment_fallback",
+    ),
+}
+
+
+def assert_required_columns_present(frame: pl.DataFrame, name: str) -> None:
+    """Refuse a persisted validation table carrying a null where its meaning requires a value.
+
+    The case that motivated this shipped: `validation_metrics` IS gated by `validate_frame`, and
+    the gate did not see that the `declines` family wrote a NULL `mask_arm` on every row it
+    produced, because it checks columns and dtypes and not nullity.
+
+    An unknown `name` RAISES rather than passing. A silent pass would let a caller believe a table
+    was gated when the gate had nothing to say about it, which is the same class of quiet success
+    this stage refuses everywhere else.
+    """
+    required = VALIDATION_REQUIRED_NON_NULL.get(name)
+    if required is None:
+        raise ConceptViolationError(
+            f"{name} declares no required-non-null columns; the declared tables are "
+            f"{sorted(VALIDATION_REQUIRED_NON_NULL)}. Declare its columns or do not gate it — a "
+            "silent pass would read as a check that ran."
+        )
+    offending = [
+        (column, frame[column].null_count())
+        for column in required
+        if column in frame.columns and frame[column].null_count()
+    ]
+    if offending:
+        raise ConceptViolationError(
+            f"{name}: null values in column(s) whose meaning requires one — "
+            f"{', '.join(f'{column} ({count} rows)' for column, count in offending)}"
+        )
+
 
 _HARMONIZED_TABLES = ("qcew_monthly", "qcew_national_size", "cbp_state_size", "bridge")
 
