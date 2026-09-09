@@ -258,13 +258,15 @@ truth = pl.DataFrame(
 """
 ```
 
-and widen the leakage import to
-`from logging_employment.validate.leakage import assert_no_future_rows, assert_no_retained_truth`.
+(The test module's own import line already names both guards; only `_RETAINING_FRAME`'s
+subprocess source needs `assert_no_retained_truth`.)
 
 - [ ] **Step 2: Run it to make sure it fails**
 
 Run: `uv run pytest tests/unit/test_validate_leakage_guards.py -v`
-Expected: all four FAIL — `ImportError: cannot import name 'LeakageError'`.
+Expected: a COLLECTION error, not four failures — `0 items collected, 1 error`, with
+`ImportError: cannot import name 'LeakageError'`. A module-level import error stops collection, so
+there is nothing to report per-test; do not go hunting for four F's.
 
 Once Step 3 lands the class, `test_the_retained_truth_guard_still_fires_under_python_O` fails
 again, and that is the failure that matters — **witnessed 2026-09-09 against the current bare
@@ -341,9 +343,10 @@ Run: `uv run pytest tests/unit/test_validate_leakage_guards.py -v`
 Expected: 4 passed — the Step 1 block defines FOUR tests, not the two an earlier draft counted.
 
 Run: `uv run pytest tests/integration/test_validate_leakage.py -v`
-Expected: all pass, or all SKIP if `data/staged` is absent — that module reads
-`HarmonizedData.load(Path("data/staged"))` directly. If they skip, say so in the task report
-rather than reporting a pass.
+Expected: all six pass. Note the fallback is NOT a skip: that module carries no `skipif`
+pytestmark and reads `HarmonizedData.load(Path("data/staged"))` directly, so an absent staged layer
+gives six `FileNotFoundError` FAILURES. (`data/staged` is present in this checkout and all six
+pass.) If they fail for that reason, say so rather than reporting a pass.
 
 - [ ] **Step 7: Commit**
 
@@ -419,7 +422,10 @@ def test_a_malformed_origin_is_refused_on_the_bare_call():
     Asserted on the BARE call, with no iteration: a refusal that only fires once a caller consumes
     the generator is not a guard, and inlining it into the generator body is exactly that bug.
     """
-    with pytest.raises(ConceptViolationError, match="banana"):
+    # Anchored on the INTERPOLATED value, not the word: the refusal's own hardcoded audit note
+    # contains the string `origins=['banana']`, so `match="banana"` would pass even if the message
+    # never named the origin the caller passed.
+    with pytest.raises(ConceptViolationError, match=r"origin\(s\) \['banana'\]"):
         rolling_origin_frames(_monthly(), origins=["banana"])
 
 
@@ -480,7 +486,13 @@ def rolling_origin_frames(
     unknown = [origin for origin in origins if origin not in panel]
     if unknown:
         raise ConceptViolationError(
-            f"origin(s) {unknown} name no period in this panel, whose months run "
+            # `min`/`max` over an empty panel raises ValueError, masking the refusal. No caller in
+            # this plan reaches it — `rolling_origins` derives origins FROM the panel, so an empty
+            # panel yields no origins and no call — but the guard is cheap and the failure mode is
+            # a confusing exception type.
+            f"origin(s) {unknown} name no period in this panel"
+            + (f", whose months run {min(panel)}..{max(panel)}" if panel else " (the panel is empty)")
+            + ". "
             f"{min(panel)}..{max(panel)}. An origin outside it truncates nothing and leaves the "
             "§13.4 guard passing over an untruncated frame: measured, `origins=['banana']` "
             "returned all 4,812 rows and `assert_no_future_rows` reported no future row, because "
@@ -507,7 +519,10 @@ Run: `uv run pytest tests/unit/test_validate_rolling_origins.py -v`
 Expected: 3 passed.
 
 Run: `uv run pytest tests/unit/test_validate_temporal_regimes.py -v`
-Expected: pass where `data/staged` exists. **Without it that module ERRORS; it does not skip.** It
+Expected: pass where `data/staged` exists. **Without it one test FAILS; nothing skips.** Measured:
+`1 failed, 1 passed` — the load is inside the body of
+`test_every_rolling_origin_frame_is_provably_past_only`, so it is a failed assertion inside a test,
+not a pytest collection ERROR, and the module's other test is unaffected. It
 carries no `pytestmark` and no `skipif` (19 lines: imports at `:1-5`, first test at `:8`), loads
 `data/staged` at `:10`, and `HarmonizedData.load` raises `FileNotFoundError`
 (`contracts.py:483-486`). Do not report that error as a skip. Its origins `2020-01` and `2022-01`
@@ -606,7 +621,9 @@ def rolling_origins(monthly: pl.DataFrame, *, config: Config) -> tuple[str, ...]
     Measured 2026-09-08: seven origins on `data/staged` (2018-01 through 2024-01, with 2017-01
     excluded by the floor) and NONE on the committed `tests/fixtures/baselines` layer, which
     carries 2023 alone. The guard is therefore vacuous on the fixture and binding on D1, and
-    `run_pseudo_suppression` records which in the manifest rather than leaving a reader to assume.
+    Task 5 then makes `run_pseudo_suppression` record which, in the manifest, rather than leaving
+    a reader to assume. (Forward-looking: nothing wires the guard into the harness until Task 5, so
+    this sentence is a promise at the moment Task 3 commits it, not a measurement.)
     """
     months = sorted(monthly["reference_month"].unique().to_list())
     floor = config.validation.minimum_unmasked_lookback_months
@@ -726,7 +743,8 @@ def test_a_spec_whose_mechanism_and_selector_disagree_is_refused():
 def test_the_cbp_reason_does_not_claim_an_entry_point_nothing_calls():
     """M8: the shipped manifest asserts `cbp_size_gaps` is exercised through its own entry point.
 
-    `cbp_size_gap_keys` and `apply_cbp_gap` have no caller and no test anywhere in the package, so
+    `cbp_size_gap_keys` and `apply_cbp_gap` HAD no caller and no test anywhere in the package when
+    this was measured (2026-09-08) — Task 6 of this plan gives them one — so
     the sentence was false — and it was false because it came from a `{name}` template shared with
     `rolling_origin`, for which it is true.
     """
@@ -1005,7 +1023,6 @@ test says so and carries the `data/staged` skipif.
 
 from pathlib import Path
 
-import polars as pl
 import pytest
 
 from logging_employment.baselines.runner import REGISTRY
@@ -1030,7 +1047,11 @@ def _fixture_config() -> Config:
 
 @pytest.fixture(scope="module")
 def fixture_run():
-    """One full-registry harness pass, shared by every test here — the suite runs in parallel."""
+    """One full-registry harness pass, shared by every test here.
+
+    Module scope because the pass costs ~11s and both tests need the same one; nothing about
+    parallelism — no xdist plugin is installed in this venv and nothing configures it.
+    """
     return run_pseudo_suppression(HarmonizedData.load(FIXTURE), REGISTRY, _fixture_config())
 
 
@@ -1060,7 +1081,9 @@ def test_only_the_truncating_regime_records_origins(fixture_run):
 - [ ] **Step 2: Run it to make sure it fails**
 
 Run: `uv run pytest tests/integration/test_stage4_acceptance.py -v`
-Expected: FAIL — `AssertionError: assert 'origins_checked' in {...}`.
+Expected: **2 failed** — `AssertionError: assert 'origins_checked' in {...}` for the first test, and
+`AssertionError: assert set() == {'rolling_origin'}` for the second. Both are the TDD-predicted
+shape; an earlier draft named only the first, and its message for the second was wrong.
 
 - [ ] **Step 3: Wire the guard into the harness**
 
@@ -1197,10 +1220,19 @@ print(cbp_size_gap_keys(data, seed=1024, config=cfg))
 def test_the_same_seed_gives_the_same_keys_in_separate_processes():
     """V6/M6: `unique()` gives no order guarantee, so a seeded sample over it is not reproducible.
 
-    ACROSS PROCESSES, not within one. Measured 2026-09-08 before the fix, three runs of this exact
-    program produced three different 20-key sets while a single process repeated itself — which is
-    why the sibling defect at `_clustered` and `_state_year` was caught twice and this one never
-    was. A subprocess is the only shape that witnesses it.
+    PER CALL — not merely per process. Re-measured 2026-09-09: six consecutive calls in ONE
+    process, on the same `HarmonizedData` object at the same seed, returned six distinct key sets
+    (symmetric difference 26 of 40 between the first two). A three-iteration in-process loop
+    witnesses this. The subprocess shape below is kept as a deliberate choice — it matches how the
+    harness is actually invoked, and it is the form that pins the property a caller depends on —
+    NOT because the defect is invisible in-process, which an earlier draft claimed.
+    Measured 2026-09-08 before the fix, three runs of this exact program produced
+    three different 20-key sets — which is why the sibling defect at `_clustered` and `_state_year`
+    was caught twice and this one never was. A subprocess is used because it is the shape that
+    matches how the harness is actually invoked, NOT because the defect is invisible in-process:
+    re-measured 2026-09-09, a plain in-process loop witnesses it too. Do not weaken the test to an
+    in-process loop on that basis, though — the cross-process form is the one that pins the
+    property a caller depends on.
     """
     drawn = {
         subprocess.run(
@@ -1291,7 +1323,8 @@ def cbp_size_gap_keys(data: HarmonizedData, *, seed: int, config: Config) -> lis
     does not permit; that is recorded, not fixed.
 
     SORT BEFORE SAMPLING. `unique()` gives no order guarantee, so a seeded sample over its output
-    draws a different key set per process — the same defect diagnosed and fixed twice in this file
+    draws a different key set on EVERY CALL (measured 2026-09-09: six calls in one process, six
+    distinct sets) — the same defect diagnosed and fixed twice in this file
     (`_clustered`, `_state_year`) for breaking §16.1's idempotence MUST. It survived here because
     the pair had no test and no caller. Measured 2026-09-08: three processes, three different
     20-key sets before the sort and one after.
@@ -1316,7 +1349,7 @@ must fall back or decline.", and "or decline" is precisely the half M4 measures 
 that one-line docstring with:
 
 ```python
-def apply_cbp_gap(data: HarmonizedData, keys: list[tuple[str, int]]) -> HarmonizedData:
+def apply_cbp_gap(data: HarmonizedData, keys: Sequence[tuple[str, int]]) -> HarmonizedData:
     """Drop the named CBP state-years so §10.4 must fall back to the establishment arm.
 
     NOT "fall back or decline". M4 measured zero additional declines from this gap; the figure and
@@ -1479,7 +1512,8 @@ Replace the `ValidationConfig` docstring in `src/logging_employment/config.py:17
 
     THE SEVEN `include_*` SWITCHES ARE THREE DIFFERENT KINDS OF THING, declared in
     `contracts.VALIDATION_SWITCH_KINDS` and summarised here because this is where a reader meets
-    them. Four are REGIME SWITCHES and gate their regime in `validate/harness.py`; two name INV-009
+    them. Four are REGIME SWITCHES and gate their regime in `validate/harness.py` once Task 8
+    lands (today harness.py reads exactly one of the seven, and reads it to RAISE); two name INV-009
     mask LABELS (§13.2 steps 3 and 8) and gate no regime; one names a design with no implementation
     anywhere in the package and is an operand of `_refuse_a_random_mask_only_design` below. Nine of
     the thirteen regimes have no switch at all, so the set was never a partition.
@@ -1547,7 +1581,8 @@ Closes R-S4C-12 and completes V4. Expect a manifest change with no scoreboard ch
 so those two regimes' entries move from a disposition-derived reason to a config-derived one.
 
 **Files:**
-- Modify: `src/logging_employment/validate/harness.py:78-104`
+- Modify: `src/logging_employment/validate/harness.py:32` (the `..contracts` import) and
+  `:87-104` (the disposition block). An earlier draft cited `:78-104`, which misses the import.
 - Test: `tests/integration/test_stage4_acceptance.py` (extend)
 
 **Interfaces:**
@@ -1602,7 +1637,11 @@ def test_turning_the_vintage_switch_on_still_raises(fixture_run):
 - [ ] **Step 2: Run it to make sure it fails**
 
 Run: `uv run pytest tests/integration/test_stage4_acceptance.py -v`
-Expected: the first two FAIL — the reason names no switch today.
+Expected: **1 failed, 3 passed** — only `test_a_regime_excluded_by_its_switch_appears_with_a_reason_naming_the_switch`
+is red, because no reason names a switch today. The other three already hold:
+`test_the_config_derived_reason_still_carries_the_declared_one` passes because
+`harness.py:98-102` already writes "no second snapshot in any staged table" verbatim, and Task 4
+does not touch that ternary. An earlier draft predicted "the first two FAIL".
 
 - [ ] **Step 3: Gate on the switch**
 
@@ -1646,7 +1685,10 @@ Then replace the `if spec.disposition != "feasible":` block at `:87-104` with:
 Delete the old `entry["reason"] = ("no second snapshot..." if ... else ...)` ternary and its
 `regimes[name] = entry; continue` — a `vacuous_on_registry` regime whose switch is on now falls
 through to the `spec.select is None` branch, which reads its declared reason. That branch is the
-single place a non-scoring reason is written, which is the point of R-S4C-1.
+single place a DECLARED no-score reason is READ, which is the point of R-S4C-1 — not the single
+place a reason is written. After this task three sites write one: the switch branch added above,
+that branch, and the `replicates == 0` fallback at `harness.py:158-162`, which is what gives
+`structural_break` and `naics_transition` their reasons on the fixture.
 
 - [ ] **Step 4: Run the tests**
 
@@ -1740,7 +1782,12 @@ def test_the_two_constraint_hashes_are_different_columns(fixture_run):
 
 
 def test_the_three_new_columns_are_derived_rather_than_constant(fixture_run):
-    """A column with one value on every row records nothing. `mask_arm` legitimately has one."""
+    """A column with one value on every row records nothing.
+
+    Two of the three legitimately have one HERE: `mask_arm` is `state_total` by design, and
+    `replicate` is `[0]` because this fixture configures a single seed — it varies only across a
+    multi-seed run. `lookback_months_masked` is the one this test actually shows varying.
+    """
     scores = fixture_run.scores
     assert scores["mask_arm"].null_count() == 0
     assert scores["mask_arm"].unique().to_list() == ["state_total"]
@@ -1754,9 +1801,18 @@ def test_the_three_new_columns_are_derived_rather_than_constant(fixture_run):
 
 - [ ] **Step 2: Run it to make sure it fails**
 
+> **Add `import polars as pl` to the module here.** Task 5 created it without one (its own tests
+> never use `pl`, and carrying it there trips ruff F401 at Task 5's commit); the block above is the
+> first to call `pl.col`.
+
 Run: `uv run pytest tests/integration/test_stage4_acceptance.py -v`
-Expected: the four new tests FAIL — the first with a `SchemaMismatchError` naming
-`missing=['replicate', 'mask_arm', 'lookback_months_masked'] extra=[...6 names...]`.
+Expected: **three of the four new tests FAIL**, not four.
+`test_the_two_constraint_hashes_are_different_columns` PASSES on unmodified code and has no red
+state at all — both columns already exist on the pre-change scores frame and
+`masked_constraint_set_hash` is a `pl.lit` of a non-null hash, so its assertions are true by
+construction whenever any regime scores. Of the three that do fail, the schema test fails with a
+plain `AssertionError` and a pytest set diff, NOT the `SchemaMismatchError` an earlier draft
+predicted: the bare `assert set(...) == set(...)` fires before `validate_frame` is ever reached.
 
 - [ ] **Step 3: Declare the six provenance columns**
 
@@ -2011,7 +2067,10 @@ def test_the_arm_comes_from_the_mask_rather_than_a_literal(fixture_run):
 - [ ] **Step 3: Run it to make sure it fails**
 
 Run: `uv run pytest tests/integration/test_validation_golden.py -v`
-Expected: `test_no_metric_family_carries_a_null_mask_arm` FAILS with `assert 70 == 0`.
+Expected: **2 failed, 3 passed** — `test_no_metric_family_carries_a_null_mask_arm` with
+`assert 70 == 0`, AND `test_the_arm_comes_from_the_mask_rather_than_a_literal` with
+`assert [None, 'state_total'] == ['state_total']`. An earlier draft named only the first, so the
+second reads as an unpredicted failure.
 
 - [ ] **Step 4: Give the report its arm**
 
@@ -2240,7 +2299,9 @@ In `src/logging_employment/contracts.py`, insert after `VALIDATION_METRIC_SCHEMA
 #
 # `wape` is the one column that may be NULL: an estimator that declined every cell has no error,
 # not zero error, and `scoreboard._best` filters on that rather than sorting nulls first. Every
-# other column is non-null by construction and `VALIDATION_REQUIRED_NON_NULL` says so.
+# other column is non-null by construction — measured on the committed golden, zero nulls in all
+# twelve. (Task 12's `VALIDATION_REQUIRED_NON_NULL` then declares them; it does not exist yet at
+# this point in the plan, so this comment does not cite it.)
 VALIDATION_SCOREBOARD_SCHEMA: dict[str, pl.DataType] = {
     "regime": pl.String,
     "seed": pl.Int64,
@@ -2283,7 +2344,8 @@ Also add a line to `build_scoreboard`'s docstring, after its existing final para
 
 ```
     The declared shape is `contracts.VALIDATION_SCOREBOARD_SCHEMA`; a column added here must be
-    added there, or `cli.py::validate_command` refuses the write.
+    added there; Task 12 makes `cli.py::validate_command` refuse the write. (Today it gates
+    `validation_metrics` only — the scoreboard gate does not exist until that task.)
 ```
 
 - [ ] **Step 4b: Shape the harness's three empty-run fallbacks**
@@ -2501,7 +2563,9 @@ package-wide is out of scope.
 
 **Files:**
 - Modify: `src/logging_employment/contracts.py` (after `VALIDATION_SCOREBOARD_SCHEMA`)
-- Modify: `src/logging_employment/cli.py:442-459`
+- Modify: `src/logging_employment/cli.py:422` (the import) and `:442-447` (the comment plus the
+  single `validate_frame` call). NOT `:442-459` as an earlier draft said — `:449-459` is the
+  `hashes` dict, which this task does not touch.
 - Test: `tests/unit/test_contracts_validation.py` (extend),
   `tests/integration/test_validate_cli.py` (verify unchanged)
 
@@ -2560,7 +2624,8 @@ def test_wape_is_not_required_because_an_all_declining_estimator_has_no_error():
 - [ ] **Step 2: Run it to make sure it fails**
 
 Run: `uv run pytest tests/unit/test_contracts_validation.py -v`
-Expected: FAIL — no `assert_required_columns_present`.
+Expected: FAIL, 4 of 4 — two on the missing `assert_required_columns_present`, and two that never
+reach it, failing on the missing module constant `VALIDATION_REQUIRED_NON_NULL`.
 
 - [ ] **Step 3: Declare the required columns and the assertion**
 
@@ -2760,9 +2825,11 @@ behaviour change. V1 must be asserted, not assumed.
   over the committed golden): `test_the_scoreboard_is_unchanged_by_everything_in_this_plan` passes
   in full today — height 70, `mask_arm` uniques `['state_total']`, `wape` null count 13, 7 distinct
   regimes — and `test_no_scoring_regime_gained_or_lost_a_score`'s seven-name set is already exact.
-  In the V4 test, four of the six names already carry their reason; only the `2026-09-08` clause
-  (Task 4) and the ``excluded by `validation.include_`` clause (Task 8) are new. These are
-  REGRESSIONS, not new behaviour: if one goes red, an earlier task broke it.
+  In the V4 test, **all six** names already carry a reason today, but only the two
+  `no eligible target` assertions pass — the four reasons for `rolling_origin`, `cbp_size_gaps`,
+  `retrospective_smoothing` and `preliminary_to_final_vintage` are all rewritten by Tasks 4, 7 and
+  8. So the two scoreboard/scored-set tests are REGRESSIONS (if one goes red, an earlier task broke
+  it); the V4 test is not.
 
 - [ ] **Step 1: Write the acceptance tests**
 
@@ -2860,6 +2927,12 @@ Expected: all pass, with the V1 test skipped when `data/staged` is absent. If V1
 different run id, a `ValidationConfig` field was added or removed somewhere in Tasks 1–12 — find it
 before doing anything else; that is the failure this test exists for.
 
+> **Run pytest from the repo root.** The skipif resolves `data/staged` ABSOLUTELY
+> (`STAGED = REPO / "data" / "staged"`) while `_input_digests` globs `cfg.storage.staged_uri`,
+> which is the RELATIVE string `data/staged`. From any other cwd the skip does not fire and the
+> digests come back empty, so V1 fails with a different run id — which Step 2 tells you to diagnose
+> as a removed config field. Check your cwd before you start bisecting the config.
+
 > **`f03023ac9f3a` was re-measured 2026-09-09 and is CURRENT.**
 > `run_id(cfg, _input_digests(cfg))` returns it against today's `config.yaml` and `data/staged`, so
 > the literal is safe to pin and a failure here really does mean a `ValidationConfig` field moved.
@@ -2879,8 +2952,28 @@ one, and several here skip without `data/staged`.
 - [ ] **Step 4: Lint**
 
 Run: `uv run ruff check src tests && uv run ruff format --check src tests`
-Expected: clean. Then `uv run interrogate src` — expected 100%, since every new `src/` function in
-this plan carries a docstring.
+Expected: `ruff check` clean — it is clean on the pre-plan tree. **`ruff format --check` is NOT.**
+Measured 2026-09-09 at the merge base, it already exits 1 over eight pre-existing files, none of
+which any task here touches:
+
+```
+src/logging_employment/constraints/cells.py      tests/audit/test_forest_sources.py
+tests/audit/test_bds_detail.py                   tests/audit/test_panel_flags.py
+tests/audit/test_cbp_regime.py                   tests/audit/test_verify_extracts.py
+tests/audit/test_ces_levels.py                   tests/integration/test_d1_acceptance.py
+```
+
+**And the two declared formatters disagree.** `uv run black --check src tests` is CLEAN — "158
+files would be left unchanged" — while `ruff format --check` wants eight. ruff >=0.9 rewrites
+`assert (x), msg` into `assert x, (msg)`; black leaves it. `pyproject.toml` declares both
+(`[tool.ruff]` and `[tool.black]`), and Step 4 happens to invoke the one that is red. Decide which
+formatter this repo actually follows before treating either result as a gate.
+
+So the check is "the list did not GROW", not "clean". Same for `uv run interrogate src`: expected
+**UNCHANGED at 98.9% FAILED**, with the same four pre-existing misses (`config.py` 1,
+`validate/recover.py` 1, `validate/regimes.py` 2). Every new `src/` function in this plan does
+carry a docstring, which is why the number must not move — but it will not reach 100%, and an
+earlier draft said it would.
 
 - [ ] **Step 5: Commit**
 
@@ -3053,7 +3146,7 @@ golden gain `metric_name` too. Directly opposed, and unresolved.
     - **M5 half-right, and instructively so**: 1,080 comparable non-declined estimates across
       2017-2023 is exact, but "max |delta| 421" was NOT reproducible — three processes at
       `seed=1024` gave 56.4, 384.1 and 102.4, and one moved only 921 of the 1,080, because
-      `cbp_size_gap_keys` draws a different sample per process (M6). WITH Task 6's sort applied the
+      `cbp_size_gap_keys` draws a different sample on every CALL (M6). WITH Task 6's sort applied the
       measurement is stable at **max |delta| 459.5, all 1,080 moved**, identical across three
       processes. M5 was a measurement of one random draw stated as a fact; Task 6's docstring now
       carries the reproducible figure and its seed.
