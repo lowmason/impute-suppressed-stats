@@ -1452,6 +1452,22 @@ that was skipped — work the close itself uncovered.
       BLS's table is recorded as `_BLS_VINTAGE_ERAS` and wired only to the refusal message. Emitted
       values for 2017-2024 are unchanged and the `:86-90` pins are byte-identical, so no `cell_id`
       and no persisted fingerprint moves.
+- [ ] **`vintage_for_year`'s refusal message pins its year but not its vintage payload.**
+      `tests/unit/test_harmonize.py::test_a_reference_year_below_the_naics_2017_era_fails_closed`
+      asserts with `pytest.raises(UnsupportedReferenceYearError, match=str(year))`, which matches
+      only the interpolated year. Demonstrated by mutation 2026-09-08: replacing
+      `bls_vintage_for_year(year)` with `bls_vintage_for_year(year - 6)` at the message site makes
+      2011's refusal read "NAICS 2002" where BLS says NAICS 2012, and the suite still reports
+      21 passed / exit 0. The era-start assertions added in `41df95b` do NOT close this — they
+      exercise `bls_vintage_for_year` in isolation and never the composed message. Found by the
+      code review of `41e17cf`; triaged Minor independently by the reviewer, by the authoring
+      session, and here, because the string is inert — raised, never emitted, never persisted, and
+      no handler reads it (`grep "except "` over `src/`, `tests/` and `scripts/` finds no handler
+      for `UnsupportedReferenceYearError`, and the CLI has no top-level
+      `LoggingEmploymentError` catch). Recorded rather than fixed so the mutation is not lost.
+      Size: quick-fix. Done when: an assertion inside the `pytest.raises` block pins the vintage
+      alongside the year (e.g. `match=r"2011.*NAICS 2012"`), and the `year - 6` mutation reddens
+      the suite.
 - [ ] **Three of `vintage_for_year`'s six call sites raise after a side effect.**
       Found by the code review of `41e17cf`, which made the function raise. In `fetching.py` the
       order per year is fetch → status check → `store.put` → `snapshot_row(...,
