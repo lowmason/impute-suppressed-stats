@@ -29,7 +29,7 @@ import polars as pl
 from ..baselines.interfaces import Estimator
 from ..baselines.runner import REGISTRY, run_baselines
 from ..config import Config
-from ..contracts import HarmonizedData, assert_declared_provenance
+from ..contracts import REGIME_SWITCHES, HarmonizedData, assert_declared_provenance
 from ..errors import ConceptViolationError
 from .leakage import assert_no_future_rows, assert_no_retained_truth
 from .mask import apply_mask
@@ -84,24 +84,32 @@ def run_pseudo_suppression(
             "hashes": [],
             "estimators": [e.estimator_id for e in estimators],
         }
-        if spec.disposition != "feasible":
-            # FAIL CLOSED when the operator asks for a regime the data cannot support. Appendix A
-            # ships `include_vintage_comparison: true`; this package defaults it false because no
-            # period in any staged table carries a second snapshot. Turning it back on must RAISE
-            # — `select_targets` owns that refusal — rather than record a disposition and move on,
-            # which would hand back an empty partition reading as "scored, nothing wrong".
-            if (
-                spec.disposition == "cannot_run_on_d1"
-                and config.validation.include_vintage_comparison
-            ):
-                select_targets(name, data.qcew_monthly, seed=0, config=config)
+        # THE SWITCH IS CHECKED FIRST, AND THE FAIL-CLOSED REFUSAL SECOND. Order matters: an
+        # operator who turns `include_vintage_comparison` ON is ASKING for a regime this window
+        # cannot support, and must get a refusal rather than a config-derived note. With the
+        # switch OFF the ask was never made, so the note is the honest record.
+        switch = REGIME_SWITCHES.get(name)
+        if switch is not None and not getattr(config.validation, switch):
+            # EXCLUDED, NOT ABSENT (R-S4C-12). A regime that vanished from the manifest when its
+            # switch went off would leave a reader unable to tell it from a regime that never
+            # existed, which is the empty-partition-as-success this stage refuses everywhere else.
+            # The declared reason rides along: the switch says why it did not run HERE, and the
+            # declared reason says why it could not have anyway.
             entry["reason"] = (
-                "no second snapshot in any staged table"
-                if spec.disposition == "cannot_run_on_d1"
-                else "no smoothing estimator in the §10 registry"
+                f"excluded by `validation.{switch}: false`; its declared reason is "
+                f"{spec.no_score_reason or 'none — this regime masks QCEW cells and would score'}"
             )
             regimes[name] = entry
             continue
+
+        if spec.disposition == "cannot_run_on_d1":
+            # FAIL CLOSED when the operator asks for a regime the data cannot support. Appendix A
+            # ships `include_vintage_comparison: true`; this package defaults it false because no
+            # period in any staged table carries a second snapshot. Reaching here means the switch
+            # is ON, so this must RAISE — `select_targets` owns that refusal — rather than record a
+            # disposition and move on, which would hand back an empty partition reading as
+            # "scored, nothing wrong".
+            select_targets(name, data.qcew_monthly, seed=0, config=config)
 
         # A `feasible` regime that scores nothing MUST say why, in ITS OWN words. The reason used
         # to be templated on `{name}` across every selectorless regime, which asserted of both that

@@ -90,3 +90,45 @@ def test_the_guard_is_binding_on_the_d1_panel():
         "2023-01",
         "2024-01",
     ]
+
+
+def test_a_regime_excluded_by_its_switch_appears_with_a_reason_naming_the_switch(fixture_run):
+    """R-S4C-12: excluded is not absent. A vanishing regime is the empty partition this refuses."""
+    for regime, switch in (
+        ("retrospective_smoothing", "include_retrospective_smoothing"),
+        ("preliminary_to_final_vintage", "include_vintage_comparison"),
+    ):
+        entry = fixture_run.manifest["regimes"][regime]
+        assert entry["n_scored"] == 0
+        assert switch in entry["reason"], entry["reason"]
+
+
+def test_the_config_derived_reason_still_carries_the_declared_one(fixture_run):
+    """The switch is WHY it did not run here; the declared reason is why it could not anyway."""
+    entry = fixture_run.manifest["regimes"]["preliminary_to_final_vintage"]
+    assert "second snapshot" in entry["reason"]
+
+
+def test_an_enabled_switch_leaves_its_regime_alone(fixture_run):
+    """`include_long_runs` ships true, so `long_consecutive_runs` must still score."""
+    entry = fixture_run.manifest["regimes"]["long_consecutive_runs"]
+    assert entry["n_scored"] > 0
+    assert "include_long_runs" not in str(entry.get("reason", ""))
+
+
+def test_turning_the_vintage_switch_on_still_raises(fixture_run):
+    """The fail-closed refusal must survive the switch gating, not be swallowed by it.
+
+    `tests/unit/test_validate_declared_regimes.py::test_asking_for_the_vintage_regime_makes_the
+    _harness_refuse` is the pin; this asserts the ORDER — the switch check must not return a
+    config-derived reason for a regime the operator explicitly asked for.
+    """
+    del fixture_run
+    cfg = _fixture_config()
+    cfg = cfg.model_copy(
+        update={
+            "validation": cfg.validation.model_copy(update={"include_vintage_comparison": True})
+        }
+    )
+    with pytest.raises(NotImplementedError, match="second snapshot"):
+        run_pseudo_suppression(HarmonizedData.load(FIXTURE), REGISTRY[:1], cfg)
