@@ -1279,8 +1279,14 @@ def cbp_size_gap_keys(data: HarmonizedData, *, seed: int, config: Config) -> lis
     when the ENTIRE `reference_year` is absent, and holing one state moves that cell to the
     declared fallback arm instead. The effect is also not local — `national_march_intensity` is a
     pooled ratio over surviving rows, so dropping one state's row moves every state's shrunk
-    intensity in that year (measured: all 1,080 non-declined `cbp_intensity` estimates across
-    2017-2023 moved, max |delta| 421 employees). Confining the effect to the holed state-year would
+    intensity in that year. RE-MEASURED 2026-09-09 at `seed=1024` WITH this sort in place: all
+    1,080 non-declined `cbp_intensity` estimates across 2017-2023 move, max |delta| **459.5**
+    employees, identical across three separate processes. The figure this docstring carried before
+    was 421, taken from a draw made BEFORE the sort — and that number was never reproducible:
+    three processes at the same seed gave max |delta| of 56.4, 384.1 and 102.4, and one of them
+    moved only 921 of the 1,080. Both halves of the old claim were artifacts of the very
+    nondeterminism this function is being fixed for. Quote the seed whenever you quote the figure.
+    Confining the effect to the holed state-year would
     require handing the estimator an ungapped national value, which `fallback.resolve_intensity`
     does not permit; that is recorded, not fixed.
 
@@ -3040,8 +3046,20 @@ golden gain `metric_name` too. Directly opposed, and unresolved.
     - Task 3's derivation yields exactly **seven** origins, `2018-01 … 2024-01`, on a panel of
       `2017-01 … 2024-12` (height 4,812).
     - M1 exact: origin `2022-01` leaves **3,024 of 4,812** rows.
-  Still unmeasured here: M4's 147 declines, M5's 1,080 moved estimates. M6 was reproduced on the
-  fixture layer instead (see Task 6 Step 2).
+  M4 and M5 were then measured too, on D1, by running `CbpIntensity` before and after
+  `apply_cbp_gap`:
+    - **M4 exact**: 147 declined rows before AND after the gap — zero additional declines,
+      confirming `CbpIntensity` declines only on a wholly absent `reference_year`.
+    - **M5 half-right, and instructively so**: 1,080 comparable non-declined estimates across
+      2017-2023 is exact, but "max |delta| 421" was NOT reproducible — three processes at
+      `seed=1024` gave 56.4, 384.1 and 102.4, and one moved only 921 of the 1,080, because
+      `cbp_size_gap_keys` draws a different sample per process (M6). WITH Task 6's sort applied the
+      measurement is stable at **max |delta| 459.5, all 1,080 moved**, identical across three
+      processes. M5 was a measurement of one random draw stated as a fact; Task 6's docstring now
+      carries the reproducible figure and its seed.
+  M6 itself was reproduced on the fixture layer (see Task 6 Step 2), so V6 needs no staged data —
+  and the experiment above independently validates that Task 6's one-line sort is what makes any
+  of these figures mean anything.
 
 **Re-measured first-hand in the project venv** (polars 1.44.1), because Task 11's correction turns
 on them: `pl.DataFrame().is_empty()` and `pl.DataFrame(schema=VALIDATION_METRIC_SCHEMA).is_empty()`
