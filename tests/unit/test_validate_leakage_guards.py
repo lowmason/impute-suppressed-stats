@@ -122,6 +122,10 @@ def test_the_retained_truth_guard_still_fires_under_python_O():
             raise SystemExit("the guard did not fire under -O")
         """
     )
-    result = subprocess.run([sys.executable, "-O", "-c", script], capture_output=True, text=True)
+    # `check=False` is deliberate: this test asserts on the return code and stderr itself, so a
+    # non-zero exit is data here rather than an error to raise on.
+    result = subprocess.run(
+        [sys.executable, "-O", "-c", script], capture_output=True, text=True, check=False
+    )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "raised"

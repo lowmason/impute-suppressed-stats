@@ -11,12 +11,14 @@ import pytest
 
 from logging_employment import contracts
 from logging_employment.baselines.runner import REGISTRY
+from logging_employment.cli import _input_digests
 from logging_employment.config import Config, load_config
 from logging_employment.contracts import (
     VALIDATION_SCORE_SCHEMA,
     HarmonizedData,
     validate_frame,
 )
+from logging_employment.runs import run_id
 from logging_employment.validate.harness import run_pseudo_suppression
 
 REPO = Path(__file__).resolve().parents[2]
@@ -212,3 +214,84 @@ def test_an_empty_run_reads_as_nothing_scored_rather_than_a_schema_failure():
 
     # The run happened; it just scored nothing. That is what the shaped frames must not obscure.
     assert len(result.manifest["regimes"]) == 13
+
+
+@pytest.mark.skipif(
+    not (STAGED / "qcew_monthly.parquet").exists(),
+    reason="data/staged is gitignored; the run id is a function of the input digests",
+)
+def test_the_shipped_config_still_resolves_to_the_stage_4_acceptance_run():
+    """V1: the sharpest single check that no config field was added or removed.
+
+    `run_id` hashes `resolved_dict(cfg)` — the whole pydantic model — and the input digests. This
+    cannot use the `staged_repo` fixture: that rewrites every `storage.*_uri` into a tmp path and
+    copies the smaller fixture parquets, so both halves of the payload differ by construction. It
+    needs the real `config.yaml` and the real staged layer.
+    """
+    cfg = load_config(REPO / "config.yaml")
+    assert run_id(cfg, _input_digests(cfg)) == "f03023ac9f3a"
+
+
+def test_no_scoring_regime_gained_or_lost_a_score(fixture_run):
+    """V2: seven regimes score on this fixture and the same seven must score after.
+
+    SEVEN, not V2's nine: nine is the D1 figure. `structural_break` and `naics_transition` find no
+    in-window month on a fixture that carries 2023 alone, so they draw no target here.
+    """
+    scoring = {
+        name for name, entry in fixture_run.manifest["regimes"].items() if entry["n_scored"] > 0
+    }
+    assert scoring == {
+        "small_cell_biased",
+        "concentration_proxy",
+        "clustered_states_within_month",
+        "long_consecutive_runs",
+        "whole_state_year_blocks",
+        "whole_seasonal_blocks",
+        "regional_blocks",
+    }
+
+
+def test_the_scoreboard_is_unchanged_by_everything_in_this_plan(fixture_run):
+    """V2: the board must be byte-identical, because nothing here touches a scored number.
+
+    The `mask_arm` the declines family gained rides on the `declines` rows, and `build_scoreboard`
+    joins those onto the point rows by (regime, seed, estimator_id) — `mask_arm` is not in the join
+    key, so the join is unmoved. This asserts that rather than trusting it.
+    """
+    board = fixture_run.scoreboard
+    assert board.height == 70
+    assert board["mask_arm"].unique().to_list() == ["state_total"]
+    assert board["wape"].null_count() == 13
+    assert board["regime"].n_unique() == 7
+
+
+def test_exactly_four_regimes_carry_a_changed_reason(fixture_run):
+    """V4: two gain measured reasons and two gain config-derived ones. No other entry moves.
+
+    SIX regimes carry a reason on this fixture, not four — measured 2026-09-08 before any of this
+    plan landed. `structural_break` and `naics_transition` draw no target here (the fixture carries
+    2023 alone, and their windows are 2020-2022), so the harness's selector-returned-nothing branch
+    already gave each of them a reason and this plan does not touch either. V4's "exactly four" is
+    about which reasons CHANGE, so this asserts the four individually and pins the other two as
+    untouched rather than asserting a set of four that was never four.
+    """
+    regimes = fixture_run.manifest["regimes"]
+    for name in ("rolling_origin", "cbp_size_gaps"):
+        assert "2026-09-08" in regimes[name]["reason"], name
+    for name in ("retrospective_smoothing", "preliminary_to_final_vintage"):
+        assert "excluded by `validation.include_" in regimes[name]["reason"], name
+    for name in ("structural_break", "naics_transition"):
+        assert (
+            "no eligible target" in regimes[name]["reason"]
+            or "carries no population" in (regimes[name]["reason"])
+        ), name
+    with_reason = {name for name, entry in regimes.items() if entry.get("reason")}
+    assert with_reason == {
+        "rolling_origin",
+        "cbp_size_gaps",
+        "retrospective_smoothing",
+        "preliminary_to_final_vintage",
+        "structural_break",
+        "naics_transition",
+    }
