@@ -1,6 +1,6 @@
 """§12.2's required no-bound fast path, and the domain refusal that guards it.
 
-§10 (spec:942) requires every baseline to use "the same source universe, training windows,
+§10 requires every baseline to use "the same source universe, training windows,
 pseudo-suppression masks, hard bounds, and reconciliation layer as the full model". This module is
 that layer's single entry point: an estimator supplies weights and calls `allocate`, and never
 computes an estimate itself. That is what makes "the same reconciliation layer" concrete rather

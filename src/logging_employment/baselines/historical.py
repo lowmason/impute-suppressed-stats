@@ -1,6 +1,6 @@
 """§10.3's five historical state-share baselines.
 
-The spec lists exactly five (spec:968-972): last observed share, same-month previous-year share,
+The spec lists exactly five (§10.3): last observed share, same-month previous-year share,
 rolling median share, exponentially weighted historical share, and a robust break-adjusted share.
 All five share one history extractor and differ only in how they reduce a series of shares to one
 number, which is the whole reason they belong in one module.

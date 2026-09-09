@@ -257,7 +257,7 @@ def test_projection_actually_reaches_a_feasible_systems_margins() -> None:
     must arrive, not merely not-diverge.
 
     Deterministic and separate rather than folded into property 4, which stays faithful to
-    spec:1740 -- 3 of its 100 trials legitimately do not move, so a strict-decrease assertion
+    §17.3 -- 3 of its 100 trials legitimately do not move, so a strict-decrease assertion
     inside its loop would be flaky by construction."""
     seed = np.array([1.0, 2.0, 3.0, 4.0])
     margins = np.vstack([np.ones(4), np.array([1.0, 1.0, 0.0, 0.0])])

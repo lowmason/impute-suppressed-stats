@@ -68,7 +68,7 @@ def scale_into_bounds(
 
     lower_sum = sum(bounds.lower[cell] for cell in cells)
     upper_sum = sum(bounds.upper_of(cell) for cell in cells)
-    # STRICT, per spec:1312-1318 -- but compared against the originated tolerance rather than in
+    # STRICT, per §12.3 -- but compared against the originated tolerance rather than in
     # exact float arithmetic. Equality is feasible: the degenerate case where every cell sits
     # exactly on a bound MUST succeed, and `>=` would fail-close on it. Exact `>` is not enough
     # either, because the sums are accumulated in floating point: seven cells at lower 0.1 sum to

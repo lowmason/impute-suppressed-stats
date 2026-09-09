@@ -3,7 +3,7 @@
 §16.2 names `Estimator` inside `run_pseudo_suppression`'s signature and never defines it. Stage 3
 defines it because Stage 4 consumes it.
 
-AN ESTIMATOR PRODUCES WEIGHTS, NOT ESTIMATES. §10 (spec:942) requires every baseline to use "the
+AN ESTIMATOR PRODUCES WEIGHTS, NOT ESTIMATES. §10 requires every baseline to use "the
 same ... reconciliation layer as the full model". The way to make that true rather than merely
 stated is to leave estimators no way to produce a number: they return q, and `reconcile.allocate`
 turns q into an estimate. §10.1 is q identically 1; §10.2 is q = establishments; §10.3 is a share
