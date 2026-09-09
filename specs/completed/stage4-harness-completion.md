@@ -4,7 +4,17 @@
 
 # Stage 4 harness completion: an honest scoreboard
 
-**Status:** APPROVED (2026-09-08) — awaiting writing-plans
+**Status:** COMPLETE (2026-09-09) — implemented by plan 12
+(`specs/plans/completed/12-stage4-harness-completion.md`).
+
+**It closed TWO of the three deferred items named below, not three.** `Appendix A's include_*
+switches gate no regime selection` and `validation_scores / validation_metrics are written without
+validate_frame` are ticked. `Wire rolling_origin and cbp_size_gaps into the harness scoring loop`
+is NOT: that item's own closure condition is "decide what each regime scores", and this spec's
+design deliberately does not — R-S4C-1 to R-S4C-3 make each regime state honestly why it scores
+nothing, which is a different deliverable, and the plan's V2 asserts that no regime gained or lost
+a score. The item stays open with its stale premises corrected. Read the `Closes:` line below as
+the spec's intent at approval, not as what shipped.
 
 **Closes:** `specs/deferred_items.md` — `Wire rolling_origin and cbp_size_gaps into the harness
 scoring loop`, `Appendix A's include_* switches gate no regime selection`, and

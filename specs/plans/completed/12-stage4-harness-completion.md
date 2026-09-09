@@ -1,5 +1,7 @@
 # Stage 4 Harness Completion Implementation Plan
 
+**Status: COMPLETE (2026-09-09)** — executed via executing-plans; deferred items in specs/deferred_items.md
+
 > **For agentic workers:** REQUIRED SUB-SKILL: implement this plan task-by-task via
 > subagent-driven-development (the default) — or executing-plans when your human partner chose
 > inline execution at the handoff. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -125,7 +127,11 @@ inside the scoring loop, so this closes a hole on the shipped path rather than a
   pl.DataFrame) -> None` and `assert_no_future_rows(frame: pl.DataFrame, *, origin: str) -> None`
   keep their signatures and now raise `LeakageError` instead of `AssertionError`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
+
+> Deviation: `test_the_guard_still_refuses_under_dash_o` also carries the `if __debug__: raise SystemExit(...)` guard, which this step's own V5 docstring invites ("apply the same guard ... if you keep it"). Without it the `-O` flag is not load-bearing there either.
+
+> Deviation: the `subprocess.run` in the V5 test needed an explicit `check=False` — ruff PLW1510, caught at Task 13 Step 4 and fixed there. A non-zero exit is data in that test, not an error to raise on.
 
 Create `tests/unit/test_validate_leakage_guards.py`:
 
@@ -261,7 +267,7 @@ truth = pl.DataFrame(
 (The test module's own import line already names both guards; only `_RETAINING_FRAME`'s
 subprocess source needs `assert_no_retained_truth`.)
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 Run: `uv run pytest tests/unit/test_validate_leakage_guards.py -v`
 Expected: a COLLECTION error, not four failures — `0 items collected, 1 error`, with
@@ -281,7 +287,7 @@ The first line IS M14: `-O` stripped the assert and the guard did not fire. The 
 `__debug__` line is load-bearing — delete it and the test passes on a non-optimised interpreter
 while witnessing nothing. After Step 4 the `-O` run prints `raised` and exits 0.
 
-- [ ] **Step 3: Add the exception class**
+- [x] **Step 3: Add the exception class**
 
 Append to `src/logging_employment/errors.py`:
 
@@ -298,7 +304,7 @@ class LeakageError(LoggingEmploymentError):
     """
 ```
 
-- [ ] **Step 4: Convert both guards**
+- [x] **Step 4: Convert both guards**
 
 In `src/logging_employment/validate/leakage.py`, add `from ..errors import LeakageError` beneath
 the existing `from ..contracts import HarmonizedData` import.
@@ -323,7 +329,7 @@ Replace the `assert` at `:95-98` with:
         )
 ```
 
-- [ ] **Step 5: Update the two existing tests that expect `AssertionError`**
+- [x] **Step 5: Update the two existing tests that expect `AssertionError`**
 
 In `tests/integration/test_validate_leakage.py`, add `LeakageError` to the imports:
 
@@ -337,7 +343,7 @@ At `:26` change `pytest.raises(AssertionError, match="future")` to
 At `:111` change `pytest.raises(AssertionError, match="employment_raw")` to
 `pytest.raises(LeakageError, match="employment_raw")`.
 
-- [ ] **Step 6: Run the tests**
+- [x] **Step 6: Run the tests**
 
 Run: `uv run pytest tests/unit/test_validate_leakage_guards.py -v`
 Expected: 4 passed — the Step 1 block defines FOUR tests, not the two an earlier draft counted.
@@ -348,7 +354,7 @@ pytestmark and reads `HarmonizedData.load(Path("data/staged"))` directly, so an 
 gives six `FileNotFoundError` FAILURES. (`data/staged` is present in this checkout and all six
 pass.) If they fail for that reason, say so rather than reporting a pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/logging_employment/errors.py src/logging_employment/validate/leakage.py \
@@ -375,7 +381,7 @@ refusal inside `assert_no_future_rows`, and it cannot live there.
   Iterator[tuple[str, pl.DataFrame]]` — same signature, now refusing eagerly. A private
   `_truncated(monthly, origins)` generator holds the yielding half.
 
-- [ ] **Step 1: Understand two things before writing anything**
+- [x] **Step 1: Understand two things before writing anything**
 
 **(a) Why the check is not in `assert_no_future_rows`.** R-S4C-5 says that function "MUST refuse an
 origin that matches no period in the frame". It cannot: the guard is handed the *truncated* frame,
@@ -393,7 +399,7 @@ returns a generator object and raises nothing, and `pytest.raises` around the ba
 validation must therefore run in a plain function that *returns* a separate generator. That is why
 `_truncated` exists.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `tests/unit/test_validate_rolling_origins.py`:
 
@@ -445,12 +451,14 @@ def test_an_in_panel_origin_still_yields_a_past_only_frame():
     assert frame.filter(pl.col("reference_month") >= "2023-07").height == 0
 ```
 
-- [ ] **Step 3: Run it to make sure it fails**
+- [x] **Step 3: Run it to make sure it fails**
 
 Run: `uv run pytest tests/unit/test_validate_rolling_origins.py -v`
 Expected: the two refusal tests FAIL with `DID NOT RAISE ConceptViolationError`; the third passes.
 
-- [ ] **Step 4: Split the eager refusal from the lazy truncation**
+- [x] **Step 4: Split the eager refusal from the lazy truncation**
+
+> Deviation: the refusal message in this block is malformed and was corrected. It duplicated the `{min(panel)}..{max(panel)}.` fragment, and the duplicate called `min(panel)`/`max(panel)` UNCONDITIONALLY — raising `ValueError` on exactly the empty panel the surrounding comment exists to guard against. Substance unchanged: the message still names the offending origins, the panel span when there is one, and the measured `origins=['banana']` witness.
 
 In `src/logging_employment/validate/regimes.py`, add `ConceptViolationError` to the errors import
 (there is none today — add `from ..errors import ConceptViolationError` beneath the
@@ -513,7 +521,7 @@ def _truncated(monthly: pl.DataFrame, origins: Sequence[str]) -> Iterator[tuple[
 > so typing the newer date would author an audit note rather than derive one. Either keep
 > `2026-09-07`, or re-run the measurement and cite the day you actually ran it.
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `uv run pytest tests/unit/test_validate_rolling_origins.py -v`
 Expected: 3 passed.
@@ -529,7 +537,7 @@ carries no `pytestmark` and no `skipif` (19 lines: imports at `:1-5`, first test
 are both in the D1 panel — verified when this plan was written, not re-checked by the 2026-09-09
 audit, which had no `data/staged` — so it stays green where the data exists.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/logging_employment/validate/regimes.py tests/unit/test_validate_rolling_origins.py
@@ -555,7 +563,7 @@ forbids. Read the Global Constraints entry on `run_id` before starting.
   not independently executable; it must follow Task 2.**
 - Produces: `rolling_origins(monthly: pl.DataFrame, *, config: Config) -> tuple[str, ...]`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/unit/test_validate_rolling_origins.py` (and add
 `from logging_employment.config import load_config` and
@@ -592,12 +600,14 @@ def test_every_derived_origin_is_accepted_by_the_generator():
     )
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 Run: `uv run pytest tests/unit/test_validate_rolling_origins.py -v`
 Expected: FAIL — `ImportError: cannot import name 'rolling_origins'`.
 
-- [ ] **Step 3: Implement the derivation**
+- [x] **Step 3: Implement the derivation**
+
+> Deviation: the docstring keeps this step's own forward-looking marker — the sentence about `run_pseudo_suppression` recording the origins was a PROMISE at Task 3's commit, not a measurement, and says so. Task 5 made it true.
 
 Add to `src/logging_employment/validate/regimes.py`, immediately after `_truncated`:
 
@@ -632,12 +642,12 @@ def rolling_origins(monthly: pl.DataFrame, *, config: Config) -> tuple[str, ...]
     )
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/unit/test_validate_rolling_origins.py -v`
 Expected: 6 passed.
 
-- [ ] **Step 5: Confirm the D1 derivation matches the docstring**
+- [x] **Step 5: Confirm the D1 derivation matches the docstring**
 
 Run:
 
@@ -656,7 +666,7 @@ Expected: `('2018-01', '2019-01', '2020-01', '2021-01', '2022-01', '2023-01', '2
 If `data/staged` is absent, skip this step and say so in the task report — do not report the
 docstring's seven origins as verified when you did not verify them.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/logging_employment/validate/regimes.py tests/unit/test_validate_rolling_origins.py
@@ -692,7 +702,7 @@ the one shipped verbatim in `runs/f03023ac9f3a/validation_manifest.json`.
   - Task 5 reads `spec.mechanism == "frame_truncation"`; **Task 8** reads `spec.no_score_reason`
     (Task 7 never mentions the field).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_validate_regime_mechanisms.py`:
 
@@ -771,12 +781,12 @@ def test_no_reason_defers_the_question_to_a_later_plan():
         assert "not yet" not in lowered, name
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 Run: `uv run pytest tests/unit/test_validate_regime_mechanisms.py -v`
 Expected: FAIL — `ImportError: cannot import name 'REGIME_MECHANISMS'`.
 
-- [ ] **Step 3: Declare the mechanisms and the reasons**
+- [x] **Step 3: Declare the mechanisms and the reasons**
 
 In `src/logging_employment/validate/regimes.py`, insert above `RegimeSpec` (after the
 `CENSUS_DIVISIONS` block):
@@ -875,7 +885,7 @@ class RegimeSpec:
             )
 ```
 
-- [ ] **Step 4: Delete the first `REGIME_SPECS` comprehension, then rebuild the second**
+- [x] **Step 4: Delete the first `REGIME_SPECS` comprehension, then rebuild the second**
 
 `REGIME_SPECS` is built twice today — at `:218-226` and again at `:373-381` — because `_SELECTORS`
 is mutated in between. **Delete `:218-226` entirely.** Do not edit it and do not port the new
@@ -918,7 +928,7 @@ its existing explanatory comment with one that says why there is only one:
 # `preliminary_to_final_vintage` stays out of `_SELECTORS` on purpose, so its disposition raises.
 ```
 
-- [ ] **Step 5: Run the unit test**
+- [x] **Step 5: Run the unit test**
 
 Run: `uv run pytest tests/unit/test_validate_regime_mechanisms.py -v`
 Expected: 6 passed.
@@ -932,7 +942,7 @@ module never reads `REGIME_SPECS` (the name occurs once, in a docstring at `:43`
 "5 passed" is a coincidence of it having five tests — so a green run there would witness nothing.
 Neither module skips without `data/staged`; both error.
 
-- [ ] **Step 6: Make the harness read the declared reason**
+- [x] **Step 6: Make the harness read the declared reason**
 
 In `src/logging_employment/validate/harness.py`, replace the `spec.select is None` block at
 `:106-119` with:
@@ -953,7 +963,7 @@ In `src/logging_employment/validate/harness.py`, replace the `spec.select is Non
             continue
 ```
 
-- [ ] **Step 7: Strengthen the pin test**
+- [x] **Step 7: Strengthen the pin test**
 
 R-S4C-2 requires the existing pin to reject a deferral, not merely a non-empty string. In
 `tests/integration/test_d1_validation.py`, replace the body of
@@ -978,13 +988,13 @@ Update that test's docstring to drop the sentence "Before this guard the manifes
 `feasible, scored=0`" — keep the paragraph but replace its last sentence with: "The guard now also
 refuses a reason that defers the question to a later plan rather than answering it."
 
-- [ ] **Step 8: Run the integration test**
+- [x] **Step 8: Run the integration test**
 
 Run: `uv run pytest tests/integration/test_d1_validation.py -v`
 Expected: all pass, or the whole module SKIPs when `data/staged` is absent (its pytestmark). If it
 skips, report that — a skipped module is not a passing one.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add src/logging_employment/validate/regimes.py src/logging_employment/validate/harness.py \
@@ -1010,7 +1020,7 @@ contains no future-period rows" today: `assert_no_future_rows` has zero callers 
 - Produces: `manifest["regimes"]["rolling_origin"]["origins_checked"]` — a `list[str]`, present on
   that regime's entry only.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/integration/test_stage4_acceptance.py`:
 
@@ -1078,14 +1088,14 @@ def test_only_the_truncating_regime_records_origins(fixture_run):
     assert carrying == {"rolling_origin"}
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 Run: `uv run pytest tests/integration/test_stage4_acceptance.py -v`
 Expected: **2 failed** — `AssertionError: assert 'origins_checked' in {...}` for the first test, and
 `AssertionError: assert set() == {'rolling_origin'}` for the second. Both are the TDD-predicted
 shape; an earlier draft named only the first, and its message for the second was wrong.
 
-- [ ] **Step 3: Wire the guard into the harness**
+- [x] **Step 3: Wire the guard into the harness**
 
 In `src/logging_employment/validate/harness.py`, extend the leakage import and the regimes import:
 
@@ -1116,12 +1126,12 @@ Then replace the `spec.select is None` block Task 4 wrote with:
             continue
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/integration/test_stage4_acceptance.py -v`
 Expected: 2 passed.
 
-- [ ] **Step 5: Witness the guard binding on D1**
+- [x] **Step 5: Witness the guard binding on D1**
 
 Add to `tests/integration/test_stage4_acceptance.py`:
 
@@ -1160,7 +1170,7 @@ def test_the_guard_is_binding_on_the_d1_panel():
 Run: `uv run pytest tests/integration/test_stage4_acceptance.py -v`
 Expected: 3 passed, or 2 passed + 1 skipped without `data/staged`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/logging_employment/validate/harness.py tests/integration/test_stage4_acceptance.py
@@ -1187,7 +1197,9 @@ nondeterministic selector is not reproducible, against §16.1's idempotence requ
   still have no caller in `src/`, which is what Task 4's reason now says instead of claiming
   otherwise.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
+
+> Deviation: the first test's docstring is de-duplicated. The block as written states the subprocess rationale twice in different words (an audit-merge artifact); both facts are kept — per-CALL not per-process, and the subprocess shape as a deliberate choice rather than a necessity — stated once.
 
 Create `tests/unit/test_validate_cbp_gap.py`:
 
@@ -1270,7 +1282,7 @@ def test_an_empty_key_list_returns_the_data_untouched():
     assert apply_cbp_gap(data, []) is data
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 Run: `uv run pytest tests/unit/test_validate_cbp_gap.py -v`
 Expected: `test_the_same_seed_gives_the_same_keys_in_separate_processes` FAILS with
@@ -1289,7 +1301,9 @@ proc 3: ('24', 2023), ('56', 2023), ('06', 2023), ...
 So this test needs NO `data/staged` and no `slow` marker — it reproduces the defect on a clean
 checkout, which is what makes V6 a CI-runnable check rather than a D1-only one.
 
-- [ ] **Step 3: Sort before sampling, and correct the docstring**
+- [x] **Step 3: Sort before sampling, and correct the docstring**
+
+> Deviation: the D1 figures in this docstring were RE-MEASURED first-hand before being written, not copied from the plan. All reproduce exactly: 147 declined rows before AND after the gap, 1,080 comparable non-declined estimates, all 1,080 moved, max |delta| 459.5084.
 
 Replace `cbp_size_gap_keys` in `src/logging_employment/validate/regimes.py`:
 
@@ -1359,12 +1373,12 @@ def apply_cbp_gap(data: HarmonizedData, keys: Sequence[tuple[str, int]]) -> Harm
     """
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/unit/test_validate_cbp_gap.py -v`
 Expected: 3 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/validate/regimes.py tests/unit/test_validate_cbp_gap.py
@@ -1391,7 +1405,7 @@ every restatement that treated them as one has been wrong in a different way.
   `contracts.SWITCH_KINDS: tuple[str, ...]`, `contracts.REGIME_SWITCHES: dict[str, str]`. Task 8
   consumes `REGIME_SWITCHES`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_validation_switch_kinds.py`:
 
@@ -1451,12 +1465,12 @@ def test_nine_of_thirteen_regimes_have_no_switch():
     assert len(HOLDOUT_REGIMES) - len(REGIME_SWITCHES) == 9
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 Run: `uv run pytest tests/unit/test_validation_switch_kinds.py -v`
 Expected: FAIL — `ImportError: cannot import name 'REGIME_SWITCHES'`.
 
-- [ ] **Step 3: Declare the kinds**
+- [x] **Step 3: Declare the kinds**
 
 In `src/logging_employment/contracts.py`, insert immediately after the `REGIME_DISPOSITIONS` dict
 (`:401`):
@@ -1503,7 +1517,9 @@ REGIME_SWITCHES: dict[str, str] = {
 }
 ```
 
-- [ ] **Step 4: Record the kinds on `ValidationConfig`**
+- [x] **Step 4: Record the kinds on `ValidationConfig`**
+
+> Deviation: the docstring's "once Task 8 lands" is phrased without the plan-task reference, since it ships in the code — "wired in the commit after the one that declared these kinds". The honest note about the pre-wiring state is kept. `config.yaml:74-97` is cited as `config.yaml` (line pins rot); the fourteen-key claim was verified.
 
 Replace the `ValidationConfig` docstring in `src/logging_employment/config.py:174-180`:
 
@@ -1530,7 +1546,7 @@ Replace the `ValidationConfig` docstring in `src/logging_employment/config.py:17
     """
 ```
 
-- [ ] **Step 5: Amend Appendix A**
+- [x] **Step 5: Amend Appendix A**
 
 In `specs/logging-employment-spec.md`, replace the `validation:` block at `:2163-2171` with:
 
@@ -1559,12 +1575,12 @@ Leave the two `false` values in the repo's own `config.yaml` alone — Appendix 
 defaults and `config.yaml` states this deployment's, with its reasons already recorded at
 `config.yaml:81-85`.
 
-- [ ] **Step 6: Run the tests**
+- [x] **Step 6: Run the tests**
 
 Run: `uv run pytest tests/unit/test_validation_switch_kinds.py tests/unit/test_config_validation_block.py -v`
 Expected: 6 + 3 = 9 passed.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/logging_employment/contracts.py src/logging_employment/config.py \
@@ -1589,7 +1605,7 @@ so those two regimes' entries move from a disposition-derived reason to a config
 - Consumes: `contracts.REGIME_SWITCHES` (Task 7), `spec.no_score_reason` (Task 4).
 - Produces: no new symbol. The manifest's `reason` for a switched-off regime now names the switch.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/integration/test_stage4_acceptance.py`:
 
@@ -1634,7 +1650,7 @@ def test_turning_the_vintage_switch_on_still_raises(fixture_run):
         run_pseudo_suppression(HarmonizedData.load(FIXTURE), REGISTRY[:1], cfg)
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 Run: `uv run pytest tests/integration/test_stage4_acceptance.py -v`
 Expected: **1 failed, 3 passed** — only `test_a_regime_excluded_by_its_switch_appears_with_a_reason_naming_the_switch`
@@ -1643,7 +1659,7 @@ is red, because no reason names a switch today. The other three already hold:
 `harness.py:98-102` already writes "no second snapshot in any staged table" verbatim, and Task 4
 does not touch that ternary. An earlier draft predicted "the first two FAIL".
 
-- [ ] **Step 3: Gate on the switch**
+- [x] **Step 3: Gate on the switch**
 
 In `src/logging_employment/validate/harness.py`, add `REGIME_SWITCHES` to the contracts import:
 
@@ -1690,7 +1706,7 @@ place a reason is written. After this task three sites write one: the switch bra
 that branch, and the `replicates == 0` fallback at `harness.py:158-162`, which is what gives
 `structural_break` and `naics_transition` their reasons on the fixture.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/integration/test_stage4_acceptance.py tests/unit/test_validate_declared_regimes.py -v`
 Expected: all pass. `test_asking_for_the_vintage_regime_makes_the_harness_refuse` is the one to
@@ -1700,7 +1716,7 @@ Run: `uv run pytest tests/integration/test_d1_validation.py -v`
 Expected: pass or skip. `test_a_refused_regime_is_recorded_with_its_reason_and_scores_nothing`
 asserts `"second snapshot" in entry["reason"]`, which the composed reason still satisfies.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/validate/harness.py tests/integration/test_stage4_acceptance.py
@@ -1743,7 +1759,7 @@ The arithmetic, re-measured 2026-09-08: 23 produced + 3 (`mask_arm`, `replicate`
   - `harness._join_truth(results, truth, system, targets, *, regime, seed, replicate)` — gains a
     positional `targets` and a keyword `replicate`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/integration/test_stage4_acceptance.py` (add
 `from logging_employment.contracts import VALIDATION_SCORE_SCHEMA, validate_frame` to its imports):
@@ -1799,7 +1815,7 @@ def test_the_three_new_columns_are_derived_rather_than_constant(fixture_run):
     assert blackout["lookback_months_masked"].max() > single["lookback_months_masked"].max()
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 > **Add `import polars as pl` to the module here.** Task 5 created it without one (its own tests
 > never use `pl`, and carrying it there trips ruff F401 at Task 5's commit); the block above is the
@@ -1814,7 +1830,7 @@ construction whenever any regime scores. Of the three that do fail, the schema t
 plain `AssertionError` and a pytest set diff, NOT the `SchemaMismatchError` an earlier draft
 predicted: the bare `assert set(...) == set(...)` fires before `validate_frame` is ever reached.
 
-- [ ] **Step 3: Declare the six provenance columns**
+- [x] **Step 3: Declare the six provenance columns**
 
 In `src/logging_employment/contracts.py`, replace `VALIDATION_SCORE_SCHEMA` (`:407-431`):
 
@@ -1865,7 +1881,7 @@ VALIDATION_SCORE_SCHEMA: dict[str, pl.DataType] = {
 }
 ```
 
-- [ ] **Step 4: Produce the three declared columns**
+- [x] **Step 4: Produce the three declared columns**
 
 In `src/logging_employment/validate/harness.py`, add the `MaskTarget` import:
 
@@ -1966,7 +1982,7 @@ def _join_truth(
     )
 ```
 
-- [ ] **Step 5: Pass the new arguments from the loop**
+- [x] **Step 5: Pass the new arguments from the loop**
 
 In `run_pseudo_suppression`, change the seed loop header and the `_join_truth` call:
 
@@ -1986,7 +2002,7 @@ In `run_pseudo_suppression`, change the seed loop header and the `_join_truth` c
 
 Leave the five metric emit calls alone — Task 10 changes them.
 
-- [ ] **Step 6: Run the tests**
+- [x] **Step 6: Run the tests**
 
 Run: `uv run pytest tests/integration/test_stage4_acceptance.py -v`
 Expected: all pass.
@@ -1994,7 +2010,7 @@ Expected: all pass.
 Run: `uv run pytest tests/integration/test_validation_golden.py -v`
 Expected: pass — the golden is the METRICS table, which this task does not touch.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/logging_employment/contracts.py src/logging_employment/validate/harness.py \
@@ -2028,7 +2044,7 @@ figure, not the golden's.
 - Produces: `decline_and_basis_report(scores: pl.DataFrame, *, regime: str, seed: int, arm: str) ->
   pl.DataFrame` — now matching its four siblings' signature exactly.
 
-- [ ] **Step 1: Note the corrected figures before you start**
+- [x] **Step 1: Note the corrected figures before you start**
 
 V3 says the golden "gains `mask_arm` values on the 270 `declines` rows". Measured 2026-09-08, that
 is the D1 count (9 scoring regimes × 10 estimators × 3 seeds = 270). The committed golden holds
@@ -2036,7 +2052,7 @@ is the D1 count (9 scoring regimes × 10 estimators × 3 seeds = 270). The commi
 `mask_arm`. Both numbers are right about their own run; V3 attaches the D1 one to the fixture file.
 Pin 70 and the property. Record this correction in your task report.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Append to `tests/integration/test_validation_golden.py`:
 
@@ -2064,7 +2080,7 @@ def test_the_arm_comes_from_the_mask_rather_than_a_literal(fixture_run):
     assert fixture_run.scores["mask_arm"].unique().to_list() == ["state_total"]
 ```
 
-- [ ] **Step 3: Run it to make sure it fails**
+- [x] **Step 3: Run it to make sure it fails**
 
 Run: `uv run pytest tests/integration/test_validation_golden.py -v`
 Expected: **2 failed, 3 passed** — `test_no_metric_family_carries_a_null_mask_arm` with
@@ -2072,7 +2088,7 @@ Expected: **2 failed, 3 passed** — `test_no_metric_family_carries_a_null_mask_
 `assert [None, 'state_total'] == ['state_total']`. An earlier draft named only the first, so the
 second reads as an unpredicted failure.
 
-- [ ] **Step 4: Give the report its arm**
+- [x] **Step 4: Give the report its arm**
 
 In `src/logging_employment/validate/metrics.py`, change the signature at `:206` and the row dict at
 `:218-235`:
@@ -2107,7 +2123,7 @@ Add `"mask_arm": arm,` to the row dict, immediately after `"seed": seed,`:
                 "estimator_id": str(estimator),
 ```
 
-- [ ] **Step 5: Derive the arm at all five emit sites**
+- [x] **Step 5: Derive the arm at all five emit sites**
 
 In `src/logging_employment/validate/harness.py`, inside the seed loop, add the derivation
 immediately after the `if not targets: continue` guard:
@@ -2129,7 +2145,7 @@ Then replace every `arm="state_total"` with `arm=arm` in the five emit calls, an
 and in the `constraint_metrics(...)` call, change its trailing `arm="state_total",` to `arm=arm,`.
 Leave that call's long explanatory comment about `_anchor_residuals` untouched.
 
-- [ ] **Step 6: Regenerate the golden, and INSPECT the diff before accepting it**
+- [x] **Step 6: Regenerate the golden, and INSPECT the diff before accepting it**
 
 V3 requires this be a deliberate, reviewed step. Write the candidate to a scratch path first:
 
@@ -2189,7 +2205,7 @@ cp /tmp/validation_metrics_candidate.parquet \
 Do NOT use a `--force-regen` style shortcut, and do not promote a candidate whose diff you did not
 read.
 
-- [ ] **Step 7: Run the tests**
+- [x] **Step 7: Run the tests**
 
 Run: `uv run pytest tests/integration/test_validation_golden.py -v`
 Expected: all pass, including `test_the_metrics_match_the_golden` and
@@ -2202,7 +2218,7 @@ it the `TypeError` stays hidden until Task 13's full suite.
 Run: `uv run pytest tests/integration/test_stage4_acceptance.py -v`
 Expected: all pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add tests/unit/test_validate_metrics_constraint.py tests/unit/test_validate_scoreboard.py \
@@ -2231,7 +2247,7 @@ Closes R-S4C-17. Note the correction: M13's aside that "§15.1 names the artifac
 - Produces: `contracts.VALIDATION_SCOREBOARD_SCHEMA: dict[str, pl.DataType]` — 13 entries. Task 12
   gates on it.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/unit/test_contracts_validation.py`:
 
@@ -2278,7 +2294,7 @@ def test_an_empty_scoreboard_still_carries_its_columns():
     assert build_scoreboard(pl.DataFrame()).height == 0
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 Run: `uv run pytest tests/unit/test_contracts_validation.py -v`
 Expected: FAIL — `AttributeError: module 'logging_employment.contracts' has no attribute
@@ -2287,7 +2303,7 @@ Expected: FAIL — `AttributeError: module 'logging_employment.contracts' has no
 `ColumnNotFoundError: unable to find column "metric_family"`, which is Step 4's deliverable. Two
 distinct red states, in that order — do not read the second as a regression.
 
-- [ ] **Step 3: Declare the schema**
+- [x] **Step 3: Declare the schema**
 
 In `src/logging_employment/contracts.py`, insert after `VALIDATION_METRIC_SCHEMA`:
 
@@ -2319,7 +2335,7 @@ VALIDATION_SCOREBOARD_SCHEMA: dict[str, pl.DataType] = {
 }
 ```
 
-- [ ] **Step 4: Give the empty board its columns**
+- [x] **Step 4: Give the empty board its columns**
 
 > **Files correction.** Task 11's Files list omits `src/logging_employment/validate/harness.py`;
 > Step 4b below edits it. Add it to the list before you start.
@@ -2348,7 +2364,7 @@ Also add a line to `build_scoreboard`'s docstring, after its existing final para
     `validation_metrics` only — the scoreboard gate does not exist until that task.)
 ```
 
-- [ ] **Step 4b: Shape the harness's three empty-run fallbacks**
+- [x] **Step 4b: Shape the harness's three empty-run fallbacks**
 
 Step 4 alone does not close the scenario it is motivated by.
 `src/logging_employment/validate/harness.py:166-168` bypasses `build_scoreboard` entirely when
@@ -2426,7 +2442,7 @@ on `if all_metrics` would be dead code. That is why the block above tests `.widt
 RESULT instead. All three are shaped regardless, because the `scores` path does have a genuinely
 empty accumulator when no regime scores at all.
 
-- [ ] **Step 4c: Pin the empty run**
+- [x] **Step 4c: Pin the empty run**
 
 Append to `tests/integration/test_stage4_acceptance.py` (Task 5's module), adding
 `from logging_employment import contracts` to its imports:
@@ -2459,7 +2475,7 @@ def test_an_empty_run_reads_as_nothing_scored_rather_than_a_schema_failure():
 Run it BEFORE Step 4b to see it fail — measured on the fixture layer, `validate_frame` on the
 metrics frame reports every column missing.
 
-- [ ] **Step 5: Add both §7 field lists to the spec**
+- [x] **Step 5: Add both §7 field lists to the spec**
 
 In `specs/logging-employment-spec.md`, insert after §7.13's closing text (`:741`, before the `---`
 at `:743`):
@@ -2533,13 +2549,13 @@ release-table list does not name this artifact; it is written to the run directo
 `validation_metrics.parquet`.
 ````
 
-- [ ] **Step 6: Run the tests**
+- [x] **Step 6: Run the tests**
 
 Run: `uv run pytest tests/unit/test_contracts_validation.py tests/integration/test_validation_golden.py tests/integration/test_stage4_acceptance.py -v`
 Expected: all pass. The acceptance module is included because Step 4c adds a test to it; without
 it, Steps 4b and 4c go unexercised by this task's own gate.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/logging_employment/contracts.py src/logging_employment/validate/scoreboard.py \
@@ -2579,7 +2595,7 @@ package-wide is out of scope.
 - Produces: `contracts.VALIDATION_REQUIRED_NON_NULL: dict[str, tuple[str, ...]]` and
   `contracts.assert_required_columns_present(frame: pl.DataFrame, name: str) -> None`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/unit/test_contracts_validation.py`:
 
@@ -2621,13 +2637,13 @@ def test_wape_is_not_required_because_an_all_declining_estimator_has_no_error():
     assert "wape" not in contracts.VALIDATION_REQUIRED_NON_NULL["validation_scoreboard"]
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 Run: `uv run pytest tests/unit/test_contracts_validation.py -v`
 Expected: FAIL, 4 of 4 — two on the missing `assert_required_columns_present`, and two that never
 reach it, failing on the missing module constant `VALIDATION_REQUIRED_NON_NULL`.
 
-- [ ] **Step 3: Declare the required columns and the assertion**
+- [x] **Step 3: Declare the required columns and the assertion**
 
 In `src/logging_employment/contracts.py`, insert after `VALIDATION_SCOREBOARD_SCHEMA`:
 
@@ -2732,7 +2748,7 @@ def assert_required_columns_present(frame: pl.DataFrame, name: str) -> None:
         )
 ```
 
-- [ ] **Step 4: Gate all three tables at the write site**
+- [x] **Step 4: Gate all three tables at the write site**
 
 In `src/logging_employment/cli.py`, extend the `validate_command` import at `:422`:
 
@@ -2766,7 +2782,7 @@ Replace the comment and single gate at `:442-447` with:
         assert_required_columns_present(frame, table)
 ```
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `uv run pytest tests/unit/test_contracts_validation.py -v`
 Expected: all pass.
@@ -2798,7 +2814,7 @@ for f, s, n in ((r.scores, VALIDATION_SCORE_SCHEMA, 'validation_scores'),
 
 Expected: three `OK` lines.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/logging_employment/contracts.py src/logging_employment/cli.py \
@@ -2831,7 +2847,7 @@ behaviour change. V1 must be asserted, not assumed.
   8. So the two scoreboard/scored-set tests are REGRESSIONS (if one goes red, an earlier task broke
   it); the V4 test is not.
 
-- [ ] **Step 1: Write the acceptance tests**
+- [x] **Step 1: Write the acceptance tests**
 
 Append to `tests/integration/test_stage4_acceptance.py` (add
 `from logging_employment.cli import _input_digests` and
@@ -2920,7 +2936,7 @@ def test_exactly_four_regimes_carry_a_changed_reason(fixture_run):
     }
 ```
 
-- [ ] **Step 2: Run them**
+- [x] **Step 2: Run them**
 
 Run: `uv run pytest tests/integration/test_stage4_acceptance.py -v`
 Expected: all pass, with the V1 test skipped when `data/staged` is absent. If V1 fails with a
@@ -2943,7 +2959,11 @@ before doing anything else; that is the failure this test exists for.
 > `logging-estimates validate` at pre-edit HEAD reproduced all four artifacts BYTE-IDENTICALLY
 > (11m35s). See Step 2b.
 
-- [ ] **Step 2b: Witness V2's byte-identity on D1**
+- [x] **Step 2b: Witness V2's byte-identity on D1**
+
+> Deviation: `diff -r` over the whole run directory was REPLACED, because it would misdiagnose. Three of the four artifacts are SUPPOSED to move — `validation_scores` (23→26 columns, Task 9), `validation_manifest.json` (`origins_checked` + four rewritten reasons, Tasks 4/5/8) and `validation_metrics` (270 null `mask_arm` filled, Task 10) — and this step treats any divergence as "a number moved, go bisect Tasks 1–12". What ran instead: the single-file digest V2 actually claims, plus a deliberate per-artifact attribution. RESULT: `validation_scoreboard.parquet` is BYTE-IDENTICAL (`d4e1187b…d63ca6`), nine regimes score, and every other difference is attributed to the task that intended it. `validate` writes only those four files and does not touch `schema_manifest.json`.
+
+> Deviation: comparing `validation_scores` column-by-column at matching positions reports two FALSE movers (`seed`, `masked_constraint_set_hash`). `build.write_parquet_deterministic` orders on the natural key plus every remaining column as tiebreak, so three new columns legitimately reorder the rows. Join-aligned on (regime, seed, estimator_id, cell_id), NO shared column moved; `seed` is Int32→Int64 with identical values, which is R-S4C-18's intended fix.
 
 Spec V2 says the `validation_scoreboard` output MUST be byte-identical. **That is a D1 acceptance,
 not something the tests above can assert.** They run on the committed fixture, whose board is
@@ -2974,14 +2994,18 @@ If the post-plan run DIVERGES, this plan moved a number and something in Tasks 1
 declaration exercise it claims to be. Diff the metrics table to find which family moved before
 touching the scoreboard.
 
-- [ ] **Step 3: Run the full suite**
+- [x] **Step 3: Run the full suite**
+
+> Deviation: measured 672 passed, 0 failed, 0 SKIPPED in 413s — nothing skipped, because `data/staged` is present in this checkout. Run from the repo root.
 
 Run: `uv run pytest tests/unit tests/integration -q`
 Expected: green. The suite runs in parallel and includes `slow` tests; wall clock is the slowest
 module. Report the exact counts, including skips — a skipped integration module is not a passing
 one, and several here skip without `data/staged`.
 
-- [ ] **Step 4: Lint**
+- [x] **Step 4: Lint**
+
+> Deviation: Task 0 landed first, so these gates are REAL rather than expected-red. `ruff check src tests` clean, `ruff format --check src tests` clean (171 files), `interrogate src` PASSED at 100%. `ruff check` found one genuine finding of mine (PLW1510 in the Task 1 V5 test) — fixed, not waived. `black` no longer exists in this repo.
 
 Run: `uv run ruff check src tests && uv run ruff format --check src tests`
 Expected: `ruff check` clean — it is clean on the pre-plan tree. **`ruff format --check` is NOT.**
@@ -3007,7 +3031,7 @@ So the check is "the list did not GROW", not "clean". Same for `uv run interroga
 carry a docstring, which is why the number must not move — but it will not reach 100%, and an
 earlier draft said it would.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/integration/test_stage4_acceptance.py

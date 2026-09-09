@@ -1132,7 +1132,18 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       tests". `rolling_origin_frames` is tested (`tests/unit/test_validate_temporal_regimes.py:11`);
       the CBP pair is not. `cbp_size_gap_keys` and `apply_cbp_gap` have no test AND no caller
       anywhere in `src/`, `tests/` or `scripts/` — both halves are dead, so "implemented" means
-      "defined" for that regime and wiring it is the larger of the two jobs. (b) This used to say
+      "defined" for that regime and wiring it is the larger of the two jobs.
+      **PARTLY OVERTAKEN by plan 12 (2026-09-09); the item stays open because neither regime
+      scores, which is what closes it.** Three of its premises are now stale. (i) The CBP pair has
+      a test — `tests/unit/test_validate_cbp_gap.py` — and `cbp_size_gap_keys` was NONDETERMINISTIC
+      when this was written, drawing a different key set on every CALL, so any wiring built on the
+      old behaviour would not have reproduced. It sorts before sampling now. (ii) `rolling_origin`
+      is no longer inert on the live path: `run_pseudo_suppression` runs `assert_no_future_rows` at
+      each panel-derived origin and records them in the manifest as `origins_checked` (seven on
+      D1). It still scores nothing. (iii) The `reason` this item credits is no longer a `{name}`
+      template — each regime declares its own, and the CBP one no longer claims an entry point
+      nothing calls. What remains to close is unchanged and is the hard half: decide what each
+      regime SCORES. (b) This used to say
       `select_targets` returns `[]` for them. It is never called: `harness.py:112-119` short-circuits
       on `spec.select is None` BEFORE the `select_targets` call at `:122`, because neither name is in
       `regimes._SELECTORS`. `select_targets`' own `return []` is latent, reachable only by a direct
@@ -1159,17 +1170,19 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       the zero clip, so an incremental form would remove another factor of n. Revisit if
       `replicates_per_regime` is raised from 3 seeds toward Appendix A's 20 replicates, where the
       plan's ~2.2 h estimate applies.
-- [ ] **`validation_scores` / `validation_metrics` are written without `validate_frame`.**
-      `contracts.VALIDATION_SCORE_SCHEMA` and `VALIDATION_METRIC_SCHEMA` are declared (plan Task 2)
-      and the metric emitters' union matches `VALIDATION_METRIC_SCHEMA` exactly — verified during
-      execution and asserted by
-      `tests/integration/test_d1_validation.py::test_the_harness_produces_metrics_that_match_the_declared_schema`.
-      But `cli.py::validate_command` calls `write_parquet_deterministic` directly without a
-      `validate_frame` gate, and `validation_scores` is never checked against
-      `VALIDATION_SCORE_SCHEMA` at all — it carries `baseline_results`' columns plus the joined
-      ones, which is a superset. Either widen the loop that gates the other persisted tables to
-      cover these two, or narrow the scores frame to its declared schema before writing. The plan
-      declared both schemas and wired neither into the writer.
+- [x] **`validation_scores` / `validation_metrics` are written without `validate_frame`.**
+      → done in plan 12 (2026-09-09). `cli.py::validate_command` now gates all THREE persisted
+      validation tables — `validation_scoreboard` was ungated too, and undeclared — on both
+      `validate_frame` and a new `assert_required_columns_present`.
+      **The "superset" premise was FALSE and is the reason this took a schema change rather than a
+      one-line gate.** Measured: 23 columns produced against 20 declared, 17 in common — so three
+      DECLARED columns were produced by nothing and six produced ones were declared nowhere.
+      Neither disposition offered here ("widen the loop", "narrow the frame") was correct: the
+      frame gained `mask_arm`, `replicate` and `lookback_months_masked`, the schema gained the six
+      provenance columns `run_baselines` already wrote, and both sets are now 26. The nullity gate
+      is separate because `validate_frame` compares columns and dtypes and
+      `dict[str, pl.DataType]` has no nullability slot — which is how a NULL `mask_arm` on every
+      `declines` row (270 of 270 on D1) passed the schema gate it was already subject to.
 - [x] **"Preferred transparent baseline" is undefined against §10.8's rung exclusion.**
       `validate/scoreboard.py::preferred_baseline` returns the lowest-WAPE estimator that scored
       anything. On the D1 acceptance run (`runs/f03023ac9f3a`, 2026-09-07) that named
@@ -1343,7 +1356,23 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       item below, which now inherits a decided
       question rather than an open one — on the scoring arm the flag names something the harness
       must refuse, not something it should start doing.
-- [ ] **Appendix A's `include_*` switches gate no regime selection.**
+- [x] **Appendix A's `include_*` switches gate no regime selection.**
+      → done in plan 12 (2026-09-09). The mapping was DECIDED, not guessed at: the seven flags are
+      three different kinds of thing, declared in `contracts.VALIDATION_SWITCH_KINDS` and
+      classified by `tests/unit/test_validation_switch_kinds.py`, which derives the switch set from
+      `ValidationConfig.model_fields` so a new flag fails until it is classified. Four are regime
+      switches, mapped in `contracts.REGIME_SWITCHES` and read by `run_pseudo_suppression`; two
+      name INV-009 mask LABELS, exactly as this item suspected; one names a design with no
+      implementation and is an operand of `_refuse_a_random_mask_only_design`, which is why that
+      validator "refuses a configuration that would in fact have run every regime" — it is
+      excluding the random-mask-only DESIGN, not selecting regimes. Nine of the thirteen regimes
+      have no switch, so the set was never a partition and no flag was deleted. An excluded regime
+      stays in the manifest with a reason naming its switch (R-S4C-12), and the switch is checked
+      BEFORE the fail-closed refusal so that turning `include_vintage_comparison` ON still raises.
+      Appendix A now states all three kinds. NOTE the constraint that shaped this: no field could
+      be added or removed, because `runs.run_id` hashes `resolved_dict` over the whole model —
+      "delete the flags that name nothing" would have orphaned every run directory.
+
       `ValidationConfig` declares `include_random_mask_sanity_check`, `include_primary_like`,
       `include_complementary_like`, `include_long_runs`, `include_rolling_origin`,
       `include_retrospective_smoothing` and `include_vintage_comparison` (plan Task 1), and
@@ -1481,3 +1510,47 @@ that was skipped — work the close itself uncovered.
       refusal cost a message instead of an orphan.
       Size: quick-fix. Done when: `fetch_source` refuses an out-of-range window before its first
       `store.put`, with a test that asserts the store is untouched after the refusal.
+
+## 12-stage4-harness-completion — 2026-09-09
+
+- [ ] **`assert_declared_provenance` does not check `mask_arm` against `MASK_ARMS`.**
+      `contracts.MASK_ARMS` is the declared pair `('state_total', 'national_size')`, and
+      `contracts.assert_declared_provenance` loops over five provenance columns without including
+      `mask_arm` — so an invented arm string reaches `validation_scores` and `validation_metrics`
+      without the fail-closed refusal every other closed set gets. Plan 12 made this reachable
+      rather than theoretical: `mask_arm` is now PRODUCED on the scores frame from
+      `MaskTarget.arm` (`validate/harness.py::_join_truth`) instead of being a literal at the emit
+      sites, so its value now comes from data. Not deferred for difficulty — it is roughly a
+      one-line addition to that loop plus a test — but because R-S4C-14 does not require it and
+      plan 12's V1/V2 assert that the plan moved no number, so an unrequired widening of the
+      fail-closed surface belonged outside that diff. Touches
+      `src/logging_employment/contracts.py` and `tests/unit/test_contracts_validation.py`.
+      Size: quick-fix. Done when: `assert_declared_provenance` refuses a `mask_arm` outside
+      `MASK_ARMS`, with a test in the shape of the existing `suppression_type` refusal.
+- [ ] **`metric_name` is NULL on every `declines` metrics row.**
+      Measured 2026-09-08 and still true: 70 of 70 rows on the committed golden, 270 of 270 on D1.
+      Structurally identical to the `mask_arm` defect plan 12 closed — a null persisted in
+      `validation_metrics` that `validate_frame` cannot see — and it was consciously RECORDED
+      rather than fixed (decision 2026-09-08, in that plan's Global Constraints): the family emits
+      counts rather than one named metric, and naming it would move a second column of the golden
+      beyond what V3 authorised. `contracts.VALIDATION_REQUIRED_NON_NULL["validation_metrics"]`
+      excludes it with that reason written down, and
+      `tests/unit/test_contracts_validation.py::test_metric_name_is_not_required_and_the_reason_is_recorded`
+      pins the exclusion. Touches `src/logging_employment/validate/metrics.py`,
+      `src/logging_employment/contracts.py`, and regenerates
+      `tests/fixtures/validation/validation_metrics_golden.parquet`.
+      Size: quick-fix. Revisit if: a consumer needs to group `validation_metrics` on
+      `metric_name` without special-casing the `declines` family — at which point delete that test
+      and give the family names for its six counts.
+- [ ] **The CBP gap's effect is pooled, not confined to the holed state-year.**
+      `apply_cbp_gap` removes one state-year, but `national_march_intensity` is a pooled ratio over
+      surviving rows, so every state's shrunk intensity in that year moves. Re-measured 2026-09-09
+      at `seed=1024` on D1 with the determinism fix in place: all 1,080 non-declined
+      `cbp_intensity` estimates across 2017-2023 move, max |delta| 459.5 employees, identical
+      across three processes. Recorded in `validate/regimes.py::cbp_size_gap_keys`'s docstring and
+      deliberately not fixed — confining the effect would require handing the estimator an
+      ungapped national value, which `baselines/fallback.py::resolve_intensity` does not permit.
+      This matters to whoever closes the wiring item above: a regime that scores `cbp_size_gaps`
+      will be scoring a perturbation of every state, not of the holed one.
+      Size: design. Revisit if: `cbp_size_gaps` is wired to score, or `resolve_intensity` gains a
+      way to take a caller-supplied national intensity.

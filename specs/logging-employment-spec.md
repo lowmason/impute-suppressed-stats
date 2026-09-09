@@ -2483,3 +2483,30 @@ Other §21 rows keep their Appendix A defaults until a stage's plan or finding c
 > all live in the roadmap's Stage 3 block — and that block has already been amended once (plan 9
 > superseded its `MAX_SCALE_RATIO` contract). A second copy is how the two would drift, which is
 > the failure this stamp exists to prevent rather than commit.
+
+
+- Roadmap: specs/logging-employment-spec-roadmap.md, Stage 4 — on plan completion, tick the stage and re-validate later stages against what shipped.
+> Stage 4: COMPLETE (2026-09-09) — implemented by plan 11
+> (specs/plans/completed/11-stage4-logging-employment-spec.md) and completed by plan 12
+> (specs/plans/completed/12-stage4-harness-completion.md).
+> Next: resume the roadmap.
+>
+> **The substance is not duplicated here**, for the reason the Stage 3 stamp gives: what Stage 4
+> shipped, the contract changes later stages inherit, and the D1 measurements live in the
+> roadmap's Stage 4 block, which plan 12 amended. Two things a Stage 5 reader must take from it
+> rather than assume:
+>
+> - **Stage 5's promotion comparand is `runs/f03023ac9f3a/validation_scoreboard.parquet`, and it
+>   is CURRENT.** Re-measured 2026-09-09: a full `logging-estimates validate` reproduces it
+>   byte-identically at `d4e1187b6e736b3e10b1310894f75a6d00a6bd3ae17a6b5a65523dc4cad63ca6`, and
+>   `run_id(cfg, _input_digests(cfg))` still resolves to that id from the shipped `config.yaml`.
+>   The board is `(270, 13)` over the NINE regimes that score. It is declared by
+>   `contracts.VALIDATION_SCOREBOARD_SCHEMA` and by §7.15, and `wape` is the one column that may
+>   be null — an estimator that declined every cell has no error, not zero error, so a gate that
+>   sorts nulls first would crown it.
+> - **Nine regimes score, not thirteen, and the four that do not each say why in their own
+>   words.** `rolling_origin` and `cbp_size_gaps` are `feasible / scored=0` because neither
+>   produces a `MaskTarget` — one truncates the frame, the other drops CBP state-years;
+>   `retrospective_smoothing` and `preliminary_to_final_vintage` are excluded by their config
+>   switches and remain IN the manifest saying so. Deciding what the first two SCORE is open in
+>   `specs/deferred_items.md` and is not something Stage 5 should infer a design for.
