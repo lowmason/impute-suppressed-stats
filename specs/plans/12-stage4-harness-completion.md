@@ -2938,9 +2938,41 @@ before doing anything else; that is the failure this test exists for.
 > the literal is safe to pin and a failure here really does mean a `ValidationConfig` field moved.
 > Worth knowing anyway: nothing in the repo asserted that literal before this test — its only
 > support was two prose comments (`runs.py:37`, `scoreboard.py:135`) — so nothing would have caught
-> a drift. Note the separate point that the roadmap records the on-disk `runs/f03023ac9f3a`
-> ARTIFACTS as written by code four commits stale; the run ID matching does not make those bytes
-> current.
+> a drift. And the roadmap's separate warning — that the on-disk `runs/f03023ac9f3a` ARTIFACTS came
+> from code four commits stale — is **disproven as of 2026-09-09**: a full
+> `logging-estimates validate` at pre-edit HEAD reproduced all four artifacts BYTE-IDENTICALLY
+> (11m35s). See Step 2b.
+
+- [ ] **Step 2b: Witness V2's byte-identity on D1**
+
+Spec V2 says the `validation_scoreboard` output MUST be byte-identical. **That is a D1 acceptance,
+not something the tests above can assert.** They run on the committed fixture, whose board is
+`(70, 13)` over seven regimes; the persisted D1 board is `(270, 13)` over nine. Pinning the D1
+digest inside a `fixture_run` test would be comparing two different artifacts.
+
+It is also not a unit test: the run costs ~11.5 minutes. Do it once, here, by hand.
+
+```bash
+# `runs/` is gitignored and unrecoverable — freeze the reference BEFORE the first source edit:
+#   mkdir -p runs/_baseline_pre_stage4c && cp -R runs/f03023ac9f3a runs/_baseline_pre_stage4c/shipped
+uv run logging-estimates validate --config config.yaml
+diff -r runs/f03023ac9f3a runs/_baseline_pre_stage4c/shipped && echo "V2 HOLDS: byte-identical"
+```
+
+The pre-edit reference, measured 2026-09-09 at the merge base:
+
+```
+d4e1187b6e736b3e10b1310894f75a6d00a6bd3ae17a6b5a65523dc4cad63ca6  validation_scoreboard.parquet
+```
+
+All four artifacts (`scoreboard`, `metrics`, `scores`, `manifest.json`) matched on that pre-edit
+run, so the comparison is known to be a real gate rather than one that passes vacuously. That run
+also independently confirmed V2's "nine regimes score" (the four that do not are `cbp_size_gaps`,
+`preliminary_to_final_vintage`, `retrospective_smoothing`, `rolling_origin`).
+
+If the post-plan run DIVERGES, this plan moved a number and something in Tasks 1–12 is not the
+declaration exercise it claims to be. Diff the metrics table to find which family moved before
+touching the scoreboard.
 
 - [ ] **Step 3: Run the full suite**
 
@@ -3240,10 +3272,17 @@ So give Task 13 the byte assertion the spec actually asks for, against
 assertions beside it. They do different jobs: the hash says *something* moved, the properties say
 *what* — and on a 13-column board that difference is the whole debugging cost.
 
-**Confirm before relying on it.** Row-count agreement is not byte-identity. Run
-`uv run logging-estimates validate --config config.yaml` once at pre-edit HEAD and check the
-scoreboard's sha256 against the digest above. That run REWRITES `runs/f03023ac9f3a/` — which is
-exactly why the freeze exists; restore from `runs/_baseline_pre_stage4c/shipped` if it diverges.
-If it does diverge, the byte assertion is not viable and the properties stand alone; say so rather
-than pinning a hash no run reproduces.
+**CONFIRMED 2026-09-09.** Row-count agreement is not byte-identity, so it was measured: a full
+`uv run logging-estimates validate --config config.yaml` at pre-edit HEAD (11m35s) reproduced
+**all four** artifacts byte-identically — scoreboard, metrics, scores and manifest. Parquet output
+in this pipeline is byte-reproducible, which is not automatic (writer metadata and compression
+routinely make semantically-identical frames differ on disk); `build.write_parquet_deterministic`
+is why. The freeze turned out unnecessary for recovery — but that was only knowable afterwards,
+and `runs/` is unrecoverable from git.
+
+**One correction to how this lands.** The byte check does NOT go in Task 13's `fixture_run` tests:
+that board is `(70, 13)` over seven regimes and the frozen D1 board is `(270, 13)` over nine, so
+the digest belongs to a different artifact. It is a one-off D1 acceptance — Task 13 Step 2b — and
+the four property assertions stay where they are, doing the job the hash cannot: saying *what*
+moved rather than *that* something did.
 
