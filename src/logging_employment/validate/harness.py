@@ -139,6 +139,7 @@ def run_pseudo_suppression(
             targets = select_targets(name, data.qcew_monthly, seed=seed, config=config)
             if not targets:
                 continue
+            arm = _mask_arm(targets)
             masked, truth = apply_mask(data, targets)
             assert_no_retained_truth(masked, truth)
             system = mask_and_solve(data, targets, config)
@@ -151,12 +152,10 @@ def run_pseudo_suppression(
             # scope by, so this is the only place the guarantee can be made. See the function.
             assert_scored_cells_are_primary_like(scored)
             all_scores.append(scored)
-            all_metrics.append(point_metrics(scored, regime=name, seed=seed, arm="state_total"))
-            all_metrics.append(bound_metrics(scored, regime=name, seed=seed, arm="state_total"))
-            all_metrics.append(decline_and_basis_report(scored, regime=name, seed=seed))
-            all_metrics.append(
-                probabilistic_metrics(scored, regime=name, seed=seed, arm="state_total")
-            )
+            all_metrics.append(point_metrics(scored, regime=name, seed=seed, arm=arm))
+            all_metrics.append(bound_metrics(scored, regime=name, seed=seed, arm=arm))
+            all_metrics.append(decline_and_basis_report(scored, regime=name, seed=seed, arm=arm))
+            all_metrics.append(probabilistic_metrics(scored, regime=name, seed=seed, arm=arm))
             all_metrics.append(
                 constraint_metrics(
                     scored,
@@ -168,7 +167,7 @@ def run_pseudo_suppression(
                     _anchor_residuals(results),
                     regime=name,
                     seed=seed,
-                    arm="state_total",
+                    arm=arm,
                 )
             )
             entry["replicates"] = int(entry["replicates"]) + 1

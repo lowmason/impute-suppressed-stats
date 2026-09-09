@@ -70,3 +70,26 @@ def test_the_golden_covers_every_estimator_and_a_composed_arm(fixture_run):
     # The own/fallback split is the signal plan 10's composed refusals need; it must not be null.
     assert fixture_run.scoreboard["n_own_estimator"].null_count() == 0
     assert fixture_run.scoreboard["n_establishment_fallback"].null_count() == 0
+
+
+def test_no_metric_family_carries_a_null_mask_arm(fixture_run):
+    """M12: the `declines` family carried a NULL `mask_arm` on 70 of 70 rows here, 270 of 270 on D1.
+
+    `validation_metrics` IS gated by `validate_frame` and the gate did not see it: `validate_frame`
+    compares columns and dtypes, and `dict[str, pl.DataType]` has no nullability slot. The cause
+    was that `decline_and_basis_report` took no `arm` parameter while its four siblings did.
+    """
+    assert fixture_run.metrics["mask_arm"].null_count() == 0
+    declines = fixture_run.metrics.filter(pl.col("metric_family") == "declines")
+    assert declines.height == 70
+    assert declines["mask_arm"].unique().to_list() == ["state_total"]
+
+
+def test_the_arm_comes_from_the_mask_rather_than_a_literal(fixture_run):
+    """R-S4C-16: `MaskTarget.arm` was read by nothing; this is its first consumer.
+
+    Every selector builds `state_total` targets today, so the VALUE does not change — which is
+    exactly why the literal survived. What changes is where it comes from.
+    """
+    assert fixture_run.metrics["mask_arm"].unique().to_list() == ["state_total"]
+    assert fixture_run.scores["mask_arm"].unique().to_list() == ["state_total"]

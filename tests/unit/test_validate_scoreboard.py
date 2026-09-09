@@ -42,7 +42,9 @@ def _metrics():
     return pl.concat(
         [
             point_metrics(scores, regime="small_cell_biased", seed=1024, arm="state_total"),
-            decline_and_basis_report(scores, regime="small_cell_biased", seed=1024),
+            decline_and_basis_report(
+                scores, regime="small_cell_biased", seed=1024, arm="state_total"
+            ),
         ],
         how="diagonal",
     )
@@ -116,7 +118,7 @@ def _seed_metrics(
     return pl.concat(
         [
             point_metrics(scores, regime=regime, seed=seed, arm="state_total"),
-            decline_and_basis_report(scores, regime=regime, seed=seed),
+            decline_and_basis_report(scores, regime=regime, seed=seed, arm="state_total"),
         ],
         how="diagonal",
     )

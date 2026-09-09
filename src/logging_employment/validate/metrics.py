@@ -203,7 +203,9 @@ def probabilistic_metrics(
     return pl.DataFrame(rows)
 
 
-def decline_and_basis_report(scores: pl.DataFrame, *, regime: str, seed: int) -> pl.DataFrame:
+def decline_and_basis_report(
+    scores: pl.DataFrame, *, regime: str, seed: int, arm: str
+) -> pl.DataFrame:
     """§13.8's R-COMP-10 report: decline counts by kind AND weight basis, per method per regime.
 
     The weight-basis half is not redundant. Plan 10's `BreakAdjustedShare` refusals reuse the
@@ -211,6 +213,16 @@ def decline_and_basis_report(scores: pl.DataFrame, *, regime: str, seed: int) ->
     `weight_basis = 'establishment_fallback'` and NO `decline_kind`. A report built from decline
     counts alone therefore shows §10.3 variant 5 as fully covered. Measured on D1,
     `share_break_adjusted` is 226 own / 1,001 fallback against its three siblings' 327/900.
+
+    `arm` matches the four sibling emitters. Without it this family wrote a NULL `mask_arm` on
+    every row it produced — 70 of 70 on the committed fixture, 270 of 270 on D1, against zero nulls
+    in each of the other four families — and that null was persisted in `validation_metrics`
+    without ever failing `validate_frame`. The damage stops at that table: `build_scoreboard`'s
+    `basis` frame selects only (`regime`, `seed`, `estimator_id`, `n_own_estimator`,
+    `n_establishment_fallback`) and drops `mask_arm` before the join, so the board takes its
+    `mask_arm` from the point rows alone, where it is non-null on all 350 of them. (1,168 is the
+    whole golden table, on which `mask_arm` IS null 70 times — those 70 are exactly this family's
+    rows, which is the defect, not a counterexample to it.)
     """
     rows: list[dict[str, object]] = []
     for (estimator,), group in scores.group_by("estimator_id", maintain_order=True):
@@ -218,6 +230,7 @@ def decline_and_basis_report(scores: pl.DataFrame, *, regime: str, seed: int) ->
             {
                 "regime": regime,
                 "seed": seed,
+                "mask_arm": arm,
                 "estimator_id": str(estimator),
                 "metric_family": "declines",
                 "denominator": float(group.height),
