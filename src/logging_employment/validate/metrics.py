@@ -221,8 +221,10 @@ def decline_and_basis_report(
     `basis` frame selects only (`regime`, `seed`, `estimator_id`, `n_own_estimator`,
     `n_establishment_fallback`) and drops `mask_arm` before the join, so the board takes its
     `mask_arm` from the point rows alone, where it is non-null on all 350 of them. (1,168 is the
-    whole golden table, on which `mask_arm` IS null 70 times — those 70 are exactly this family's
-    rows, which is the defect, not a counterexample to it.)
+    whole golden table, on which `mask_arm` WAS null 70 times before this parameter existed — those
+    70 were exactly this family's rows, which is the defect, not a counterexample to it. The
+    committed golden was regenerated when `arm` landed and now has zero nulls; the diff was
+    inspected first and `mask_arm` was the only column that moved.)
     """
     rows: list[dict[str, object]] = []
     for (estimator,), group in scores.group_by("estimator_id", maintain_order=True):

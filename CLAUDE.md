@@ -120,8 +120,9 @@ synthetic masks. Outputs land in `runs/<run_id>/` beside one JSON manifest per c
   (plan 12's Task 0): the two disagreed on eight files — ruff >=0.9 rewrites `assert (x), msg`
   into `assert x, (msg)` and black leaves it — and `pyproject.toml` declared both, so "is the tree
   formatted?" depended on which command you ran. Format `src tests`, **never `ruff format .`**:
-  measured, it rewrites `except (A, B):` into PEP 758's `except A, B:` in three `scripts/audit/`
-  files whose PEP 723 headers declare `>=3.12`, where that syntax does not parse. The reason now
+  measured, it rewrites `except (A, B):` into PEP 758's `except A, B:` in two `scripts/audit/`
+  files (`forest_sources.py`, `qcew_routes.py`) whose PEP 723 headers declare `>=3.12`, where that
+  syntax does not parse. The reason now
   lives beside `[tool.ruff]`. Lint is scope-dependent the same way: `ruff check src tests` is
   **clean**, while `ruff check .` reports 24 findings (ISC004, TRY004, UP037, RUF100, RET501,
   UP047) that all live in `scripts/`. `interrogate src` is `fail-under = 100` and now **passes at

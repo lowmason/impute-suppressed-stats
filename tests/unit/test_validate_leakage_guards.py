@@ -70,7 +70,8 @@ def test_the_guard_still_refuses_under_dash_o():
     assert done.stdout.strip() == "REFUSED"
 
 
-# V5 IS ABOUT THE OTHER GUARD. Spec V5 (`specs/stage4-harness-completion.md`) requires a test that
+# V5 IS ABOUT THE OTHER GUARD. Spec V5 (`specs/completed/stage4-harness-completion.md`, retired
+# there when plan 12 completed) requires a test that
 # "feeding retained truth to `assert_no_retained_truth` raises under `-O`" — and that is the guard
 # with the live `src/` caller (`harness.py`, inside the scoring loop). `assert_no_future_rows` has
 # ZERO callers in `src/` until Task 5 of plan 12. The two tests above therefore witness the guard
@@ -98,13 +99,14 @@ def test_retained_truth_raises_a_typed_error():
 
 
 def test_the_retained_truth_guard_still_fires_under_python_O():
-    """V5, and the ONLY test here where the `-O` flag is load-bearing.
+    """V5: the guard on the LIVE scoring path, refusing under `-O`.
 
     `if __debug__: raise SystemExit(...)` is the whole point. Without it this test passes
     identically with `-O` deleted — because after the typed conversion the guard raises
     `LeakageError` on every interpreter, so "it raised" witnesses the typed conversion, not the
     optimisation. The `__debug__` check proves the subprocess really was optimised before the guard
-    was called.
+    was called. `test_the_guard_still_refuses_under_dash_o` above carries the same guard for the
+    same reason; what makes THIS one V5 is which function it calls, not the flag.
     """
     # Dedent ONLY the appended half. `_RETAINING_FRAME` already sits at column 0, so dedenting the
     # CONCATENATION finds a common prefix of "" and strips nothing, leaving this half indented and

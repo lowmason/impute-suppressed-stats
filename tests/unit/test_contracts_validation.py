@@ -102,3 +102,16 @@ def test_metric_name_is_not_required_and_the_reason_is_recorded():
 
 def test_wape_is_not_required_because_an_all_declining_estimator_has_no_error():
     assert "wape" not in contracts.VALIDATION_REQUIRED_NON_NULL["validation_scoreboard"]
+
+
+def test_a_required_column_missing_entirely_is_refused():
+    """The gate is named for presence, so absence must fail — it used to be silently skipped.
+
+    Measured before the fix: a one-column frame passed the `validation_metrics` gate without a word
+    about its eight missing columns. `validate_frame` runs first at the only production call site,
+    so this was never a live hole; but the two callers in `tests/` reach this function without it.
+    """
+    with pytest.raises(ConceptViolationError, match="absent from the frame"):
+        contracts.assert_required_columns_present(
+            pl.DataFrame({"unrelated": [1]}), "validation_metrics"
+        )

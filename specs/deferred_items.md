@@ -299,9 +299,11 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       formatted?" depended on which command you ran. THE TRAP THIS ITEM FOUND SURVIVES THE
       SWITCH, and is the reason the removal was not a straight deletion: `ruff` takes its target
       from the same `requires-python` and rewrites the same `except (A, B):` in the same PEP 723
-      scripts (re-measured, three files). There is no per-file target-version, and a global
-      `target-version = "py312"` would silently retarget every pyupgrade rule for `src/`, so the
-      guard is now SCOPE — format `src tests`, never `ruff format .` — recorded beside
+      scripts (re-measured 2026-09-09: TWO files, `forest_sources.py` and `qcew_routes.py`, not the
+      three first written here). A global `target-version = "py312"` would silently retarget every
+      pyupgrade rule for `src/`; ruff has no per-file target-version WITHIN one config, though it
+      does resolve a nearest-ancestor config per file, so a `scripts/audit/ruff.toml` is a real
+      alternative that was not taken. The guard is instead SCOPE — format `src tests`, never `ruff format .` — recorded beside
       `[tool.ruff]` and in `CLAUDE.md`. Read this item's last sentence as history, not as
       configuration that exists.
 - [x] **The bulk-route branch is exercised only under a synthetic boundary.**
@@ -1154,9 +1156,10 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       template — each regime declares its own, and the CBP one no longer claims an entry point
       nothing calls. What remains to close is unchanged and is the hard half: decide what each
       regime SCORES. (b) This used to say
-      `select_targets` returns `[]` for them. It is never called: `harness.py:112-119` short-circuits
-      on `spec.select is None` BEFORE the `select_targets` call at `:122`, because neither name is in
-      `regimes._SELECTORS`. `select_targets`' own `return []` is latent, reachable only by a direct
+      `select_targets` returns `[]` for them. It is never called: `run_pseudo_suppression`
+      short-circuits on `spec.select is None` BEFORE its `select_targets` call, because neither
+      name is in `regimes._SELECTORS`. (Line pins dropped 2026-09-09 — plan 12 moved this code
+      while editing this very bullet, which is how they went stale.) `select_targets`' own `return []` is latent, reachable only by a direct
       caller — so a fix aimed at `select_targets` alone would never run. The plan specified the two mechanisms (Tasks 11 and
       12) but never specified their wiring into Task 18's loop, and inventing a design during
       execution was out of scope. The harness now records an explicit `reason` on each so the

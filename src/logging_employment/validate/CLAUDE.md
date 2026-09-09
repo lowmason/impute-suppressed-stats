@@ -8,23 +8,37 @@ restriction, §16.2 → `harness.run_pseudo_suppression`.
 
 ## Read this first: the config knobs do not do what they look like
 
-- **No `include_*` flag decides which regimes run.** That is `contracts.REGIME_DISPOSITIONS` plus
-  membership in `regimes._SELECTORS`; `include_long_runs: false` does not stop
-  `long_consecutive_runs` being masked and scored. Only `include_vintage_comparison` is read at run
-  time (`harness.py::run_pseudo_suppression`). Five more — `primary_like`, `complementary_like`, `long_runs`,
-  `rolling_origin`, `retrospective_smoothing` — are read *only* by
-  `ValidationConfig._refuse_a_random_mask_only_design` (`config.py::ValidationConfig`-218`), which raises at
-  config-load time if every designed regime is off (§13.2 forbids random masking as the only
-  design). `include_random_mask_sanity_check` (`config.py::ValidationConfig`) is read nowhere at all, and no
-  random-mask regime exists in `contracts.HOLDOUT_REGIMES`.
+- **FOUR of the seven `include_*` flags gate their regime; the other three do not, and the
+  difference is declared.** CORRECTED 2026-09-09 (plan 12) — this bullet used to say no flag
+  decided anything, which is no longer true. `contracts.VALIDATION_SWITCH_KINDS` classifies all
+  seven into three kinds, and `tests/unit/test_validation_switch_kinds.py` derives the switch set
+  from `ValidationConfig.model_fields`, so a new flag fails until it is classified.
+  - **regime switches** (`include_long_runs`, `include_rolling_origin`,
+    `include_retrospective_smoothing`, `include_vintage_comparison`) — mapped regime→switch in
+    `contracts.REGIME_SWITCHES` and read by `harness.py::run_pseudo_suppression`.
+    `include_long_runs: false` now DOES stop `long_consecutive_runs` scoring. **Excluded is not
+    absent**: the regime keeps its manifest entry, with a reason naming the switch. The switch is
+    checked BEFORE the fail-closed refusal, so turning `include_vintage_comparison` ON still
+    raises rather than returning a config-derived note.
+  - **mask-label switches** (`include_primary_like`, `include_complementary_like`) — §13.2 steps 3
+    and 8. They name the INV-009 LABEL a masked cell carries, not a regime, and gate no selection.
+  - **design-validity operand** (`include_random_mask_sanity_check`) — read only by
+    `ValidationConfig._refuse_a_random_mask_only_design`, and the ONLY flag absent from that
+    validator's disjunction: it names the design §13.2 prohibits, not one of the designed regimes
+    that satisfies it. No implementation, and no random-mask regime in `contracts.HOLDOUT_REGIMES`.
+  Nine of the thirteen regimes have no switch at all, so the set was never a partition of §13.3.
+  NO FIELD MAY BE ADDED OR REMOVED — `runs.run_id` hashes `resolved_dict` over the whole model, so
+  either direction orphans every run directory.
 - **`replicates_per_regime` sizes the MASK, not the loop.** It is the target count a selector
   draws; the harness loops once per entry in `pseudo_suppression_seeds`. An earlier docstring read
   it the other way and the correction is recorded in `harness.py`'s module docstring.
-- **`REGIME_SPECS` is built twice in `regimes.py`** (`:218` and again at `:373`) — the second
-  build exists because `structural_break` and `naics_transition` are registered into `_SELECTORS`
-  after the first comprehension. Registering a selector without rebuilding leaves `select=None`,
-  and the harness then reports the regime as "does not mask QCEW cells" — a silent no-op wearing a
-  reason string.
+- **`REGIME_SPECS` is built ONCE**, at the foot of `regimes.py`, after every selector is
+  registered. CORRECTED 2026-09-09 (plan 12) — it used to be built twice, and the first dict was
+  always stale. `RegimeSpec.__post_init__` now refuses a spec whose mechanism, selector and reason
+  disagree, which is an IMPORT-TIME invariant rather than a test: the stale first pass would raise
+  at import, so deleting it was forced rather than tidying. Registering a selector without a
+  matching `mechanism` is therefore no longer a silent no-op wearing a reason string — it is an
+  `ConceptViolationError` before the module finishes loading.
 
 ## The boundary
 
@@ -38,18 +52,35 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
   the implementation takes the whole `Config` (it needs `config.constraints` for `solve_bounds` and
   the full object for `run_baselines`) and defaults it to `None` only so §16.2's argument *order*
   survives. A `None` raises `ConceptViolationError` — a bare `assert` would vanish under `-O`.
-- **Schema enforcement is asymmetric.** `metrics` is gated by `validate_frame(...,
-  VALIDATION_METRIC_SCHEMA, ...)` in `cli.py` before the write; `scores` deliberately is not.
-  `contracts.VALIDATION_SCORE_SCHEMA` declares `replicate`, `mask_arm` and
-  `lookback_months_masked` and the scores frame carries none of them — `_join_truth` emits
-  `run_baselines`' columns plus `truth`, `suppression_type`, the masked bounds, `regime`, `seed`,
-  `masked_constraint_set_hash`. Narrowing it is a deferred decision, and that deferred item is
-  itself stale: it says *both* tables are ungated.
-- **The mask arm is the literal `"state_total"` at every call site** — `harness.py` passes
-  `arm="state_total"` at `:135`, `:136`, `:139`, `:152`. `national_size` is declared in
-  `contracts.MASK_ARMS` and implemented (`recover.mask_and_solve_size`, `mask.apply_size_mask`) but
-  nothing scores it: the §10 baselines estimate state totals, not size classes. `scoreboard._best`'s
-  two-arm refusal guards a future wiring, not a live branch.
+- **ALL THREE persisted tables are gated, on schema AND on nullity.** CORRECTED 2026-09-09 (plan
+  12) — enforcement used to be asymmetric, with `scores` ungated on the grounds that its columns
+  were "a superset" of the declared schema. That was false in both directions: 23 produced against
+  20 declared, 17 in common. `cli.py::validate_command` now loops over `validation_scores`,
+  `validation_metrics` and `validation_scoreboard`, calling `validate_frame` and then
+  `assert_required_columns_present`. The scores frame carries all 26 declared columns, `replicate`,
+  `mask_arm` and `lookback_months_masked` among them.
+  **The nullity pass is separate on purpose**: `validate_frame` compares names and dtypes, and
+  `dict[str, pl.DataType]` has no nullability slot — which is how a NULL `mask_arm` on every
+  `declines` row passed a gate it was already subject to. `contracts.VALIDATION_REQUIRED_NON_NULL`
+  is a second, NARROWER declaration beside the schemas, not an extension of them; adding
+  nullability to every schema in `contracts.py` is explicitly out of scope.
+- **`constraint_set_hash` is null on every scored row, and that is the data, not a bug.** It rides
+  in from `run_baselines`, which does not populate it on this path — measured 2026-09-09, 12,530 of
+  12,530 nulls on D1. `masked_constraint_set_hash` is the one that carries a value (0 nulls) and is
+  the hash of the masked system this replicate actually solved. The two are DIFFERENT columns and
+  neither is a rename of the other, so neither is dropped as a duplicate; but do not read
+  `constraint_set_hash` as an available join key. `VALIDATION_REQUIRED_NON_NULL` correctly omits
+  it.
+- **The mask arm is DERIVED from the mask, not a literal.** CORRECTED 2026-09-09 (plan 12) — every
+  emit site used to pass `arm="state_total"` verbatim. `harness._mask_arm(targets)` now reads
+  `MaskTarget.arm` (its first consumer anywhere in the package) and refuses a replicate spanning
+  two arms, and the scores frame carries the arm PER ROW. The VALUE does not change, because every
+  selector still builds `state_total` targets — which is exactly why the literal survived so long.
+  `national_size` is declared in `contracts.MASK_ARMS` and implemented
+  (`recover.mask_and_solve_size`, `mask.apply_size_mask`) but nothing scores it: the §10 baselines
+  estimate state totals, not size classes. `scoreboard._best`'s two-arm refusal guards a future
+  wiring, not a live branch. NOTE `contracts.assert_declared_provenance` still does NOT check
+  `mask_arm` against `MASK_ARMS` — an open item in `specs/deferred_items.md`.
 - **A regime that scores nothing must say why.** Every manifest entry with `n_scored == 0` carries
   a `reason`, pinned by
   `test_d1_validation.py::test_no_regime_reports_zero_scores_without_saying_why`. The empty
@@ -62,10 +93,23 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
   `MaskTarget`. `harness` short-circuits on `spec.select is None` *before* calling `select_targets`,
   so that function's own `return []` is unreachable for them and a fix aimed there would never run.
   `specs/deferred_items.md` has the open item "Wire `rolling_origin` and `cbp_size_gaps` into the
-  harness scoring loop".
-- `regimes.cbp_size_gap_keys` and `regimes.apply_cbp_gap` have **no caller and no
-  test** anywhere in `src/`, `tests/` or `scripts/`; the only mention is a comment at
-  `harness.py::run_pseudo_suppression`. `propensity.complementary_partners` has no production caller either (only
+  harness scoring loop" — still open, because closing it means deciding what each regime SCORES.
+  UPDATED 2026-09-09 (plan 12): each now states its OWN measured reason from
+  `RegimeSpec.no_score_reason` rather than a `{name}` template shared between them (the shared one
+  asserted of both that they are "exercised through their own entry point", which was true of one
+  and false of the other, and shipped verbatim in `runs/f03023ac9f3a/validation_manifest.json`).
+  And `rolling_origin` is no longer inert on the live path: the harness runs
+  `leakage.assert_no_future_rows` at each origin from `regimes.rolling_origins` and records them as
+  `origins_checked` in the manifest — seven on D1, `[]` on the 12-month fixture. READ THAT GUARD
+  FOR WHAT IT IS: `_truncated` filters `reference_month < origin` and the guard refuses
+  `>= origin`, so on this composition it cannot fail. Its value is as a regression detector over
+  the truncation, not as an independent check, and `origins_checked` is what distinguishes a guard
+  that ran nowhere from one that ran everywhere.
+- `regimes.cbp_size_gap_keys` and `regimes.apply_cbp_gap` have **no production caller** in `src/`.
+  They DO have a test as of 2026-09-09 — `tests/unit/test_validate_cbp_gap.py`, which pins §16.1
+  idempotence across processes, the state-year grain, and the empty-key identity. CORRECTED: this
+  bullet used to say "no caller and no test", and the missing test is why the nondeterminism below
+  survived two sibling fixes. `propensity.complementary_partners` has no production caller either (only
   `tests/unit/test_validate_complementary.py`), and
   `scoreboard.assert_scored_cells_are_primary_like` would refuse its output. That refusal message
   names the four edits that would make a second label legal; do them, or leave it unwired.
@@ -110,11 +154,14 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
   §10.1 sanity check and **gates nothing**.
 - **Selectors must sort before sampling.** `unique()` and `group_by()` give no order guarantee, so
   a seeded `sample` over them is not reproducible and breaks §16.1's idempotence MUST. Two
-  selectors were fixed; `cbp_size_gap_keys` (`regimes.py::cbp_size_gap_keys`-351`) still has the bug. The source
-  docstrings scope it "per process" and that understates it: re-measured 2026-09-09 on the
-  committed `tests/fixtures/baselines/cbp_state_size.parquet`, six consecutive `unique().sample()`
-  calls in a **single** process at one seed gave six distinct key sets. It is per *call*, so a
-  three-iteration in-process loop witnesses it — no subprocess needed.
+  selectors were fixed, and `regimes.cbp_size_gap_keys` was the third — FIXED 2026-09-09 (plan 12),
+  after surviving both earlier sweeps because it had no test. The defect was per *CALL*, not merely
+  per process: six consecutive `unique().sample()` calls in a SINGLE process at one seed gave six
+  distinct key sets on the committed `tests/fixtures/baselines/cbp_state_size.parquet`. It now
+  sorts on `("state_fips", "reference_year")` between `.unique()` and `.sample()`, and
+  `tests/unit/test_validate_cbp_gap.py` pins it across three processes. Any figure measured from
+  that selector BEFORE the sort is unreproducible and must be re-measured, not quoted — the
+  docstring's own max-|delta| number was replaced for exactly that reason.
 - `intervals` offers CRPS and refuses log score on purpose: an empirical ensemble gives -inf
   whenever the truth falls outside its range. §13.7 permits either.
 
@@ -124,14 +171,18 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
 uv run pytest tests/unit/test_validate_scoreboard.py tests/unit/test_validate_intervals.py \
   tests/unit/test_validate_metrics_point.py tests/unit/test_validate_metrics_bounds.py \
   tests/unit/test_validate_metrics_constraint.py        # 40 passed, 0.2s — no data/ needed
-uv run pytest tests/integration/test_validation_golden.py   # 3 passed, 11s — in-git fixtures
+uv run pytest tests/integration/test_validation_golden.py   # 5 passed, 11s — in-git fixtures
 uv run logging-estimates validate --config config.yaml [--estimators id,id]
 ```
 
-- **Seven of the twelve `tests/unit/test_validate_*.py` modules load `data/staged` through a bare
+- **Seven of the sixteen `tests/unit/test_validate_*.py` modules load `data/staged` through a bare
   relative path with no `skipif`**: `complementary`, `declared_regimes`, `mask`, `propensity`,
   `recover`, `regimes`, `temporal_regimes`. Measured without `data/`,
-  `pytest tests/unit/test_validate_*.py` is **34 failed, 45 passed, 0 skipped**. The *integration*
+  `pytest tests/unit/test_validate_*.py` was **34 failed, 45 passed, 0 skipped** when this glob held
+  twelve modules. The 34 failures are unchanged — none of the four modules added 2026-09-09
+  (`cbp_gap`, `leakage_guards`, `regime_mechanisms`, `rolling_origins`) reads `data/staged`, and
+  they contribute 19 further passes on a bare checkout — but the pass count has not been re-measured
+  without `data/` since. The *integration*
   modules that need it (`test_d1_validation.py`, `test_validate_cli.py`) do carry a `skipif`;
   `test_validation_golden.py` runs on `tests/fixtures/baselines/` and needs nothing. It also sets
   `replicates_per_regime: 3`, because at 20 the 12-month fixture trips `select_targets`' own

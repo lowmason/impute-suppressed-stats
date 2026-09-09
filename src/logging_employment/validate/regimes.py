@@ -481,8 +481,11 @@ def cbp_size_gap_keys(data: HarmonizedData, *, seed: int, config: Config) -> lis
     """(state_fips, reference_year) pairs whose CBP size rows this regime removes.
 
     A STATE-YEAR GAP, not a size gap, whatever the name says. `apply_cbp_gap` keys on
-    `(state_fips, reference_year)` and removes the state-year across all seven size codes — 86 rows
-    for a 20-key draw on D1. The identifiers `cbp_size_gaps` and `cbp_size_gap_keys` are NOT
+    `(state_fips, reference_year)` and removes the state-year across ALL of that year's size codes.
+    The row count is a property of the DRAW, not of the function: measured 2026-09-09 on D1, a
+    20-key draw removes 83 rows at `seed=1024`, 70 at 2048 and 73 at 4096. (This docstring said a
+    flat "86 rows for a 20-key draw", which reproduces at no seed — a single pre-sort draw quoted
+    as a constant, the same defect as the max-|delta| figure below.) The identifiers `cbp_size_gaps` and `cbp_size_gap_keys` are NOT
     renamed: `cbp_size_gaps` is a member of `contracts.HOLDOUT_REGIMES` and appears in
     `REGIME_DISPOSITIONS`, so renaming would change the manifest's regime keys for no behavioural
     gain. The mismatch is recorded where it is read.

@@ -41,10 +41,14 @@ line-length = 100
 src = ["src", "tests"]
 # FORMAT `src tests`, NEVER `.`. The PEP 723 scripts under scripts/audit/ declare
 # `requires-python = ">=3.12"` while this project declares ">=3.14", and ruff takes its target
-# from the project. Measured: `ruff format scripts` rewrites `except (ValueError, KeyError):` into
-# PEP 758's `except ValueError, KeyError:` in three of them, which then fail to parse under the
-# 3.12 their own headers promise. A global `target-version = "py312"` would fix the formatter and
-# silently retarget every pyupgrade rule for src/, so the scope is the guard instead.
+# from the project. Measured 2026-09-09: `ruff format scripts` rewrites
+# `except (ValueError, KeyError):` into PEP 758's `except ValueError, KeyError:` in TWO of them --
+# forest_sources.py and qcew_routes.py -- which then fail to parse under the 3.12 their own headers
+# promise. (Four scripts/audit files reformat in total; the other two are string-joining changes
+# and harmless.) Setting `target-version = "py312"` HERE would fix the formatter and silently
+# retarget every pyupgrade rule for src/, so the scope is the guard instead. A nested ruff.toml
+# under scripts/audit/ would also work -- ruff resolves the nearest ancestor config per file -- and
+# is the better fix if these scripts ever need formatting rather than exclusion.
 # This note inherits the reason from the [tool.black] block deleted 2026-09-09; black was dropped
 # because it and `ruff format` disagreed on eight files and nothing said which one the tree
 # followed.

@@ -120,8 +120,10 @@ def run_pseudo_suppression(
         # A `feasible` regime that scores nothing MUST say why, in ITS OWN words. The reason used
         # to be templated on `{name}` across every selectorless regime, which asserted of both that
         # the regime "is exercised through its own entry point in `validate.regimes`" — true for
-        # `rolling_origin`, false for `cbp_size_gaps`, whose entry points have no caller and no
-        # test. The false version shipped in `runs/f03023ac9f3a/validation_manifest.json`. The
+        # `rolling_origin`, false for `cbp_size_gaps`, whose entry points had no caller and no test
+        # anywhere in the package when that was measured (2026-09-08). They have a test now
+        # (`tests/unit/test_validate_cbp_gap.py`) and still no production caller. The false version
+        # shipped verbatim in `runs/f03023ac9f3a/validation_manifest.json`. The
         # reason now comes from `RegimeSpec.no_score_reason`, which is PROVABLY non-None here:
         # `__post_init__` ties `select is None` to a non-`qcew_mask` mechanism and every one of
         # those must declare a reason. Do not add an `or "..."` fallback — that fallback would be
@@ -133,6 +135,13 @@ def run_pseudo_suppression(
                 # exit criterion "a rolling-origin run provably contains no future-period rows"
                 # was discharged by nothing a run executes. The origins are recorded because a
                 # guard that ran nowhere and a guard that ran everywhere both report success.
+                # READ THE GUARD FOR WHAT IT IS: `_truncated` filters `reference_month < origin`
+                # and `assert_no_future_rows` refuses `>= origin`, so ON THIS COMPOSITION it
+                # cannot fail — it is a regression detector over the truncation, not an independent
+                # check, and a test pinning it would pin a tautology. What it buys is that a future
+                # edit to `_truncated` (a `<=`, a different column, a re-sort) stops being silent.
+                # `origins_checked` is the part that carries information a reader cannot otherwise
+                # get: it separates a vacuous run from a binding one.
                 origins = rolling_origins(data.qcew_monthly, config=config)
                 for origin, frame in rolling_origin_frames(data.qcew_monthly, origins=origins):
                     assert_no_future_rows(frame, origin=origin)

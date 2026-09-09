@@ -459,7 +459,11 @@ INTERVAL_SOURCES: tuple[str, ...] = ("rolling_residual_ensemble", "none")
 # are declared rather than dropped (R-S4C-14). `constraint_set_hash` and
 # `masked_constraint_set_hash` are BOTH here and are different columns: the first rides in from
 # `run_baselines`, the second is the hash of the masked system this replicate solved. Neither is a
-# rename of the other and neither may be dropped as a duplicate.
+# rename of the other and neither may be dropped as a duplicate. NOTE that `run_baselines` does not
+# populate the first on this path — measured 2026-09-09, `constraint_set_hash` is null on all
+# 12,530 D1 scored rows while `masked_constraint_set_hash` is non-null on all of them. It is
+# declared because R-S4C-14 declares what is produced rather than dropping it, and it is
+# deliberately absent from VALIDATION_REQUIRED_NON_NULL below; do not read it as a join key.
 VALIDATION_SCORE_SCHEMA: dict[str, pl.DataType] = {
     "regime": pl.String,
     "seed": pl.Int64,
@@ -620,6 +624,14 @@ def assert_required_columns_present(frame: pl.DataFrame, name: str) -> None:
     An unknown `name` RAISES rather than passing. A silent pass would let a caller believe a table
     was gated when the gate had nothing to say about it, which is the same class of quiet success
     this stage refuses everywhere else.
+
+    ABSENCE IS CHECKED, NOT SKIPPED, and the function is named for it. An earlier version tested
+    `if column in frame.columns and frame[column].null_count()`, so a frame missing a required
+    column entirely passed — measured, a one-column frame passed the `validation_metrics` gate
+    without a word about its eight missing columns. `validate_frame` runs first at the only
+    production call site and would have caught that, so this was never a live hole; but a gate
+    whose name promises presence and silently skips it is the quiet success this module refuses,
+    and the two callers in `tests/` reach it without `validate_frame` in front.
     """
     required = VALIDATION_REQUIRED_NON_NULL.get(name)
     if required is None:
@@ -628,10 +640,15 @@ def assert_required_columns_present(frame: pl.DataFrame, name: str) -> None:
             f"{sorted(VALIDATION_REQUIRED_NON_NULL)}. Declare its columns or do not gate it — a "
             "silent pass would read as a check that ran."
         )
+    missing = [column for column in required if column not in frame.columns]
+    if missing:
+        raise ConceptViolationError(
+            f"{name}: required column(s) absent from the frame — {', '.join(missing)}. Every "
+            "column here is one whose MEANING requires a value, so an absent one is a stronger "
+            "failure than a null one."
+        )
     offending = [
-        (column, frame[column].null_count())
-        for column in required
-        if column in frame.columns and frame[column].null_count()
+        (column, frame[column].null_count()) for column in required if frame[column].null_count()
     ]
     if offending:
         raise ConceptViolationError(
