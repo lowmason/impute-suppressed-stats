@@ -3070,10 +3070,12 @@ One has since been written; see the foot of this file.
    `runs/f03023ac9f3a` is frozen at `runs/_baseline_pre_stage4c/shipped` (`diff -r` clean, 14
    files) with SHA-256s in `runs/_baseline_pre_stage4c/DIGESTS.txt`. The V2 comparand is
    `d4e1187b6e736b3e10b1310894f75a6d00a6bd3ae17a6b5a65523dc4cad63ca6  validation_scoreboard.parquet`.
-   What this settles and what it does not: the bytes are now recoverable, but the roadmap records
-   the shipped artifacts as written by code four commits stale, so a mismatch against them is not
-   by itself a regression. Compare bytes deliberately, and re-run the harness at the pre-edit HEAD
-   if you want a reference that current inputs actually reproduce.
+   The roadmap's objection to using these bytes — that they came from code four commits stale — is
+   **itself stale.** Measured 2026-09-09: the on-disk `validation_metrics.parquet` holds 4,530 rows
+   (the roadmap's "re-measured" figure, not its "on disk" 4,536) and is dated 2026-09-08 11:27,
+   later than the 2026-09-07 16:49 file the roadmap describes. It was regenerated after that note.
+   The frozen baseline is therefore a legitimate comparand, and Decision 2 in the Execution Handoff
+   adopts the byte assertion — beside the property assertions, not instead of them.
 
 ### Left open on purpose
 
