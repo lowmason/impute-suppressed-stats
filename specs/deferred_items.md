@@ -293,7 +293,17 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       `requires-python = ">=3.14"`, and at that target it rewrites `except (A, B):` into PEP 758
       form in `qcew_routes.py` and `forest_sources.py` — PEP 723 scripts whose own headers
       promise `>=3.12`, where the result does not parse. No test catches it: the suite runs on
-      3.14. `[tool.black] target-version = ["py312"]` is now pinned in `pyproject.toml`.
+      3.14. `[tool.black] target-version = ["py312"]` was pinned in `pyproject.toml`.
+      **SUPERSEDED 2026-09-09 by plan 12's Task 0: black is gone from this repo** — it and
+      `ruff format` disagreed on eight files and `pyproject.toml` declared both, so "is the tree
+      formatted?" depended on which command you ran. THE TRAP THIS ITEM FOUND SURVIVES THE
+      SWITCH, and is the reason the removal was not a straight deletion: `ruff` takes its target
+      from the same `requires-python` and rewrites the same `except (A, B):` in the same PEP 723
+      scripts (re-measured, three files). There is no per-file target-version, and a global
+      `target-version = "py312"` would silently retarget every pyupgrade rule for `src/`, so the
+      guard is now SCOPE — format `src tests`, never `ruff format .` — recorded beside
+      `[tool.ruff]` and in `CLAUDE.md`. Read this item's last sentence as history, not as
+      configuration that exists.
 - [x] **The bulk-route branch is exercised only under a synthetic boundary.**
       Stage 0 measured `bulk_years_required = []`, so with the boundary where it
       sits today no window year routes to bulk and no live run will ever take that
