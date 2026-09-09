@@ -480,12 +480,43 @@ def _naics_transition(monthly: pl.DataFrame, seed: int, config: Config) -> list[
 def cbp_size_gap_keys(data: HarmonizedData, *, seed: int, config: Config) -> list[tuple[str, int]]:
     """(state_fips, reference_year) pairs whose CBP size rows this regime removes.
 
-    Returns CBP keys, NOT `MaskTarget`s: no QCEW cell is hidden here. The only consumer of
-    `cbp_state_size` in the estimation path is `intensity_rows`, so removing a state-year turns
-    §10.4 from an own-arm estimator into a declining one for that state-year and leaves every
-    other estimator untouched. That difference IS the metric.
+    A STATE-YEAR GAP, not a size gap, whatever the name says. `apply_cbp_gap` keys on
+    `(state_fips, reference_year)` and removes the state-year across all seven size codes — 86 rows
+    for a 20-key draw on D1. The identifiers `cbp_size_gaps` and `cbp_size_gap_keys` are NOT
+    renamed: `cbp_size_gaps` is a member of `contracts.HOLDOUT_REGIMES` and appears in
+    `REGIME_DISPOSITIONS`, so renaming would change the manifest's regime keys for no behavioural
+    gain. The mismatch is recorded where it is read.
+
+    Returns CBP keys, NOT `MaskTarget`s: no QCEW cell is hidden here, so the regime scores nothing
+    on its own. CORRECTED 2026-09-08 — this docstring used to say removal "turns §10.4 from an
+    own-arm estimator into a declining one for that state-year". Measured, that produces ZERO
+    additional declines (147 declined rows before and after): `CbpIntensity.weights` declines only
+    when the ENTIRE `reference_year` is absent, and holing one state moves that cell to the
+    declared fallback arm instead. The effect is also not local — `national_march_intensity` is a
+    pooled ratio over surviving rows, so dropping one state's row moves every state's shrunk
+    intensity in that year. RE-MEASURED 2026-09-09 at `seed=1024` WITH this sort in place: all
+    1,080 non-declined `cbp_intensity` estimates across 2017-2023 move, max |delta| **459.5**
+    employees, identical across three separate processes. The figure this docstring carried before
+    was 421, taken from a draw made BEFORE the sort — and that number was never reproducible:
+    three processes at the same seed gave max |delta| of 56.4, 384.1 and 102.4, and one of them
+    moved only 921 of the 1,080. Both halves of the old claim were artifacts of the very
+    nondeterminism this function is being fixed for. Quote the seed whenever you quote the figure.
+    Confining the effect to the holed state-year would require handing the estimator an ungapped
+    national value, which `fallback.resolve_intensity` does not permit; that is recorded, not
+    fixed.
+
+    SORT BEFORE SAMPLING. `unique()` gives no order guarantee, so a seeded sample over its output
+    draws a different key set on EVERY CALL (measured 2026-09-09: six calls in one process, six
+    distinct sets) — the same defect diagnosed and fixed twice in this file (`_clustered`,
+    `_state_year`) for breaking §16.1's idempotence MUST. It survived here because the pair had no
+    test and no caller. Measured 2026-09-08: three processes, three different 20-key sets before
+    the sort and one after.
     """
-    pool = data.cbp_state_size.select("state_fips", "reference_year").unique()
+    pool = (
+        data.cbp_state_size.select("state_fips", "reference_year")
+        .unique()
+        .sort("state_fips", "reference_year")
+    )
     drawn = pool.sample(
         n=min(config.validation.replicates_per_regime, pool.height),
         with_replacement=False,
@@ -496,7 +527,13 @@ def cbp_size_gap_keys(data: HarmonizedData, *, seed: int, config: Config) -> lis
 
 
 def apply_cbp_gap(data: HarmonizedData, keys: Sequence[tuple[str, int]]) -> HarmonizedData:
-    """Drop the named CBP state-years so §10.4 must fall back or decline."""
+    """Drop the named CBP state-years so §10.4 must fall back to the establishment arm.
+
+    NOT "fall back or decline". M4 measured zero additional declines from this gap; the figure and
+    its reasoning live in `cbp_size_gap_keys`'s docstring above and are deliberately NOT restated
+    here, so the claim has one home to correct. A STATE-YEAR gap keyed on
+    `(state_fips, reference_year)` and removed across all seven size codes.
+    """
     if not keys:
         return data
     selector = pl.struct("state_fips", "reference_year").is_in(
