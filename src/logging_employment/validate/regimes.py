@@ -20,6 +20,7 @@ import polars as pl
 
 from ..config import Config
 from ..contracts import HOLDOUT_REGIMES, REGIME_DISPOSITIONS, HarmonizedData
+from ..errors import ConceptViolationError
 from .mask import MaskTarget, eligible_targets
 from .propensity import sample_targets
 
@@ -278,7 +279,39 @@ def rolling_origin_frames(
     Reported scope: measured 2026-09-07, no §10 estimator reads a future period, so this regime
     does not separate any Stage 3 baseline. It is built now because Stage 5's model will, and
     because the guard is what makes that claim checkable rather than assumed.
+
+    THE MEMBERSHIP REFUSAL LIVES HERE AND NOT IN `assert_no_future_rows`, which is where R-S4C-5
+    places it. A truncated frame never contains its own origin — every period in it is strictly
+    below the origin by construction — so the guard cannot ask this question from the two arguments
+    it takes. It COULD be made to: give it the untruncated panel's periods as a third argument and
+    the check fits there. That was rejected because every caller would then have to thread the
+    pre-truncation universe through to a guard whose whole job is to inspect one frame, and this
+    function already holds the panel. The constraint is the guard's signature, not arithmetic.
+
+    THE REFUSAL IS EAGER, which is why `_truncated` is a separate function. A `yield` anywhere in
+    this body would defer every line of it until a caller iterated, so the check would not run on
+    the bare call — measured 2026-09-08, the inline version returned a generator and raised
+    nothing.
     """
+    panel = set(monthly["reference_month"].unique().to_list())
+    unknown = [origin for origin in origins if origin not in panel]
+    if unknown:
+        # `min`/`max` over an empty panel raises ValueError, masking the refusal, so the range
+        # clause is conditional. No caller in this package reaches it — `rolling_origins` derives
+        # origins FROM the panel, so an empty panel yields no origins and no call — but the guard
+        # is cheap and the failure mode is a confusing exception type.
+        span = f", whose months run {min(panel)}..{max(panel)}" if panel else " (which is empty)"
+        raise ConceptViolationError(
+            f"origin(s) {unknown} name no period in this panel{span}. An origin outside it "
+            "truncates nothing and leaves the §13.4 guard passing over an untruncated frame: "
+            "measured, `origins=['banana']` returned all 4,812 rows and `assert_no_future_rows` "
+            "reported no future row, because every period sorts below the string."
+        )
+    return _truncated(monthly, origins)
+
+
+def _truncated(monthly: pl.DataFrame, origins: Sequence[str]) -> Iterator[tuple[str, pl.DataFrame]]:
+    """One past-only frame per origin. Called only by `rolling_origin_frames`, after its refusal."""
     for origin in origins:
         yield origin, monthly.filter(pl.col("reference_month") < origin)
 
