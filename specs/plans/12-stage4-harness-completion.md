@@ -3047,9 +3047,9 @@ Three things about it are worth recording, because the obvious reading of that r
 **Tasks 1–13 are authoritative**, because that draft is two tasks of a thirteen-task plan and is
 simply unexecutable. But its content was not scrap, and two things have been harvested from it.
 
-**Also incomplete: this plan has no `## Execution Handoff` section.** Two of the eleven plans in
-`specs/plans/completed/` carry one — plan 8 and plan 11, the immediately preceding plan — so this
-is a weaker signal than "every plan has one", but the section writing-plans prompts for is absent.
+**It also had no `## Execution Handoff` section** — the section writing-plans prompts for, carried
+by plan 8 and plan 11 (the immediately preceding plan) among the eleven in `specs/plans/completed/`.
+One has since been written; see the foot of this file.
 
 ### Harvested from the removed draft
 
@@ -3161,3 +3161,46 @@ are both `True` (`is_empty` is height-based); `build_scoreboard(pl.DataFrame())`
 `build_scoreboard(pl.DataFrame(schema=VALIDATION_METRIC_SCHEMA))` returns `(0, 13)`. Fixture-layer
 figures (70 declines rows, seven scoring regimes, the four Task 13 board properties) were
 re-measured against the committed golden and held.
+
+## Execution Handoff
+
+**Plan complete and saved to `specs/plans/12-stage4-harness-completion.md`.**
+
+**Recommended: `/clear` (or open a new session) and execute against the saved plan** — a fresh
+session drops this planning-and-audit conversation and lets execution run on the standard model
+default. Two execution options, either session:
+
+1. **Subagent-Driven (recommended)** — a fresh subagent per task, two-stage review between tasks.
+2. **Inline Execution** — tasks executed in plan order in one session (`executing-plans`).
+
+**Execute in the MAIN checkout, not a worktree.** `data/` is gitignored and 564 MB, so a worktree
+has no staged layer: the integration modules skip silently and several unit modules fail hard. V1
+also requires the real `config.yaml` and the real `data/staged`.
+
+**Run pytest from the repo root.** The V1 skipif resolves `data/staged` absolutely while
+`_input_digests` globs it relatively; from any other cwd V1 fails with a different run id and reads
+as a removed `ValidationConfig` field.
+
+### Preconditions — all met as of 2026-09-09
+
+- `main` merged (`6dbd689`); the branch is 0 behind.
+- The shipped run is frozen at `runs/_baseline_pre_stage4c/shipped` (14 files, `diff -r` clean),
+  digests in `DIGESTS.txt`. V2's comparand is
+  `d4e1187b6e736b3e10b1310894f75a6d00a6bd3ae17a6b5a65523dc4cad63ca6  validation_scoreboard.parquet`.
+  `runs/` is gitignored and unrecoverable from git — do not delete that directory.
+- V1's `f03023ac9f3a` re-measured and CURRENT.
+- 67 of this plan's 86 code blocks were executed against the live tree and the defects they exposed
+  are fixed. The 19 unexecuted are the `git add` / `git commit` blocks and Task 10's `cp` of the
+  golden — mutations an audit must not perform, not unverified logic.
+
+### Two decisions this plan records rather than makes
+
+1. **Which formatter this repo follows.** `black --check` is clean (158 files); `ruff format
+   --check` wants 8, because ruff ≥0.9 rewrites `assert (x), msg` into `assert x, (msg)`. Both are
+   declared in `pyproject.toml`. Task 13 Step 4 invokes ruff's; treat its 8 as pre-existing and
+   check the list did not grow, or settle the question first.
+2. **What V2's "byte-identical" means.** Task 13 asserts properties of a freshly computed board,
+   not bytes. The baseline above makes the byte comparison available if you want it — but the
+   roadmap records those shipped artifacts as written by code four commits stale, so a mismatch
+   against them is not by itself a regression.
+
