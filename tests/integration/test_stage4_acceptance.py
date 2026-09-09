@@ -6,11 +6,16 @@ test says so and carries the `data/staged` skipif.
 
 from pathlib import Path
 
+import polars as pl
 import pytest
 
 from logging_employment.baselines.runner import REGISTRY
 from logging_employment.config import Config, load_config
-from logging_employment.contracts import HarmonizedData
+from logging_employment.contracts import (
+    VALIDATION_SCORE_SCHEMA,
+    HarmonizedData,
+    validate_frame,
+)
 from logging_employment.validate.harness import run_pseudo_suppression
 
 REPO = Path(__file__).resolve().parents[2]
@@ -132,3 +137,53 @@ def test_turning_the_vintage_switch_on_still_raises(fixture_run):
     )
     with pytest.raises(NotImplementedError, match="second snapshot"):
         run_pseudo_suppression(HarmonizedData.load(FIXTURE), REGISTRY[:1], cfg)
+
+
+def test_the_scores_frame_produces_exactly_what_it_declares(fixture_run):
+    """M11: 23 produced against 20 declared, overlapping in 17 — a three-way disagreement.
+
+    `cli.py` called the produced set "a superset", which it was not: three declared columns were
+    produced by nothing. Set equality, not containment, is the assertion.
+    """
+    assert set(fixture_run.scores.columns) == set(VALIDATION_SCORE_SCHEMA)
+    validate_frame(fixture_run.scores, VALIDATION_SCORE_SCHEMA, "validation_scores")
+
+
+def test_the_seed_column_is_int64_in_both_frames(fixture_run):
+    """R-S4C-18: resolved toward the DECLARATION, not by weakening the schema to Int32.
+
+    `pl.lit(seed)` infers Int32 on polars 1.44 while the metrics frame builds Int64 from Python
+    dicts, so the two disagreed. Seeds come from `config.validation.pseudo_suppression_seeds` and
+    nothing bounds them to 32 bits.
+    """
+    assert fixture_run.scores.schema["seed"] == pl.Int64
+    assert fixture_run.metrics.schema["seed"] == pl.Int64
+
+
+def test_the_two_constraint_hashes_are_different_columns(fixture_run):
+    """M11: `masked_constraint_set_hash` is not a rename of `constraint_set_hash`.
+
+    Neither may be dropped as a duplicate. The masked one is the hash of the system this replicate
+    actually solved; the unmasked one rides in from `run_baselines` and is null on this fixture.
+    """
+    assert "constraint_set_hash" in fixture_run.scores.columns
+    assert "masked_constraint_set_hash" in fixture_run.scores.columns
+    assert fixture_run.scores["masked_constraint_set_hash"].null_count() == 0
+
+
+def test_the_three_new_columns_are_derived_rather_than_constant(fixture_run):
+    """A column with one value on every row records nothing.
+
+    Two of the three legitimately have one HERE: `mask_arm` is `state_total` by design, and
+    `replicate` is `[0]` because this fixture configures a single seed — it varies only across a
+    multi-seed run. `lookback_months_masked` is the one this test actually shows varying.
+    """
+    scores = fixture_run.scores
+    assert scores["mask_arm"].null_count() == 0
+    assert scores["mask_arm"].unique().to_list() == ["state_total"]
+    assert scores["replicate"].unique().to_list() == [0]
+    # `lookback_months_masked` is the per-state masked-month count, so a blackout regime's rows
+    # must carry more than a single-month regime's.
+    blackout = scores.filter(pl.col("regime") == "long_consecutive_runs")
+    single = scores.filter(pl.col("regime") == "small_cell_biased")
+    assert blackout["lookback_months_masked"].max() > single["lookback_months_masked"].max()

@@ -447,6 +447,19 @@ INTERVAL_SOURCES: tuple[str, ...] = ("rolling_residual_ensemble", "none")
 # One row per (regime, seed, replicate, estimator, cell): the raw scored observations, including
 # the ones that were declined. Distinct in grain from VALIDATION_METRIC_SCHEMA below, and
 # conflating the two is how R-COMP-10's denominator gets lost.
+#
+# `replicate` is the INDEX OF THE SEED in `config.validation.pseudo_suppression_seeds`, so it is
+# 1:1 with `seed` on any single run and the two together are one key rather than two. It is carried
+# anyway because `pseudo_suppression_seeds` is configurable and a reader comparing two runs needs
+# the slot as well as the value. `replicates_per_regime` is a DIFFERENT number: it sizes the mask
+# (`regimes.sample_targets`), not this loop's trip count.
+#
+# The last six are the PROVENANCE columns `run_baselines` already writes and this schema used to
+# omit, which is what made a scored row auditable and the declaration wrong at the same time. They
+# are declared rather than dropped (R-S4C-14). `constraint_set_hash` and
+# `masked_constraint_set_hash` are BOTH here and are different columns: the first rides in from
+# `run_baselines`, the second is the hash of the masked system this replicate solved. Neither is a
+# rename of the other and neither may be dropped as a duplicate.
 VALIDATION_SCORE_SCHEMA: dict[str, pl.DataType] = {
     "regime": pl.String,
     "seed": pl.Int64,
@@ -468,6 +481,12 @@ VALIDATION_SCORE_SCHEMA: dict[str, pl.DataType] = {
     "masked_constraint_set_hash": pl.String,
     "lookback_months_masked": pl.Int64,
     "missing_set_size": pl.Int64,
+    "raw_weight": pl.Float64,
+    "anchor_basis": pl.String,
+    "reconciliation_status": pl.String,
+    "decline_reason": pl.String,
+    "residual": pl.Float64,
+    "constraint_set_hash": pl.String,
 }
 
 # One row per (regime, seed, estimator, metric_family): the §13.5-13.8 aggregates, each carrying

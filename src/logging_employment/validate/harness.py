@@ -32,7 +32,7 @@ from ..config import Config
 from ..contracts import REGIME_SWITCHES, HarmonizedData, assert_declared_provenance
 from ..errors import ConceptViolationError
 from .leakage import assert_no_future_rows, assert_no_retained_truth
-from .mask import apply_mask
+from .mask import MaskTarget, apply_mask
 from .metrics import (
     bound_metrics,
     constraint_metrics,
@@ -135,7 +135,7 @@ def run_pseudo_suppression(
             regimes[name] = entry
             continue
 
-        for seed in config.validation.pseudo_suppression_seeds:
+        for replicate, seed in enumerate(config.validation.pseudo_suppression_seeds):
             targets = select_targets(name, data.qcew_monthly, seed=seed, config=config)
             if not targets:
                 continue
@@ -143,7 +143,9 @@ def run_pseudo_suppression(
             assert_no_retained_truth(masked, truth)
             system = mask_and_solve(data, targets, config)
             results, _audit = run_baselines(masked, config, estimators=estimators)
-            scored = _join_truth(results, truth, system, regime=name, seed=seed)
+            scored = _join_truth(
+                results, truth, system, targets, regime=name, seed=seed, replicate=replicate
+            )
             assert_declared_provenance(scored)
             # §13.10 gates "on primary-like masks" and nothing downstream carries the label to
             # scope by, so this is the only place the guarantee can be made. See the function.
@@ -190,31 +192,87 @@ def _join_truth(
     results: pl.DataFrame,
     truth: pl.DataFrame,
     system: MaskedSystem,
+    targets: Sequence[MaskTarget],
     *,
     regime: str,
     seed: int,
+    replicate: int,
 ) -> pl.DataFrame:
-    """Attach truth, masked bounds, the INV-009 label, and the MASKED hash to the estimator rows.
+    """Attach truth, masked bounds, the INV-009 label, the MASKED hash and the mask's own shape.
 
     The bounds come from `system`, never from the run directory's shipped
     `deterministic_bounds.parquet` — that table still carries the published value for a masked
     cell, so joining it would hand the harness the answer.
 
     The truth join is INNER on purpose: it drops every cell the mask did not hide, so a scored row
-    that was never masked is impossible by construction rather than by assertion.
+    that was never masked is impossible by construction rather than by assertion. The `arms` and
+    `lookback` joins are INNER for the same reason — every surviving row was a target, so a null
+    `mask_arm` is unconstructible rather than merely unexpected. Neither can fan out: `apply_mask`
+    refuses a duplicated target, so `arms` is one row per (state, month) and `lookback` one per
+    state.
+
+    `lookback_months_masked` is the count of months THIS replicate masked for the row's state, not
+    `config.validation.minimum_unmasked_lookback_months`. The global floor would write the same
+    value on every row of every regime, which records nothing; the per-state count separates a
+    twelve-month blackout from a single-month draw, which is the distinction §13.3's grain exists
+    to make.
     """
     labelled = truth.select("state_fips", "reference_month", "truth", "suppression_type")
     bounds = system.bounds.select("cell_id", "selected_lower", "selected_upper", "bound_status")
+    arms = pl.DataFrame(
+        {
+            "state_fips": [target.state_fips for target in targets],
+            "reference_month": [target.reference_month for target in targets],
+            "mask_arm": [target.arm for target in targets],
+        },
+        schema={"state_fips": pl.String, "reference_month": pl.String, "mask_arm": pl.String},
+    )
+    masked_months: dict[str, int] = {}
+    for target in targets:
+        masked_months[target.state_fips] = masked_months.get(target.state_fips, 0) + 1
+    lookback = pl.DataFrame(
+        {
+            "state_fips": list(masked_months),
+            "lookback_months_masked": list(masked_months.values()),
+        },
+        schema={"state_fips": pl.String, "lookback_months_masked": pl.Int64},
+    )
     return (
         results.join(labelled, on=["state_fips", "reference_month"], how="inner")
         .join(bounds, on="cell_id", how="left")
+        .join(arms, on=["state_fips", "reference_month"], how="inner")
+        .join(lookback, on="state_fips", how="inner")
         .with_columns(
             pl.lit(regime).alias("regime"),
-            pl.lit(seed).alias("seed"),
+            # DTYPE DECLARED, not inferred: `pl.lit(1024)` is Int32 on polars 1.44 while the
+            # metrics frame builds Int64 from Python dicts, so the two frames disagreed on `seed`
+            # and `validate_frame` would have raised on dtype even after the column sets matched.
+            pl.lit(seed, dtype=pl.Int64).alias("seed"),
+            pl.lit(replicate, dtype=pl.Int64).alias("replicate"),
             pl.lit(system.constraint_set_hash).alias("masked_constraint_set_hash"),
             pl.col("truth").cast(pl.Float64),
         )
     )
+
+
+def _mask_arm(targets: Sequence[MaskTarget]) -> str:
+    """The single INV-009 arm this replicate masked, or a refusal if it masked two.
+
+    `MaskTarget.arm` was read by nothing anywhere in the package while every metric emit site
+    passed the literal `"state_total"`; this is its first consumer, so the field stops being
+    decorative. The scores frame carries the arm PER ROW and the metric emitters take one SCALAR
+    per (regime, seed), so a replicate spanning two arms would label every metric row with one of
+    them. `scoreboard._best` already refuses a two-arm regime downstream; refusing here names the
+    replicate that produced it rather than the board that inherited it.
+    """
+    arms = sorted({target.arm for target in targets})
+    if len(arms) != 1:
+        raise ConceptViolationError(
+            f"this replicate masked {len(arms)} mask arms ({', '.join(arms) or 'none'}); the "
+            "metric emitters take one arm per (regime, seed), and pooling a state-total metric "
+            "with a national-size one under a single label is the ambiguity §13.10 refuses"
+        )
+    return arms[0]
 
 
 def _anchor_residuals(results: pl.DataFrame) -> pl.DataFrame:
