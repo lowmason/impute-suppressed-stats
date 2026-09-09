@@ -68,7 +68,7 @@ were re-measured 2026-09-08 at `e5d4bdd`:
 | M1's truncation width | **Confirmed.** Origin `2022-01` leaves 3,024 of 4,812 rows — 1,788 removed. |
 | M14's `-O` hole | **Confirmed.** The same call raises `AssertionError` under `python` and returns silently under `python -O`. |
 | M2's malformed origin | **Confirmed**, and worse than recorded — see Task 2. |
-| **M13's aside** — "§15.1 names the artifact" | **FALSE.** `scoreboard` appears nowhere in `specs/logging-employment-spec.md`; §15.1's nine-item list stops at `validation_metrics.parquet`. The artifact is named only in the roadmap and produced by `cli.py:456`. R-S4C-17's actual obligation (a §7 field list + a `contracts.py` schema) is unaffected; Task 11 records the correction rather than repeating the claim. |
+| **M13's aside** — "§15.1 names the artifact" | **FALSE.** `scoreboard` appears nowhere in `specs/logging-employment-spec.md`; §15.1's nine-item list names no scoreboard — its *validation* entries stop at `validation_metrics.parquet`, though the list itself runs on to `disclosure_decisions`, `source_manifest`, `constraint_manifest` and `run_manifest.json` (spec `:1650-1653`). The artifact is named only in the roadmap and produced by `cli.py:456`. R-S4C-17's actual obligation (a §7 field list + a `contracts.py` schema) is unaffected; Task 11 records the correction rather than repeating the claim. |
 | **V3's "270 declines rows"** | **Wrong file.** 270 is the D1 figure (9 regimes × 10 estimators × 3 seeds). `tests/fixtures/validation/validation_metrics_golden.parquet` holds **70** (7 × 10 × 1), all with NULL `mask_arm`. Task 10 pins 70 and the property, not 270. |
 
 ---
@@ -139,8 +139,9 @@ import textwrap
 import polars as pl
 import pytest
 
+from logging_employment.contracts import HarmonizedData
 from logging_employment.errors import LeakageError
-from logging_employment.validate.leakage import assert_no_future_rows
+from logging_employment.validate.leakage import assert_no_future_rows, assert_no_retained_truth
 
 
 def test_a_future_row_is_refused_with_a_typed_error():
@@ -174,12 +175,93 @@ def test_the_guard_still_refuses_under_dash_o():
         [sys.executable, "-O", "-c", program], capture_output=True, text=True, check=True
     )
     assert done.stdout.strip() == "REFUSED"
+
+
+# V5 IS ABOUT THE OTHER GUARD. Spec V5 (`specs/stage4-harness-completion.md:278-280`) requires a
+# test that "feeding retained truth to `assert_no_retained_truth` raises under `-O`" — and that is
+# the guard with the live `src/` caller (`harness.py:126`, inside the scoring loop).
+# `assert_no_future_rows` has ZERO callers in `src/` until Task 5. The two tests above therefore
+# witness the guard that is NOT on the shipped path; these two witness the one that is.
+
+
+def _masked_frame_that_retains_the_truth() -> tuple[HarmonizedData, pl.DataFrame]:
+    """A one-row frame whose `employment_value` still equals the held-out value."""
+    data = HarmonizedData(
+        qcew_monthly=pl.DataFrame(
+            {"state_fips": ["41"], "reference_month": ["2019-06"], "employment_value": [58]}
+        ),
+        qcew_national_size=pl.DataFrame(),
+        cbp_state_size=pl.DataFrame(),
+        bridge=pl.DataFrame(),
+    )
+    truth = pl.DataFrame({"state_fips": ["41"], "reference_month": ["2019-06"], "truth": [58]})
+    return data, truth
+
+
+def test_retained_truth_raises_a_typed_error():
+    data, truth = _masked_frame_that_retains_the_truth()
+    with pytest.raises(LeakageError, match="employment_value"):
+        assert_no_retained_truth(data, truth)
+
+
+def test_the_retained_truth_guard_still_fires_under_python_O():
+    """V5, and the ONLY test here where the `-O` flag is load-bearing.
+
+    `if __debug__: raise SystemExit(...)` is the whole point. Without it this test passes
+    identically with `-O` deleted — because after Step 4 the guard raises `LeakageError` on every
+    interpreter, so "it raised" witnesses the typed conversion, not the optimisation. The
+    `__debug__` check proves the subprocess really was optimised before the guard was called.
+    Apply the same guard to `test_the_guard_still_refuses_under_dash_o` above if you keep it.
+    """
+    script = textwrap.dedent(
+        _RETAINING_FRAME
+        + """
+        if __debug__:
+            raise SystemExit("this subprocess is not optimized; -O did not take")
+        try:
+            assert_no_retained_truth(data, truth)
+        except LeakageError:
+            print("raised")
+        else:
+            raise SystemExit("the guard did not fire under -O")
+        """
+    )
+    result = subprocess.run([sys.executable, "-O", "-c", script], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "raised"
 ```
+
+`_RETAINING_FRAME` is the module-level source string the subprocess runs; put it above the
+helpers:
+
+```python
+_RETAINING_FRAME = """
+import polars as pl
+from logging_employment.contracts import HarmonizedData
+from logging_employment.errors import LeakageError
+from logging_employment.validate.leakage import assert_no_retained_truth
+
+data = HarmonizedData(
+    qcew_monthly=pl.DataFrame(
+        {"state_fips": ["41"], "reference_month": ["2019-06"], "employment_value": [58]}
+    ),
+    qcew_national_size=pl.DataFrame(),
+    cbp_state_size=pl.DataFrame(),
+    bridge=pl.DataFrame(),
+)
+truth = pl.DataFrame(
+    {"state_fips": ["41"], "reference_month": ["2019-06"], "truth": [58]}
+)
+"""
+```
+
+and widen the leakage import to
+`from logging_employment.validate.leakage import assert_no_future_rows, assert_no_retained_truth`.
 
 - [ ] **Step 2: Run it to make sure it fails**
 
 Run: `uv run pytest tests/unit/test_validate_leakage_guards.py -v`
-Expected: both FAIL — `ImportError: cannot import name 'LeakageError'`.
+Expected: all four FAIL — `ImportError: cannot import name 'LeakageError'`.
 
 - [ ] **Step 3: Add the exception class**
 
@@ -361,7 +443,7 @@ def rolling_origin_frames(
     TRUNCATION, not masking. A mask nulls a value and leaves the row; the exit criterion asks that
     the run "provably contains no future-period rows", which only removing them can satisfy.
 
-    Reported scope: measured 2026-09-08, no §10 estimator reads a future period, so this regime
+    Reported scope: measured 2026-09-07, no §10 estimator reads a future period, so this regime
     does not separate any Stage 3 baseline. It is built now because Stage 5's model will, and
     because the guard is what makes that claim checkable rather than assumed.
 
@@ -394,15 +476,24 @@ def _truncated(monthly: pl.DataFrame, origins: Sequence[str]) -> Iterator[tuple[
         yield origin, monthly.filter(pl.col("reference_month") < origin)
 ```
 
+> **Keep the `2026-09-07` date; do not advance it.** This plan as first written said
+> `measured 2026-09-08` in that docstring. `regimes.py:267` says `2026-09-07`, and the
+> "Facts re-confirmed against the working tree" table above never re-ran that measurement —
+> so typing the newer date would author an audit note rather than derive one. Either keep
+> `2026-09-07`, or re-run the measurement and cite the day you actually ran it.
+
 - [ ] **Step 5: Run the tests**
 
 Run: `uv run pytest tests/unit/test_validate_rolling_origins.py -v`
 Expected: 3 passed.
 
 Run: `uv run pytest tests/unit/test_validate_temporal_regimes.py -v`
-Expected: pass, or SKIP/fail-on-missing-data — that module loads `data/staged` at
-`test_validate_temporal_regimes.py:10`. Its origins `2020-01` and `2022-01` are both in the D1
-panel (verified), so it stays green where the data exists.
+Expected: pass where `data/staged` exists. **Without it that module ERRORS; it does not skip.** It
+carries no `pytestmark` and no `skipif` (19 lines: imports at `:1-5`, first test at `:8`), loads
+`data/staged` at `:10`, and `HarmonizedData.load` raises `FileNotFoundError`
+(`contracts.py:483-486`). Do not report that error as a skip. Its origins `2020-01` and `2022-01`
+are both in the D1 panel — verified when this plan was written, not re-checked by the 2026-09-09
+audit, which had no `data/staged` — so it stays green where the data exists.
 
 - [ ] **Step 6: Commit**
 
@@ -419,12 +510,15 @@ Supplies R-S4C-4's "configured origins" without adding a `ValidationConfig` fiel
 forbids. Read the Global Constraints entry on `run_id` before starting.
 
 **Files:**
-- Modify: `src/logging_employment/validate/regimes.py` (add after `rolling_origin_frames`)
+- Modify: `src/logging_employment/validate/regimes.py` (add immediately after `_truncated`, the
+  helper Task 2 introduces — Step 3 says the same. An earlier draft said "after
+  `rolling_origin_frames`"; the two name the same place only once Task 2 has landed.)
 - Test: `tests/unit/test_validate_rolling_origins.py` (extend)
 
 **Interfaces:**
 - Consumes: `rolling_origin_frames` refuses an out-of-panel origin (Task 2) — every origin this
-  function returns is drawn from the panel, so the pair composes without a refusal.
+  function returns is drawn from the panel, so the pair composes without a refusal. **Task 3 is
+  not independently executable; it must follow Task 2.**
 - Produces: `rolling_origins(monthly: pl.DataFrame, *, config: Config) -> tuple[str, ...]`.
 
 - [ ] **Step 1: Write the failing test**
@@ -784,9 +878,14 @@ its existing explanatory comment with one that says why there is only one:
 Run: `uv run pytest tests/unit/test_validate_regime_mechanisms.py -v`
 Expected: 6 passed.
 
-Run: `uv run pytest tests/unit/test_validate_declared_regimes.py -v`
-Expected: 5 passed — that module reads `REGIME_SPECS["retrospective_smoothing"].select is None`,
-which is unchanged.
+Run: `uv run pytest tests/unit/test_validate_temporal_regimes.py -v`
+Expected: pass where `data/staged` exists. **That is the module holding the regression this step
+guards**, at `:17-19`: `spec = REGIME_SPECS["retrospective_smoothing"]` /
+`assert spec.disposition == "vacuous_on_registry"` / `assert spec.select is None`, none of which
+Task 4 changes. An earlier draft named `tests/unit/test_validate_declared_regimes.py` here; that
+module never reads `REGIME_SPECS` (the name occurs once, in a docstring at `:43`), and its
+"5 passed" is a coincidence of it having five tests — so a green run there would witness nothing.
+Neither module skips without `data/staged`; both error.
 
 - [ ] **Step 6: Make the harness read the declared reason**
 
@@ -1165,6 +1264,22 @@ def cbp_size_gap_keys(data: HarmonizedData, *, seed: int, config: Config) -> lis
     return [(r["state_fips"], r["reference_year"]) for r in drawn.iter_rows(named=True)]
 ```
 
+Then correct the **second** CBP docstring in the same file — R-S4C-6/R-S4C-7 are not discharged
+without it. `apply_cbp_gap` at `:355-362` still opens "Drop the named CBP state-years so §10.4
+must fall back or decline.", and "or decline" is precisely the half M4 measures as false. Replace
+that one-line docstring with:
+
+```python
+def apply_cbp_gap(data: HarmonizedData, keys: list[tuple[str, int]]) -> HarmonizedData:
+    """Drop the named CBP state-years so §10.4 must fall back to the establishment arm.
+
+    NOT "fall back or decline". M4 measured zero additional declines from this gap; the figure and
+    its reasoning live in `cbp_size_gap_keys`'s docstring above and are deliberately NOT restated
+    here, so the claim has one home to correct. A STATE-YEAR gap keyed on
+    `(state_fips, reference_year)` and removed across all seven size codes.
+    """
+```
+
 - [ ] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/unit/test_validate_cbp_gap.py -v`
@@ -1186,7 +1301,8 @@ every restatement that treated them as one has been wrong in a different way.
 
 **Files:**
 - Modify: `src/logging_employment/contracts.py` (after `REGIME_DISPOSITIONS`, `:401`)
-- Modify: `src/logging_employment/config.py:173-180` (`ValidationConfig` docstring)
+- Modify: `src/logging_employment/config.py:174-180` (`ValidationConfig` docstring; `:173` is the
+  `class` line, and Step 4 states the range correctly)
 - Modify: `specs/logging-employment-spec.md:2163-2171` (Appendix A `validation` block)
 - Test: `tests/unit/test_validation_switch_kinds.py` (create)
 
@@ -1447,7 +1563,7 @@ Expected: the first two FAIL — the reason names no switch today.
 In `src/logging_employment/validate/harness.py`, add `REGIME_SWITCHES` to the contracts import:
 
 ```python
-from ..contracts import REGIME_SWITCHES, HarmonizedData, assert_declared_provenance
+from ..contracts import HarmonizedData, REGIME_SWITCHES, assert_declared_provenance
 ```
 
 Then replace the `if spec.disposition != "feasible":` block at `:87-104` with:
@@ -1521,7 +1637,10 @@ The arithmetic, re-measured 2026-09-08: 23 produced + 3 (`mask_arm`, `replicate`
 - Test: `tests/integration/test_stage4_acceptance.py` (extend)
 
 **Interfaces:**
-- Consumes: nothing from Tasks 1–8.
+- Consumes: no *source* change from Tasks 1–8 — but Step 1 appends to
+  `tests/integration/test_stage4_acceptance.py`, which **Task 5 creates**, along with the
+  module-scoped `fixture_run` its four tests take. Task 9 is therefore not standalone; it must
+  follow Task 5.
 - Produces:
   - `VALIDATION_SCORE_SCHEMA` grows to 26 entries.
   - `harness._mask_arm(targets: Sequence[MaskTarget]) -> str` — Task 10 consumes it.
@@ -1848,9 +1967,11 @@ Append to that function's docstring, before the closing quotes:
 ```
     `arm` matches the four sibling emitters. Without it this family wrote a NULL `mask_arm` on
     every row it produced — 70 of 70 on the committed fixture, 270 of 270 on D1, against zero nulls
-    in each of the other four families — and `build_scoreboard` joins these rows onto the point
-    rows by (regime, seed, estimator_id), so the null rode into every downstream read of the
-    own/fallback split without ever failing `validate_frame`.
+    in each of the other four families — and that null was persisted in `validation_metrics`
+    without ever failing `validate_frame`. The damage stops at that table: `build_scoreboard`'s
+    `basis` frame selects only (`regime`, `seed`, `estimator_id`, `n_own_estimator`,
+    `n_establishment_fallback`) and drops `mask_arm` before the join, so the board takes its
+    `mask_arm` from the point rows alone, where it is non-null on all 1,168 golden rows.
 ```
 
 Add `"mask_arm": arm,` to the row dict, immediately after `"seed": seed,`:
@@ -2001,22 +2122,42 @@ def test_the_scoreboard_schema_is_declared_and_distinct():
 
 
 def test_an_empty_scoreboard_still_carries_its_columns():
-    """`build_scoreboard` returned a bare DataFrame when no metric row existed, which no gate can
-    check: `validate_frame` would report all thirteen columns missing rather than an empty board."""
+    """An empty board must carry its columns, so a gate reads "nothing scored", not "13 missing".
+
+    WHERE THE BARE FRAME ACTUALLY COMES FROM, measured 2026-09-09 on polars 1.44.1: not from
+    `build_scoreboard`. Handed a bare `pl.DataFrame()` it RAISES `ColumnNotFoundError: unable to
+    find column "metric_family"`, and handed a schema-shaped empty metrics frame it already
+    returns a correct (0, 13) board that `validate_frame` accepts. The bare frame is written by
+    the CALLER — `validate/harness.py:168`,
+    `board = build_scoreboard(metrics) if metrics.height else pl.DataFrame()`, with the same
+    fallback for `scores` at `:166` and `metrics` at `:167`. Step 4 shapes this function anyway
+    (cheap, and it removes the raise); Step 4b shapes the harness fallbacks, which is where the
+    shipped empty path really is.
+    """
     from logging_employment.validate.scoreboard import build_scoreboard
 
-    empty = build_scoreboard(pl.DataFrame())
+    # The real path: a rowless but schema-SHAPED metrics frame, which is what Step 4b makes the
+    # harness hand over. Measured 2026-09-09 on polars 1.44.1 — this already returns (0, 13)
+    # today, so the load-bearing half of this test is the `validate_frame` call below.
+    empty = build_scoreboard(pl.DataFrame(schema=contracts.VALIDATION_METRIC_SCHEMA))
     assert empty.height == 0
     contracts.validate_frame(
         empty, contracts.VALIDATION_SCOREBOARD_SCHEMA, "validation_scoreboard"
     )
+
+    # Step 4's early return. Before it lands this line raises `ColumnNotFoundError`, not
+    # `AttributeError` — a bare frame has no `metric_family` for `headline` to filter on.
+    assert build_scoreboard(pl.DataFrame()).height == 0
 ```
 
 - [ ] **Step 2: Run it to make sure it fails**
 
 Run: `uv run pytest tests/unit/test_contracts_validation.py -v`
 Expected: FAIL — `AttributeError: module 'logging_employment.contracts' has no attribute
-'VALIDATION_SCOREBOARD_SCHEMA'`.
+'VALIDATION_SCOREBOARD_SCHEMA'`. `test_an_empty_scoreboard_still_carries_its_columns` reaches that
+`AttributeError` first; once Step 3 lands it fails again on its LAST line with
+`ColumnNotFoundError: unable to find column "metric_family"`, which is Step 4's deliverable. Two
+distinct red states, in that order — do not read the second as a regression.
 
 - [ ] **Step 3: Declare the schema**
 
@@ -2050,6 +2191,9 @@ VALIDATION_SCOREBOARD_SCHEMA: dict[str, pl.DataType] = {
 
 - [ ] **Step 4: Give the empty board its columns**
 
+> **Files correction.** Task 11's Files list omits `src/logging_employment/validate/harness.py`;
+> Step 4b below edits it. Add it to the list before you start.
+
 In `src/logging_employment/validate/scoreboard.py`, add the import:
 
 ```python
@@ -2072,6 +2216,64 @@ Also add a line to `build_scoreboard`'s docstring, after its existing final para
     The declared shape is `contracts.VALIDATION_SCOREBOARD_SCHEMA`; a column added here must be
     added there, or `cli.py::validate_command` refuses the write.
 ```
+
+- [ ] **Step 4b: Shape the harness's three empty-run fallbacks**
+
+Step 4 alone does not close the scenario it is motivated by.
+`src/logging_employment/validate/harness.py:166-168` bypasses `build_scoreboard` entirely when
+nothing scored — verbatim, as it stands today:
+
+```python
+    scores = pl.concat(all_scores, how="vertical") if all_scores else pl.DataFrame()
+    metrics = pl.concat(all_metrics, how="diagonal") if all_metrics else pl.DataFrame()
+    board = build_scoreboard(metrics) if metrics.height else pl.DataFrame()
+```
+
+Give all three their declared schema instead, so an empty run reports "nothing scored" rather than
+a schema failure:
+
+```python
+    scores = (
+        pl.concat(all_scores, how="vertical")
+        if all_scores
+        else pl.DataFrame(schema=VALIDATION_SCORE_SCHEMA)
+    )
+    metrics = (
+        pl.concat(all_metrics, how="diagonal")
+        if all_metrics
+        else pl.DataFrame(schema=VALIDATION_METRIC_SCHEMA)
+    )
+    board = build_scoreboard(metrics)
+```
+
+**Step 4b requires Step 4, and cannot be taken instead of it.** Dropping the `if metrics.height`
+guard hands `build_scoreboard` a rowless frame unconditionally, which is safe only because Step 4
+gives it the `is_empty()` early return. (Verified 2026-09-09 on polars 1.44.1: `is_empty()` is
+height-based, so it is `True` for a shaped `(0, 19)` frame as well as a bare `(0, 0)` one — the
+early return fires on both.) Step 4 is belt-and-braces for the scoreboard's own callers; it is
+load-bearing for this step.
+
+Both schema names are NEW imports here — `harness.py:32` imports neither today. After Task 8 that
+line reads `from ..contracts import HarmonizedData, REGIME_SWITCHES, assert_declared_provenance`;
+widen it:
+
+```python
+from ..contracts import (
+    HarmonizedData,
+    REGIME_SWITCHES,
+    VALIDATION_METRIC_SCHEMA,
+    VALIDATION_SCORE_SCHEMA,
+    assert_declared_provenance,
+)
+```
+
+This matters most for **Task 12**, which adds `validate_frame` gates to `result.scores` and
+`result.scoreboard`. On the un-shaped path those gates fail with `missing=[20 columns]` /
+`missing=[13 columns]` — so Task 12 *widens* this exposure unless Step 4b lands first.
+
+REACHABILITY, stated honestly: `metrics.height == 0` needs a run where nothing scored at all. The
+D1 config does not produce one, and the 2026-09-09 audit did not observe this path firing. It is
+the path this task names as its own motivation, not a measured failure.
 
 - [ ] **Step 5: Add both §7 field lists to the spec**
 
@@ -2176,7 +2378,12 @@ package-wide is out of scope.
   `tests/integration/test_validate_cli.py` (verify unchanged)
 
 **Interfaces:**
-- Consumes: all three schemas (Tasks 9 and 11).
+- Consumes: all three schemas (Tasks 9 and 11), and **Task 11 Step 4b**. Without Step 4b this task
+  makes the empty-run path worse rather than better: `harness.py:166-168` falls back to a bare
+  zero-column `pl.DataFrame()` for `scores`, `metrics` and `board` when nothing scored, so the
+  gates added in Step 4 below would fail with `missing=[20 columns]` / `missing=[13 columns]`
+  instead of reporting that the run scored nothing. Step 4b shapes those three fallbacks; land it
+  first.
 - Produces: `contracts.VALIDATION_REQUIRED_NON_NULL: dict[str, tuple[str, ...]]` and
   `contracts.assert_required_columns_present(frame: pl.DataFrame, name: str) -> None`.
 
@@ -2240,8 +2447,15 @@ In `src/logging_employment/contracts.py`, insert after `VALIDATION_SCOREBOARD_SC
 # schema in this module is explicitly out of scope.
 #
 # Each list holds only columns that are non-null BY CONSTRUCTION, not columns that merely happen to
-# be non-null on a measured run. `selected_lower` and `bound_status` are absent for that reason:
-# they arrive through a LEFT join on `cell_id`, so their nullability is a property of the data.
+# be non-null on a measured run. The test is whether the join that supplies the column is TOTAL by
+# construction, NOT merely whether it is a LEFT join. `selected_lower` and `bound_status` are absent
+# because they arrive through a LEFT join on `cell_id` from a frame that need not carry every cell,
+# so their nullability is a property of the data. `n_own_estimator` and `n_establishment_fallback`
+# ARE listed even though they too arrive through a LEFT join (`scoreboard.py:58`, on
+# `regime`/`seed`/`estimator_id`), because the `declines` family emits exactly one row per
+# (regime, seed, estimator_id) — the board's own grain — so that join cannot miss. Corrected
+# 2026-09-09: the earlier wording gave "arrives through a LEFT join" as the criterion, which would
+# have excluded those two as well.
 # `weight_basis` is absent because a declining row has no weight to describe.
 # `metric_name` is absent because the `declines` family emits counts rather than one named metric
 # and writes null there on every row — measured 2026-09-08, 70 of 70 on the committed fixture.
@@ -2399,11 +2613,20 @@ Closes V1 and V2 — the two checks that say this whole plan was a declaration e
 behaviour change. V1 must be asserted, not assumed.
 
 **Files:**
-- Test: `tests/integration/test_stage4_acceptance.py` (extend)
+- Test: `tests/integration/test_stage4_acceptance.py` (extend — **Task 5 creates** this module,
+  its `REPO` / `FIXTURE` / `STAGED` constants, `_fixture_config`, and the module-scoped
+  `fixture_run` fixture these tests take. Task 13 cannot run before Task 5.)
 
 **Interfaces:**
-- Consumes: everything. This task adds no source change; if a test here fails, the fix belongs in
-  the task that broke it.
+- Consumes: everything, and Task 5's test module concretely. This task adds no source change; if a
+  test here fails, the fix belongs in the task that broke it.
+- **Already green before this plan starts** (measured 2026-09-09 by replaying `build_scoreboard`
+  over the committed golden): `test_the_scoreboard_is_unchanged_by_everything_in_this_plan` passes
+  in full today — height 70, `mask_arm` uniques `['state_total']`, `wape` null count 13, 7 distinct
+  regimes — and `test_no_scoring_regime_gained_or_lost_a_score`'s seven-name set is already exact.
+  In the V4 test, four of the six names already carry their reason; only the `2026-09-08` clause
+  (Task 4) and the ``excluded by `validation.include_`` clause (Task 8) are new. These are
+  REGRESSIONS, not new behaviour: if one goes red, an earlier task broke it.
 
 - [ ] **Step 1: Write the acceptance tests**
 
@@ -2501,6 +2724,12 @@ Expected: all pass, with the V1 test skipped when `data/staged` is absent. If V1
 different run id, a `ValidationConfig` field was added or removed somewhere in Tasks 1–12 — find it
 before doing anything else; that is the failure this test exists for.
 
+> **Re-measure `f03023ac9f3a` before you type it into the test.** Nothing in the repo asserts that
+> literal today — its only support is two prose comments (`runs.py:37`, `scoreboard.py:135`), so
+> nothing has been failing if it drifted, and the roadmap already records that `runs/f03023ac9f3a`
+> on disk was written by code four commits stale. A first-run failure here may mean the pin is
+> stale rather than that you removed a config field.
+
 - [ ] **Step 3: Run the full suite**
 
 Run: `uv run pytest tests/unit tests/integration -q`
@@ -2542,7 +2771,10 @@ in Task 6's docstring and not fixed; neither regime is made to score; no CI and 
    R-S4C-17's obligation is unaffected; Task 11 records the correction in the new §7.15.
 3. **R-S4C-5's refusal cannot live in `assert_no_future_rows`.** A truncated frame never contains
    its own origin. Task 2 puts it in `rolling_origin_frames`, which holds the panel, and writes the
-   reason into the docstring.
+   reason into the docstring. **The 2026-09-09 audit found this reason false as written** — a
+   guard given the untruncated panel's periods *can* answer the question in the function the spec
+   names. Task 2's choice stands on other grounds; see "Left open on purpose" below before
+   inheriting the argument.
 4. **V4's "exactly four regimes" counts CHANGED reasons, not regimes carrying one.** Measured
    2026-09-08 on the fixture before any of this landed, six carry a reason: the four V4 names plus
    `structural_break` and `naics_transition`, which draw no in-window target and already hit the
@@ -2558,354 +2790,115 @@ instead of taking the config key R-S4C-4's wording invites.
 validation `raise` written into its body does not execute until a caller iterates. Measured — the
 inline version returned a generator and raised nothing. Task 2 Step 1(b) covers it.
 
-## File Structure
-
-| File | Responsibility after this plan |
-| --- | --- |
-| `src/logging_employment/errors.py` | Gains `LeakageError` — the typed class the two §13.4 guards raise (R-S4C-20). |
-| `src/logging_employment/validate/leakage.py` | Both guards raise `LeakageError`; `assert_no_future_rows` gains a `periods` universe and refuses an origin outside it (R-S4C-5, R-S4C-20). |
-| `src/logging_employment/validate/regimes.py` | `RegimeSpec` gains `no_select_kind`; `rolling_origins()` derives the origins; `cbp_size_gap_keys` sorts before sampling; the two CBP docstrings state M3/M4/M5 (R-S4C-1, R-S4C-4, R-S4C-6, R-S4C-7, R-S4C-8). |
-| `src/logging_employment/validate/harness.py` | Reasons derived from kind and switch, not templated; the rolling-origin guard runs here; the scored frame carries `replicate` / `mask_arm` / `lookback_months_masked` and an Int64 `seed` (R-S4C-1, R-S4C-2, R-S4C-3, R-S4C-4, R-S4C-9, R-S4C-12, R-S4C-15). |
-| `src/logging_employment/validate/metrics.py` | `decline_and_basis_report` takes `arm` and names its metric (R-S4C-16). |
-| `src/logging_employment/contracts.py` | `VALIDATION_SCORE_SCHEMA` +6 provenance columns; new `VALIDATION_SCOREBOARD_SCHEMA`; new `NON_NULL_VALIDATION_COLUMNS` + `assert_non_null`; `assert_declared_provenance` learns `mask_arm` (R-S4C-14, R-S4C-17, R-S4C-19). |
-| `src/logging_employment/cli.py` | `validate_command` gates all three tables with `validate_frame` + `assert_non_null` (R-S4C-18, R-S4C-19). |
-| `src/logging_employment/config.py` | `ValidationConfig`'s docstring states each switch's KIND (R-S4C-10, R-S4C-13). No field added or removed. |
-| `specs/logging-employment-spec.md` | Appendix A's `validation:` block gains per-switch KIND comments; §7 gains `7.14 validation_score` and `7.15 validation_scoreboard` field lists (R-S4C-10, R-S4C-13, R-S4C-17). |
-| `tests/unit/test_validate_leakage_guards.py` | **New.** Typed-error and `-O` survival tests, and the malformed-origin refusal (V5). |
-| `tests/unit/test_validate_cbp_gap.py` | **New.** The state-year shape of the gap, and cross-process determinism (V6). |
-| `tests/unit/test_validate_regime_reasons.py` | **New.** Every regime's kind/switch/reason wiring, checked structurally. |
-| `tests/unit/test_contracts_validation.py` | Extended: the §7.14 / §7.15 field lists parsed **from the spec file** and compared to the schemas; the non-null declarations. |
-| `tests/unit/test_config_validation_block.py` | Extended: the fourteen-field surface and the resolved-config digest (V1, cheap half). |
-| `tests/integration/test_d1_validation.py` | The zero-score pin is strengthened to reject a deferral and to require a reason the package declares (R-S4C-2); the refused-regime test expects a config-derived reason. |
-| `tests/integration/test_validation_golden.py` | Unchanged assertions; its fixture parquet is regenerated once, reviewed. |
-| `tests/fixtures/validation/validation_metrics_golden.parquet` | Regenerated: 70 `declines` rows gain `mask_arm` and `metric_name`. Nothing else moves. |
-
----
-
-### Task 1: Baseline the shipped run before touching anything
-
-**Why this is a task and not a preamble:** `runs/` is gitignored, so `runs/f03023ac9f3a` cannot be restored from git. V2 requires the post-change `validation_scoreboard.parquet` to be byte-identical, and the roadmap already records that the on-disk artifacts were written by code four commits stale (metric rows 4,536 on disk vs 4,530 re-measured). Comparing against the on-disk bytes alone would therefore compare against an artifact no current input reproduces. This task freezes both references: the shipped bytes, and what HEAD produces today.
-
-**Files:**
-- Create: `runs/_baseline_pre_stage4c/` (gitignored; the underscore cannot collide with a 12-hex run id)
-- Read: `runs/f03023ac9f3a/`
-
-**Interfaces:**
-- Produces: `runs/_baseline_pre_stage4c/shipped/` (a copy of the artifact as committed to disk) and `runs/_baseline_pre_stage4c/head/` (what HEAD produces now), plus `runs/_baseline_pre_stage4c/DIGESTS.txt`. Task 11 diffs against `head/`.
-
-- [ ] **Step 1: Copy the shipped artifact out of harm's way**
-
-```bash
-mkdir -p runs/_baseline_pre_stage4c
-cp -R runs/f03023ac9f3a runs/_baseline_pre_stage4c/shipped
-ls -la runs/_baseline_pre_stage4c/shipped
-```
-Expected: `validation_scores.parquet`, `validation_metrics.parquet`, `validation_scoreboard.parquet`, `validation_manifest.json`.
-
-- [ ] **Step 2: Record the baseline suite result at HEAD**
-
-```bash
-uv run pytest -q 2>&1 | tail -20 > runs/_baseline_pre_stage4c/suite_at_head.txt
-cat runs/_baseline_pre_stage4c/suite_at_head.txt
-```
-Expected: a pass/fail line. **Record it.** Any failure here is pre-existing and must not be attributed to this plan later.
-
-- [ ] **Step 3: Re-run the harness at HEAD and keep what it produces**
-
-```bash
-time uv run logging-estimates validate --config config.yaml
-cp -R runs/f03023ac9f3a runs/_baseline_pre_stage4c/head
-```
-Expected: ~11 minutes; thirteen `<regime> <disposition> scored=<n>` lines; nine regimes with `scored>0`.
-
-- [ ] **Step 4: Record every digest and the shipped-vs-HEAD drift**
-
-```bash
-uv run python - <<'PY' | tee runs/_baseline_pre_stage4c/DIGESTS.txt
-import hashlib, json
-from pathlib import Path
-base = Path("runs/_baseline_pre_stage4c")
-for side in ("shipped", "head"):
-    for name in sorted(p.name for p in (base / side).iterdir()):
-        digest = hashlib.sha256((base / side / name).read_bytes()).hexdigest()[:16]
-        print(f"{side:8s} {name:32s} {digest}")
-import polars as pl
-for side in ("shipped", "head"):
-    m = pl.read_parquet(base / side / "validation_metrics.parquet")
-    s = pl.read_parquet(base / side / "validation_scoreboard.parquet")
-    print(f"{side:8s} metrics_rows={m.height} scoreboard_rows={s.height}")
-    reasons = json.loads((base / side / "validation_manifest.json").read_text())["regimes"]
-    print(f"{side:8s} scored_regimes=" + ",".join(sorted(k for k, v in reasons.items() if v["n_scored"])))
-PY
-```
-Expected: nine scored regimes on both sides. The `validation_scoreboard.parquet` digests are expected to MATCH between `shipped` and `head` (the stale rows are `probabilistic`, which the scoreboard does not read) — **but do not assume it. Write down what actually printed.** If they differ, V2 is measured against `head/`, and the difference is reported in Task 11.
-
-- [ ] **Step 5: Commit the recorded facts (no source change)**
-
-Nothing under `runs/` is committable. Instead, paste the Step 4 output and the Step 2 suite line into the task's completion note, and commit only this plan file if it is not yet committed:
-
-```bash
-git add specs/plans/12-stage4-harness-completion.md
-git commit -m "docs(specs): plan 12 — Stage 4 harness completion
-
-Baseline recorded before any change: shipped vs HEAD digests for
-runs/f03023ac9f3a, copied to runs/_baseline_pre_stage4c/ (gitignored).
-
-Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_016yXue1JwE4k46A3ayBd6hd"
-```
-
----
-
-### Task 2: Typed leakage errors, and an origin that cannot be malformed
-
-**Requirements:** R-S4C-5, R-S4C-20. **Verification:** V5.
-
-**Why:** `assert_no_retained_truth` is a bare `assert` on the shipped scoring path (`harness.py:126`), so it vanishes under `python -O` today — while `harness.py:63-73` states the opposite convention in prose. `assert_no_future_rows` has the same shape and becomes live in Task 4. Separately, `rolling_origin_frames(monthly, origins=['banana'])` returns all 4,812 rows untruncated and the guard passes: string comparison puts every `'2017-01'`-shaped month below `'banana'`, so nothing is filtered and nothing is at-or-after the origin.
-
-**Files:**
-- Modify: `src/logging_employment/errors.py` (append a class)
-- Modify: `src/logging_employment/validate/leakage.py:82` and `:88-98`
-- Modify: `tests/unit/test_validate_temporal_regimes.py:11-13`
-- Modify: `tests/integration/test_validate_leakage.py:11-14,24-27`
-- Test: `tests/unit/test_validate_leakage_guards.py` (new)
-
-**Interfaces:**
-- Produces: `errors.LeakageError`; `leakage.assert_no_future_rows(frame, *, origin: str, periods: Sequence[str]) -> None` — Task 4 calls it with the untruncated frame's distinct months as `periods`.
-- Consumes: nothing from earlier tasks.
-
-- [ ] **Step 1: Write the failing tests**
-
-Create `tests/unit/test_validate_leakage_guards.py`:
-
-```python
-"""§13.4's guards as typed, strip-proof refusals rather than bare asserts.
-
-`python -O` deletes an `assert` statement outright. `assert_no_retained_truth` runs inside the
-shipped scoring loop (`validate/harness.py`), so before this module the primary leakage control
-was disarmed by an interpreter flag on the live path while the package documented the opposite
-convention two functions above it.
-"""
-
-from __future__ import annotations
-
-import subprocess
-import sys
-import textwrap
-
-import polars as pl
-import pytest
-
-from logging_employment.contracts import HarmonizedData
-from logging_employment.errors import LeakageError
-from logging_employment.validate.leakage import assert_no_future_rows, assert_no_retained_truth
-
-_RETAINING_FRAME = """
-import polars as pl
-from logging_employment.contracts import HarmonizedData
-from logging_employment.errors import LeakageError
-from logging_employment.validate.leakage import assert_no_retained_truth
-
-data = HarmonizedData(
-    qcew_monthly=pl.DataFrame(
-        {"state_fips": ["41"], "reference_month": ["2019-06"], "employment_value": [58]}
-    ),
-    qcew_national_size=pl.DataFrame(),
-    cbp_state_size=pl.DataFrame(),
-    bridge=pl.DataFrame(),
-)
-truth = pl.DataFrame(
-    {"state_fips": ["41"], "reference_month": ["2019-06"], "truth": [58]}
-)
-"""
-
-
-def _masked_frame_that_retains_the_truth() -> tuple[HarmonizedData, pl.DataFrame]:
-    """A one-row frame whose `employment_value` still equals the held-out value."""
-    data = HarmonizedData(
-        qcew_monthly=pl.DataFrame(
-            {"state_fips": ["41"], "reference_month": ["2019-06"], "employment_value": [58]}
-        ),
-        qcew_national_size=pl.DataFrame(),
-        cbp_state_size=pl.DataFrame(),
-        bridge=pl.DataFrame(),
-    )
-    truth = pl.DataFrame({"state_fips": ["41"], "reference_month": ["2019-06"], "truth": [58]})
-    return data, truth
-
-
-def test_retained_truth_raises_a_typed_error():
-    data, truth = _masked_frame_that_retains_the_truth()
-    with pytest.raises(LeakageError, match="employment_value"):
-        assert_no_retained_truth(data, truth)
-
-
-def test_the_retained_truth_guard_still_fires_under_python_O():
-    """V5. A bare `assert` here was deleted by `-O` on the shipped scoring path.
-
-    Two subprocesses' worth of certainty is not needed; one optimized interpreter is. The
-    `__debug__` assertion inside the script is what stops this passing vacuously on a
-    non-optimized run.
-    """
-    script = textwrap.dedent(
-        _RETAINING_FRAME
-        + """
-        if __debug__:
-            raise SystemExit("this subprocess is not optimized; -O did not take")
-        try:
-            assert_no_retained_truth(data, truth)
-        except LeakageError:
-            print("raised")
-        else:
-            raise SystemExit("the guard did not fire under -O")
-        """
-    )
-    result = subprocess.run(
-        [sys.executable, "-O", "-c", script], capture_output=True, text=True
-    )
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "raised"
-
-
-def test_a_future_row_raises_a_typed_error():
-    frame = pl.DataFrame({"reference_month": ["2019-12", "2020-01"]})
-    with pytest.raises(LeakageError, match="future"):
-        assert_no_future_rows(frame, origin="2020-01", periods=["2019-12", "2020-01"])
-
-
-def test_an_origin_matching_no_period_is_refused():
-    """M2's malformed origin: `'banana'` truncated nothing and passed.
-
-    Every `YYYY-MM` string sorts below `'banana'`, so the filter removed no row and the
-    at-or-after check found none. The guard certified a frame it had not truncated.
-    """
-    frame = pl.DataFrame({"reference_month": ["2019-12", "2020-01"]})
-    with pytest.raises(LeakageError, match="banana"):
-        assert_no_future_rows(frame, origin="banana", periods=["2019-12", "2020-01"])
-
-
-def test_a_past_only_frame_passes():
-    frame = pl.DataFrame({"reference_month": ["2019-11", "2019-12"]})
-    assert_no_future_rows(frame, origin="2020-01", periods=["2019-11", "2019-12", "2020-01"])
-```
-
-- [ ] **Step 2: Run the tests to verify they fail**
-
-```bash
-uv run pytest tests/unit/test_validate_leakage_guards.py -v
-```
-Expected: collection error — `ImportError: cannot import name 'LeakageError' from 'logging_employment.errors'`.
-
-- [ ] **Step 3: Add the typed error**
-
-Append to `src/logging_employment/errors.py`:
-
-```python
-class LeakageError(LoggingEmploymentError):
-    """A §13.4 leakage control fired, or was asked to certify a frame it cannot speak for.
-
-    Typed rather than a bare `assert` because `python -O` deletes an `assert` statement outright.
-    `validate.leakage.assert_no_retained_truth` runs inside the shipped scoring loop
-    (`validate/harness.py`), so until 2026-09-08 the package's primary leakage control was
-    disarmed by an interpreter flag on the live path while `harness.py` documented the opposite
-    convention. It also covers a guard that CANNOT certify what it was asked to: an origin
-    matching no period in the frame truncates nothing, so passing is not evidence.
-    """
-```
-
-- [ ] **Step 4: Make both guards typed, and give the origin guard a universe**
-
-In `src/logging_employment/validate/leakage.py`, add `from collections.abc import Sequence` to the imports and `from ..errors import LeakageError` beside the existing `from ..contracts import HarmonizedData`.
-
-Replace the assertion at the end of `assert_no_retained_truth`:
-
-```python
-            if str(value) == withheld:
-                raise LeakageError(
-                    f"{column} on {row['state_fips']}/{row['reference_month']} retains the "
-                    f"held-out value {withheld}"
-                )
-```
-
-Replace `assert_no_future_rows` entirely:
-
-```python
-def assert_no_future_rows(
-    frame: pl.DataFrame, *, origin: str, periods: Sequence[str]
-) -> None:
-    """§13.4 bullet 3: a rolling-origin frame contains no period at or after the origin.
-
-    This guard, not the mask, is what Stage 4's exit criterion "a rolling-origin run provably
-    contains no future-period rows" is about — a mask hides values, it does not remove rows.
-
-    `periods` is the UNTRUNCATED frame's month universe, and it is required rather than derived
-    from `frame` because `frame` is the truncated one: every origin is trivially absent from it,
-    so a check against `frame` alone can only ever be vacuous. Measured 2026-09-08 before this
-    argument existed: `rolling_origin_frames(monthly, origins=['banana'])` returned all 4,812
-    rows untruncated and this function passed, because every `YYYY-MM` string sorts below
-    `'banana'` and so neither the filter nor the comparison here matched anything.
-    """
-    known = sorted(set(periods))
-    if origin not in known:
-        span = f"{known[0]}..{known[-1]}" if known else "an empty period universe"
-        raise LeakageError(
-            f"origin {origin!r} matches no period in {span}, so the truncation it names did not "
-            "happen and this guard would certify a frame it never cut"
-        )
-    future = frame.filter(pl.col("reference_month") >= origin)
-    if future.height:
-        raise LeakageError(
-            f"{future.height} future rows at or after origin {origin}: "
-            f"{sorted(future['reference_month'].unique().to_list())[:5]}"
-        )
-```
-
-- [ ] **Step 5: Update the two existing call sites**
-
-In `tests/unit/test_validate_temporal_regimes.py`, replace the body of `test_every_rolling_origin_frame_is_provably_past_only`:
-
-```python
-def test_every_rolling_origin_frame_is_provably_past_only():
-    """Stage 4's exit criterion, as an assertion over the truncated frame."""
-    monthly = HarmonizedData.load(Path("data/staged")).qcew_monthly
-    periods = monthly["reference_month"].unique().to_list()
-    for origin, frame in rolling_origin_frames(monthly, origins=["2020-01", "2022-01"]):
-        assert_no_future_rows(frame, origin=origin, periods=periods)
-        assert frame.height < monthly.height
-```
-
-In `tests/integration/test_validate_leakage.py`, add `LeakageError` to the imports (`from logging_employment.errors import LeakageError`) and replace:
-
-```python
-def test_a_rolling_origin_frame_carrying_a_future_row_is_refused():
-    data = HarmonizedData.load(Path("data/staged"))
-    periods = data.qcew_monthly["reference_month"].unique().to_list()
-    with pytest.raises(LeakageError, match="future"):
-        assert_no_future_rows(data.qcew_monthly, origin="2020-01", periods=periods)
-```
-
-- [ ] **Step 6: Run the tests to verify they pass**
-
-```bash
-uv run pytest tests/unit/test_validate_leakage_guards.py tests/unit/test_validate_temporal_regimes.py -v
-uv run pytest tests/integration/test_validate_leakage.py -v
-```
-Expected: all pass. (The integration module needs `data/staged`; it skips without it.)
-
-- [ ] **Step 7: Commit**
-
-```bash
-uv run ruff check src tests && uv run black --check src tests
-git add src/logging_employment/errors.py src/logging_employment/validate/leakage.py \
-        tests/unit/test_validate_leakage_guards.py tests/unit/test_validate_temporal_regimes.py \
-        tests/integration/test_validate_leakage.py
-git commit -m "fix(validate): the §13.4 guards raise a typed error and refuse a malformed origin
-
-R-S4C-5, R-S4C-20. Both guards were bare asserts, so \`python -O\` disarmed
-\`assert_no_retained_truth\` on the shipped scoring path. \`assert_no_future_rows\`
-now takes the untruncated frame's period universe and refuses an origin outside
-it — measured, origins=['banana'] truncated nothing and passed.
-
-Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_016yXue1JwE4k46A3ayBd6hd"
-```
+## Post-authoring audit — 2026-09-09
+
+Audited task by task against read-only exports of `stage4-harness-completion` (`5a3fe38`) and
+`main` (`994fac5`). **Nothing in this plan was implemented on either branch**: the two refs differ
+only in this file, `specs/deferred_items.md` and comment text in `harmonize/naics.py`, and their
+`tests/` trees are byte-identical. Every finding below is against pre-plan code.
+
+### The file used to contain two drafts
+
+After the Self-Review there was a second `## File Structure` table and a second decomposition —
+`Task 1: Baseline the shipped run` and `Task 2: Typed leakage errors` — which has been removed.
+Three things about it are worth recording, because the obvious reading of that removal is wrong:
+
+- **It was not a merge artifact.** `git log` on this file shows one commit, a single insertion.
+- **It did not stop mid-sentence.** Its Task 2 was complete through a Step 7 commit block that
+  closed cleanly at the old EOF. What was missing was Task 3 onward — its own File Structure
+  promised work across `contracts.py`, `harness.py`, `metrics.py`, `scoreboard.py`, `cli.py`,
+  `config.py` and the spec that no task in it ever described.
+- **It was the front of an interrupted rewrite, not a stale earlier draft.** It opened at
+  `## File Structure` — canonically an early section — with no H1, Goal, Architecture or Global
+  Constraints, and its two tasks are more developed than the ones they replace.
+
+**Tasks 1–13 are authoritative**, because that draft is two tasks of a thirteen-task plan and is
+simply unexecutable. But its content was not scrap, and two things have been harvested from it.
+
+**Also incomplete: this plan has no `## Execution Handoff` section.** Two of the eleven plans in
+`specs/plans/completed/` carry one — plan 8 and plan 11, the immediately preceding plan — so this
+is a weaker signal than "every plan has one", but the section writing-plans prompts for is absent.
+
+### Harvested from the removed draft
+
+1. **The V5 witness, into Task 1.** Spec V5 (`specs/stage4-harness-completion.md:278-280`) requires
+   a test that feeding retained truth to **`assert_no_retained_truth`** raises under `-O`. Task 1's
+   two original tests both called `assert_no_future_rows` — the guard with ZERO `src/` callers until
+   Task 5 — while `assert_no_retained_truth` is the one on the live scoring path
+   (`harness.py:126`). Worse, once both guards raise `LeakageError` the original `-O` test passes
+   identically with the flag deleted, so it witnessed the typed conversion rather than the
+   optimisation. The removed draft's version is correctly targeted AND carries
+   `if __debug__: raise SystemExit(...)`, which is what makes `-O` load-bearing. Task 1 Step 1 now
+   contains both tests. The Self-Review's "V5 → 1" is only true with them.
+2. **A baseline for V2, recorded as an open decision.** Spec V2 (`:265-267`) says
+   "The `validation_scoreboard` output MUST be byte-identical." Task 13 asserts *properties* of a
+   freshly computed board (height 70, `mask_arm` uniques, `wape` null count 13, seven regimes), never
+   a byte comparison — and `runs/` is gitignored and unrecoverable from git, so the reference has to
+   be captured **before the first source edit** or it cannot be captured at all. The removed draft's
+   Task 1 did exactly that. Decide deliberately: either run it first, or amend V2's reading.
+
+### Left open on purpose
+
+**The Self-Review's correction #3 states a false reason.** It says R-S4C-5's refusal "cannot live in
+`assert_no_future_rows`... A truncated frame never contains its own origin." The removed draft is a
+counterexample: `assert_no_future_rows(frame, *, origin, periods)` taking the *untruncated* panel's
+periods can answer the question in the function the spec names. Putting the refusal in
+`rolling_origin_frames` is still defensible — it already holds the panel — but the *reason* is
+false as written and must not be inherited unexamined.
+
+**`metric_name` on the declines rows.** Global Constraints rule it "record, do not fix" because
+naming it would move a second golden column beyond what V3 authorises; the removed draft had the
+golden gain `metric_name` too. Directly opposed, and unresolved.
+
+### Corrections applied to the tasks
+
+| Task | What was wrong | Fix |
+| --- | --- | --- |
+| 1 | Both tests called the wrong guard, and the `-O` flag was not load-bearing — V5 undischarged. | Correctly-targeted pair added with the `__debug__` guard; Step 2 expects four failures. |
+| 2 | Step 4's docstring advanced a dated witness from `2026-09-07` to `2026-09-08` without re-measuring. | Date restored; a note forbids advancing it without a re-run. |
+| 2 | Step 5 expected a SKIP from `test_validate_temporal_regimes.py`. It has no `skipif` — it ERRORS. | Expectation corrected. |
+| 3 | Files said "after `rolling_origin_frames`", Step 3 said "after `_truncated`". | Both say `_truncated`; the Task 2 dependency is stated. |
+| 4 | Step 5 named `test_validate_declared_regimes.py` as holding the regression. It never reads `REGIME_SPECS`; the assertion is at `test_validate_temporal_regimes.py:17-19`. Its "5 passed" was a coincidence. | Correct module named. |
+| 6 | Step 3 rewrote only `cbp_size_gap_keys`; `apply_cbp_gap`'s docstring still said "fall back or decline" — the half M4 measures false. | Second docstring added to Step 3. |
+| 7 | Files cited `config.py:173-180`; `:173` is the `class` line. | Corrected to `:174-180`. |
+| 8 | Step 3's import line was not sorted. | Sorted. |
+| 9 | Interfaces claimed "Consumes: nothing from Tasks 1–8" while appending to the module Task 5 creates. | Dependency stated. |
+| 10 | Step 4 had the executor type "the null rode into every downstream read of the own/fallback split" into a docstring. Measured false: `build_scoreboard`'s `basis` select drops `mask_arm` before the join. | Claim narrowed to the persisted `validation_metrics` table. |
+| 11 | Step 1's motivation said `build_scoreboard` returns a bare frame on an empty run. It RAISES `ColumnNotFoundError`; the bare frame comes from `harness.py:168`. | Docstring corrected; the test exercises the shaped path and pins Step 4's early return separately; Step 2 names both red states in order. |
+| 11 | **Scope added, not a correction.** Step 4 does not reach the shipped empty path at all. | **New Step 4b** shapes the three `harness.py:166-168` fallbacks and widens the `contracts` import; `harness.py` added to Files; Step 4b marked as requiring Step 4. This is the one edit that changes what the plan *does* rather than what it says. |
+| 11 | "§15.1's nine-item list stops at `validation_metrics.parquet`" — the list continues. | Reworded; the substantive claim (no scoreboard in the spec) stands. |
+| 12 | The stated criterion was "arrives through a LEFT join ⇒ excluded", but the tuple includes `n_own_estimator` / `n_establishment_fallback`, which arrive through one. | Criterion restated as whether the join is TOTAL by construction. |
+| 12 | Task 12's gates widen the empty-run exposure Task 11 Step 4 aims at. | Cross-referenced in both directions. |
+| 13 | Files said "(extend)" without naming Task 5 as the module's creator. | Dependency stated; the already-green assertions marked as regressions. |
+| 13 | `f03023ac9f3a` is asserted nowhere in the repo — only in two prose comments — so it may be stale. | Re-measure note added to Step 2. |
+
+### Before you start
+
+- **Merge `main` first.** It is two commits AHEAD of this branch. `specs/deferred_items.md` is the
+  merge point (main carries a 16-line deferred item this branch lacks) and `harmonize/naics.py`
+  needs main's version. A "keep both" resolution has silently duplicated a block in this repo
+  before.
+- **V1's hard-coded run id reverses this repo's own precedent.** `tests/unit/test_runs.py:14-24`
+  deliberately RE-DERIVES the hash, with the docstring reason that a literal "would encode today's
+  `config.yaml` and would have to be re-typed on every unrelated config change, which is exactly
+  how a compatibility pin stops checking compatibility and starts checking nothing." Here the
+  literal is arguably the point — V1 exists to catch a field add/remove — but it is a decision
+  against precedent, not an oversight.
+- **The roadmap already ticks Stage 4** (`specs/logging-employment-spec-roadmap.md:219`). Retiring
+  this plan means revisiting that block, not just this file.
+- **Free adjacent fix, not in any task:** `MASK_ARMS` is declared at `contracts.py:403` but
+  `assert_declared_provenance` (`:239-243`) loops over five columns and does not check `mask_arm`.
+  The removed draft promised it; no task here does it. R-S4C-14 does not require it, so this is an
+  opportunity rather than a gap.
+- **Unverifiable from the audit's snapshots** (`data/` and `runs/` are gitignored): whether
+  `runs/f03023ac9f3a/` still exists, and every D1 figure in this plan — the seven D1 origins in
+  Tasks 3 and 5, M1's "3,024 of 4,812 rows", M4's 147 declines, M5's 1,080 moved estimates, M6's
+  three-process nondeterminism, and V1's `f03023ac9f3a`. Treat them as unverified, not as false.
+
+**Re-measured first-hand in the project venv** (polars 1.44.1), because Task 11's correction turns
+on them: `pl.DataFrame().is_empty()` and `pl.DataFrame(schema=VALIDATION_METRIC_SCHEMA).is_empty()`
+are both `True` (`is_empty` is height-based); `build_scoreboard(pl.DataFrame())` raises
+`ColumnNotFoundError: unable to find column "metric_family"`; and
+`build_scoreboard(pl.DataFrame(schema=VALIDATION_METRIC_SCHEMA))` returns `(0, 13)`. Fixture-layer
+figures (70 declines rows, seven scoring regimes, the four Task 13 board properties) were
+re-measured against the committed golden and held.
