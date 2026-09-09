@@ -316,6 +316,36 @@ def _truncated(monthly: pl.DataFrame, origins: Sequence[str]) -> Iterator[tuple[
         yield origin, monthly.filter(pl.col("reference_month") < origin)
 
 
+def rolling_origins(monthly: pl.DataFrame, *, config: Config) -> tuple[str, ...]:
+    """The origins §13.4's future-row guard runs at: each January with enough history behind it.
+
+    DERIVED FROM THE PANEL, NOT CONFIGURED, and that is a constraint rather than a preference.
+    `runs.run_id` hashes `config.resolved_dict`, which is `Config.model_dump(mode="json")` — the
+    whole model — so ADDING a `ValidationConfig` key re-identifies every run directory on disk
+    exactly as removing one does. `runs/f03023ac9f3a` is Stage 4's acceptance artifact and must
+    still resolve from the shipped `config.yaml`. A panel-derived rule needs no new key.
+
+    Januaries rather than the declared break windows, which was the alternative considered:
+    `structural_break_windows` and `naics_seam_month` name months this panel's ESTIMATORS are
+    stressed at, which is a different question from where a real-time frame should be cut, and
+    reusing them would make an edit to either silently move the other. The history floor is
+    `minimum_unmasked_lookback_months`, reused rather than re-declared — a January with less than
+    that behind it truncates to a frame too short to estimate from, which proves nothing.
+
+    Measured 2026-09-08: seven origins on `data/staged` (2018-01 through 2024-01, with 2017-01
+    excluded by the floor) and NONE on the committed `tests/fixtures/baselines` layer, which
+    carries 2023 alone. The guard is therefore vacuous on the fixture and binding on D1, and
+    `run_pseudo_suppression` then records which, in the manifest, rather than leaving a reader to
+    assume. (Forward-looking at the moment this function was written: nothing wired the guard into
+    the harness until the task after it, so that sentence was a promise then, not a measurement.)
+    """
+    months = sorted(monthly["reference_month"].unique().to_list())
+    floor = config.validation.minimum_unmasked_lookback_months
+    return tuple(
+        month for index, month in enumerate(months) if month.endswith("-01") and index >= floor
+    )
+
+
 def _structural_break(monthly: pl.DataFrame, seed: int, config: Config) -> list[MaskTarget]:
     """Targets inside a DECLARED break window.
 
