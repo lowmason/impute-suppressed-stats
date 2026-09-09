@@ -213,9 +213,12 @@ def test_the_retained_truth_guard_still_fires_under_python_O():
     `__debug__` check proves the subprocess really was optimised before the guard was called.
     Apply the same guard to `test_the_guard_still_refuses_under_dash_o` above if you keep it.
     """
-    script = textwrap.dedent(
-        _RETAINING_FRAME
-        + """
+    # Dedent ONLY the appended half. `_RETAINING_FRAME` already sits at column 0, so dedenting the
+    # CONCATENATION finds a common prefix of "" and strips nothing, leaving this half indented and
+    # the subprocess dying on `IndentationError: unexpected indent`. Measured 2026-09-09 — the
+    # draft this test came from had it the other way round and could not run.
+    script = _RETAINING_FRAME + textwrap.dedent(
+        """
         if __debug__:
             raise SystemExit("this subprocess is not optimized; -O did not take")
         try:
@@ -262,6 +265,19 @@ and widen the leakage import to
 
 Run: `uv run pytest tests/unit/test_validate_leakage_guards.py -v`
 Expected: all four FAIL — `ImportError: cannot import name 'LeakageError'`.
+
+Once Step 3 lands the class, `test_the_retained_truth_guard_still_fires_under_python_O` fails
+again, and that is the failure that matters — **witnessed 2026-09-09 against the current bare
+`assert`**:
+
+```
+with -O      rc=1  stderr: the guard did not fire under -O
+without -O   rc=1  stderr: this subprocess is not optimized; -O did not take
+```
+
+The first line IS M14: `-O` stripped the assert and the guard did not fire. The second proves the
+`__debug__` line is load-bearing — delete it and the test passes on a non-optimised interpreter
+while witnessing nothing. After Step 4 the `-O` run prints `raised` and exits 0.
 
 - [ ] **Step 3: Add the exception class**
 
@@ -322,7 +338,7 @@ At `:111` change `pytest.raises(AssertionError, match="employment_raw")` to
 - [ ] **Step 6: Run the tests**
 
 Run: `uv run pytest tests/unit/test_validate_leakage_guards.py -v`
-Expected: 2 passed.
+Expected: 4 passed — the Step 1 block defines FOUR tests, not the two an earlier draft counted.
 
 Run: `uv run pytest tests/integration/test_validate_leakage.py -v`
 Expected: all pass, or all SKIP if `data/staged` is absent — that module reads
@@ -449,8 +465,11 @@ def rolling_origin_frames(
 
     THE MEMBERSHIP REFUSAL LIVES HERE AND NOT IN `assert_no_future_rows`, which is where R-S4C-5
     places it. A truncated frame never contains its own origin — every period in it is strictly
-    below the origin by construction — so the guard cannot ask this question about the frame it is
-    handed. Only the pre-truncation panel can answer it, and this is the function that holds one.
+    below the origin by construction — so the guard cannot ask this question from the two arguments
+    it takes. It COULD be made to: give it the untruncated panel's periods as a third argument and
+    the check fits there. That was rejected because every caller would then have to thread the
+    pre-truncation universe through to a guard whose whole job is to inspect one frame, and this
+    function already holds the panel. The constraint is the guard's signature, not arithmetic.
 
     THE REFUSAL IS EAGER, which is why `_truncated` is a separate function. A `yield` anywhere in
     this body would defer every line of it until a caller iterated, so the check would not run on
@@ -642,13 +661,19 @@ the one shipped verbatim in `runs/f03023ac9f3a/validation_manifest.json`.
 - Test: `tests/unit/test_validate_regime_mechanisms.py` (create)
 
 **Interfaces:**
-- Consumes: nothing from Tasks 1–3.
+- Consumes: **the `from ..errors import ConceptViolationError` that Task 2 Step 4 adds to
+  `regimes.py`.** `RegimeSpec.__post_init__` raises it, and `regimes.py` imports nothing from
+  `..errors` today — measured 2026-09-09, applying Task 4 alone gives `NameError:
+  ConceptViolationError is not defined` and Step 5's "6 passed" is 1 failed / 5 passed. In plan
+  order this is free; executed standalone it is not, so an earlier draft's "Consumes: nothing from
+  Tasks 1–3" was wrong. If you take Task 4 out of order, add that import yourself.
 - Produces:
   - `regimes.REGIME_MECHANISMS: tuple[str, ...]`
   - `RegimeSpec(name: str, disposition: str, grain: str, select: Callable | None, mechanism: str,
     no_score_reason: str | None)` — two new fields, both required positionally-or-by-keyword; the
     two comprehensions that build `REGIME_SPECS` must both pass them.
-  - Task 5 reads `spec.mechanism == "frame_truncation"`; Task 7 reads `spec.no_score_reason`.
+  - Task 5 reads `spec.mechanism == "frame_truncation"`; **Task 8** reads `spec.no_score_reason`
+    (Task 7 never mentions the field).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -769,7 +794,7 @@ _NO_SCORE_REASONS: dict[str, str] = {
         "rolling_origin truncates the frame rather than masking a QCEW cell, so it produces no "
         "MaskTarget. Measured 2026-09-08 against the ten-estimator §10 registry: truncation moves "
         "no estimator's pre-origin estimate — rolling_origin_frames removes 1,788 of 4,812 rows "
-        "at origin 2022-01, the widest blackout in the file, and every estimator returns what it "
+        "at origin 2022-01, and every estimator returns what it "
         "returned unmasked — so this regime separates ZERO baselines on THIS registry. The scope "
         "is the registry: adding a smoothing or autoregressive estimator invalidates this reason "
         "rather than inheriting it. A scoreboard entry that cannot discriminate would read as "
@@ -861,7 +886,9 @@ REGIME_SPECS: dict[str, RegimeSpec] = {
 }
 ```
 
-Keep the `: dict[str, RegimeSpec]` annotation on it, since it is now the only definition. Replace
+Add the `: dict[str, RegimeSpec]` annotation to it, since it is now the only definition (the
+annotation currently lives on the comprehension being DELETED at `:218`; the surviving one at
+`:373` has none — the block below already carries it). Replace
 its existing explanatory comment with one that says why there is only one:
 
 ```python
@@ -1216,6 +1243,19 @@ def test_an_empty_key_list_returns_the_data_untouched():
 Run: `uv run pytest tests/unit/test_validate_cbp_gap.py -v`
 Expected: `test_the_same_seed_gives_the_same_keys_in_separate_processes` FAILS with
 `three processes drew 3 different key sets`. The other two pass — they do not depend on order.
+
+**The red state is witnessed, not assumed.** M6 was measured on D1; re-run 2026-09-09 on the
+committed fixture layer (`tests/fixtures/baselines`, 188 CBP rows over 46 distinct state-years),
+three separate processes at `seed=1024` drew three disjoint-looking 20-key sets, beginning:
+
+```
+proc 1: ('27', 2023), ('33', 2023), ('19', 2023), ...
+proc 2: ('21', 2023), ('39', 2023), ('25', 2023), ...
+proc 3: ('24', 2023), ('56', 2023), ('06', 2023), ...
+```
+
+So this test needs NO `data/staged` and no `slow` marker — it reproduces the defect on a clean
+checkout, which is what makes V6 a CI-runnable check rather than a D1-only one.
 
 - [ ] **Step 3: Sort before sampling, and correct the docstring**
 
@@ -1632,7 +1672,15 @@ The arithmetic, re-measured 2026-09-08: 23 produced + 3 (`mask_arm`, `replicate`
 `reconciliation_status`, `decline_reason`, `residual`, `constraint_set_hash`) = 26.
 
 **Files:**
-- Modify: `src/logging_employment/contracts.py:410-431` (`VALIDATION_SCORE_SCHEMA`)
+- Modify: `src/logging_employment/contracts.py` — `VALIDATION_SCORE_SCHEMA` **and the three
+  comment lines directly above it** (at HEAD that is `:407-431`; Step 3 cites the same span).
+
+> **Do not trust a numeric line here.** Task 7 Step 3 inserts ~40 lines after `REGIME_DISPOSITIONS`
+> at `contracts.py:401`, so by the time Task 9 runs, `VALIDATION_SCORE_SCHEMA` has moved from
+> `:410` to roughly `:450`. An executor who replaces `:410-431` on the shifted file overwrites the
+> tail of Task 7's own `VALIDATION_SWITCH_KINDS` and all of `REGIME_SWITCHES`. Locate the dict by
+> NAME. The same shift invalidates the `MASK_ARMS` at `contracts.py:403` reference in
+> "Before you start".
 - Modify: `src/logging_employment/validate/harness.py:121-129`, `:172-200` (`_join_truth`)
 - Test: `tests/integration/test_stage4_acceptance.py` (extend)
 
@@ -1902,8 +1950,16 @@ figure, not the golden's.
 **Files:**
 - Modify: `src/logging_employment/validate/metrics.py:206-237`
 - Modify: `src/logging_employment/validate/harness.py` (the five metric emit calls)
+- Modify: `tests/unit/test_validate_metrics_constraint.py:27,:36,:42` — **existing callers**
+- Modify: `tests/unit/test_validate_scoreboard.py:45,:119` — **existing callers**
 - Modify: `tests/fixtures/validation/validation_metrics_golden.parquet` (regenerate, once)
 - Test: `tests/integration/test_validation_golden.py` (extend)
+
+> **`arm` is REQUIRED keyword-only, so every existing caller breaks.** Measured 2026-09-09: five
+> call sites across the two unit modules above pass no `arm` and raise `TypeError` the moment
+> Step 4 lands. Add `arm="state_total"` to each — that is what they were implicitly asserting.
+> An earlier draft listed none of this, and this plan runs no full suite before Task 13, so the
+> breakage would have surfaced ten tasks later.
 
 **Interfaces:**
 - Consumes: `harness._mask_arm` (Task 9).
@@ -1971,7 +2027,9 @@ Append to that function's docstring, before the closing quotes:
     without ever failing `validate_frame`. The damage stops at that table: `build_scoreboard`'s
     `basis` frame selects only (`regime`, `seed`, `estimator_id`, `n_own_estimator`,
     `n_establishment_fallback`) and drops `mask_arm` before the join, so the board takes its
-    `mask_arm` from the point rows alone, where it is non-null on all 1,168 golden rows.
+    `mask_arm` from the point rows alone, where it is non-null on all 350 of them. (1,168 is the
+    whole golden table, on which `mask_arm` IS null 70 times — those 70 are exactly this family's
+    rows, which is the defect, not a counterexample to it.)
 ```
 
 Add `"mask_arm": arm,` to the row dict, immediately after `"seed": seed,`:
@@ -2072,13 +2130,18 @@ Run: `uv run pytest tests/integration/test_validation_golden.py -v`
 Expected: all pass, including `test_the_metrics_match_the_golden` and
 `test_the_golden_matches_the_declared_schema`.
 
+Run: `uv run pytest tests/unit/test_validate_metrics_constraint.py tests/unit/test_validate_scoreboard.py -v`
+Expected: all pass — the regression gate for the five updated call sites. Do not skip it; without
+it the `TypeError` stays hidden until Task 13's full suite.
+
 Run: `uv run pytest tests/integration/test_stage4_acceptance.py -v`
 Expected: all pass.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add src/logging_employment/validate/metrics.py src/logging_employment/validate/harness.py \
+git add tests/unit/test_validate_metrics_constraint.py tests/unit/test_validate_scoreboard.py \
+  src/logging_employment/validate/metrics.py src/logging_employment/validate/harness.py \
   tests/fixtures/validation/validation_metrics_golden.parquet \
   tests/integration/test_validation_golden.py
 git commit -m "fix(validate): the declines family carries the mask arm it was measured on"
@@ -2233,16 +2296,20 @@ Give all three their declared schema instead, so an empty run reports "nothing s
 a schema failure:
 
 ```python
-    scores = (
-        pl.concat(all_scores, how="vertical")
-        if all_scores
-        else pl.DataFrame(schema=VALIDATION_SCORE_SCHEMA)
-    )
-    metrics = (
-        pl.concat(all_metrics, how="diagonal")
-        if all_metrics
-        else pl.DataFrame(schema=VALIDATION_METRIC_SCHEMA)
-    )
+    scores = pl.concat(all_scores, how="vertical") if all_scores else pl.DataFrame()
+    if scores.width == 0:
+        scores = pl.DataFrame(schema=VALIDATION_SCORE_SCHEMA)
+    metrics = pl.concat(all_metrics, how="diagonal") if all_metrics else pl.DataFrame()
+    if metrics.width == 0:
+        # WIDTH, NOT LIST-TRUTHINESS. An earlier draft of this step wrote
+        # `pl.concat(...) if all_metrics else pl.DataFrame(schema=...)` and it NEVER FIRED:
+        # measured 2026-09-09, an empty-estimator run leaves `all_metrics` holding 35 frames of
+        # shape (0, 0) — one per regime x emitter — because every emitter loops
+        # `for (estimator,), group in scores.group_by("estimator_id")` (`validate/metrics.py:72`)
+        # and zero estimator groups makes `rows == []`, i.e. `pl.DataFrame([])`. The list is
+        # truthy, `pl.concat` of thirty-five (0, 0) frames is (0, 0), and the shaped branch is
+        # skipped. The emptiness that matters is the RESULT's, not the accumulator's.
+        metrics = pl.DataFrame(schema=VALIDATION_METRIC_SCHEMA)
     board = build_scoreboard(metrics)
 ```
 
@@ -2268,7 +2335,7 @@ from ..contracts import (
 ```
 
 This matters most for **Task 12**, which adds `validate_frame` gates to `result.scores` and
-`result.scoreboard`. On the un-shaped path those gates fail with `missing=[20 columns]` /
+`result.scoreboard`. On the un-shaped path those gates fail with `missing=[26 columns]` /
 `missing=[13 columns]` — so Task 12 *widens* this exposure unless Step 4b lands first.
 
 REACHABILITY — **witnessed 2026-09-09, not hypothetical.** An earlier draft of this step called the
@@ -2283,9 +2350,13 @@ run_pseudo_suppression(HarmonizedData.load("tests/fixtures/baselines"), [], cfg)
                                    'metric_family', 'metric_name', ...]
 ```
 
-An empty estimator list is the cheapest trigger. Note `scores` does NOT take its fallback there
-(`all_scores` is non-empty, giving `(0, 23)`); `metrics` and `board` both do. All three are shaped
-above anyway, because the scores fallback fires when no regime scores at all.
+An empty estimator list is the cheapest trigger. **Read those shapes carefully — the obvious
+reading is wrong, and cost this plan a defect.** Only `board` reaches a fallback. `scores` is
+`(0, 23)` because `all_scores` is non-empty. `metrics` is `(0, 0)` NOT because its fallback fired
+but because `pl.concat` of thirty-five `(0, 0)` emitter frames is `(0, 0)` — so a shaping guarded
+on `if all_metrics` would be dead code. That is why the block above tests `.width == 0` on the
+RESULT instead. All three are shaped regardless, because the `scores` path does have a genuinely
+empty accumulator when no regime scores at all.
 
 - [ ] **Step 4c: Pin the empty run**
 
@@ -2432,7 +2503,7 @@ package-wide is out of scope.
 - Consumes: all three schemas (Tasks 9 and 11), and **Task 11 Step 4b**. Without Step 4b this task
   makes the empty-run path worse rather than better: `harness.py:166-168` falls back to a bare
   zero-column `pl.DataFrame()` for `scores`, `metrics` and `board` when nothing scored, so the
-  gates added in Step 4 below would fail with `missing=[20 columns]` / `missing=[13 columns]`
+  gates added in Step 4 below would fail with `missing=[26 columns]` / `missing=[13 columns]`
   instead of reporting that the run scored nothing. Step 4b shapes those three fallbacks; land it
   first.
 - Produces: `contracts.VALIDATION_REQUIRED_NON_NULL: dict[str, tuple[str, ...]]` and
@@ -2546,6 +2617,14 @@ VALIDATION_REQUIRED_NON_NULL: dict[str, tuple[str, ...]] = {
         "denominator",
         "denominator_basis",
         "n_scored",
+        # The three `n_declined_*` columns were omitted by an earlier draft. They ride in on the
+        # same total LEFT join as the two below (`scoreboard.py:58`) and are equally non-null by
+        # construction — measured 2026-09-09 on the committed golden, 0 nulls in all five. §7.15
+        # and Task 11's schema comment both say they must carry a value, so leaving them out made
+        # this table disagree with the two declarations shipped alongside it.
+        "n_declined_by_design",
+        "n_declined_data_gap",
+        "n_declined_reconciliation_failure",
         "n_own_estimator",
         "n_establishment_fallback",
     ),
@@ -2775,11 +2854,14 @@ Expected: all pass, with the V1 test skipped when `data/staged` is absent. If V1
 different run id, a `ValidationConfig` field was added or removed somewhere in Tasks 1–12 — find it
 before doing anything else; that is the failure this test exists for.
 
-> **Re-measure `f03023ac9f3a` before you type it into the test.** Nothing in the repo asserts that
-> literal today — its only support is two prose comments (`runs.py:37`, `scoreboard.py:135`), so
-> nothing has been failing if it drifted, and the roadmap already records that `runs/f03023ac9f3a`
-> on disk was written by code four commits stale. A first-run failure here may mean the pin is
-> stale rather than that you removed a config field.
+> **`f03023ac9f3a` was re-measured 2026-09-09 and is CURRENT.**
+> `run_id(cfg, _input_digests(cfg))` returns it against today's `config.yaml` and `data/staged`, so
+> the literal is safe to pin and a failure here really does mean a `ValidationConfig` field moved.
+> Worth knowing anyway: nothing in the repo asserted that literal before this test — its only
+> support was two prose comments (`runs.py:37`, `scoreboard.py:135`) — so nothing would have caught
+> a drift. Note the separate point that the roadmap records the on-disk `runs/f03023ac9f3a`
+> ARTIFACTS as written by code four commits stale; the run ID matching does not make those bytes
+> current.
 
 - [ ] **Step 3: Run the full suite**
 
@@ -2822,10 +2904,10 @@ in Task 6's docstring and not fixed; neither regime is made to score; no CI and 
    R-S4C-17's obligation is unaffected; Task 11 records the correction in the new §7.15.
 3. **R-S4C-5's refusal cannot live in `assert_no_future_rows`.** A truncated frame never contains
    its own origin. Task 2 puts it in `rolling_origin_frames`, which holds the panel, and writes the
-   reason into the docstring. **The 2026-09-09 audit found this reason false as written** — a
-   guard given the untruncated panel's periods *can* answer the question in the function the spec
-   names. Task 2's choice stands on other grounds; see "Left open on purpose" below before
-   inheriting the argument.
+   reason into the docstring. **The 2026-09-09 audit found this reason overstated** — a guard
+   given the untruncated panel's periods *can* answer the question in the function the spec names,
+   so the constraint is the guard's signature, not the geometry. Task 2's choice stands; its
+   docstring now says why in terms that survive the counterexample.
 4. **V4's "exactly four regimes" counts CHANGED reasons, not regimes carrying one.** Measured
    2026-09-08 on the fixture before any of this landed, six carry a reason: the four V4 names plus
    `structural_break` and `naics_transition`, which draw no in-window target and already hit the
@@ -2881,21 +2963,29 @@ is a weaker signal than "every plan has one", but the section writing-plans prom
    optimisation. The removed draft's version is correctly targeted AND carries
    `if __debug__: raise SystemExit(...)`, which is what makes `-O` load-bearing. Task 1 Step 1 now
    contains both tests. The Self-Review's "V5 → 1" is only true with them.
-2. **A baseline for V2, recorded as an open decision.** Spec V2 (`:265-267`) says
-   "The `validation_scoreboard` output MUST be byte-identical." Task 13 asserts *properties* of a
-   freshly computed board (height 70, `mask_arm` uniques, `wape` null count 13, seven regimes), never
-   a byte comparison — and `runs/` is gitignored and unrecoverable from git, so the reference has to
-   be captured **before the first source edit** or it cannot be captured at all. The removed draft's
-   Task 1 did exactly that. Decide deliberately: either run it first, or amend V2's reading.
+2. **A baseline for V2 — CAPTURED 2026-09-09, before any source edit.** Spec V2 (`:265-267`)
+   says "The `validation_scoreboard` output MUST be byte-identical." Task 13 asserts *properties*
+   of a freshly computed board (height 70, `mask_arm` uniques, `wape` null count 13, seven
+   regimes), never a byte comparison — and `runs/` is gitignored and unrecoverable from git, so the
+   reference had to be taken before the first edit or not at all. It has been:
+   `runs/f03023ac9f3a` is frozen at `runs/_baseline_pre_stage4c/shipped` (`diff -r` clean, 14
+   files) with SHA-256s in `runs/_baseline_pre_stage4c/DIGESTS.txt`. The V2 comparand is
+   `d4e1187b6e736b3e10b1310894f75a6d00a6bd3ae17a6b5a65523dc4cad63ca6  validation_scoreboard.parquet`.
+   What this settles and what it does not: the bytes are now recoverable, but the roadmap records
+   the shipped artifacts as written by code four commits stale, so a mismatch against them is not
+   by itself a regression. Compare bytes deliberately, and re-run the harness at the pre-edit HEAD
+   if you want a reference that current inputs actually reproduce.
 
 ### Left open on purpose
 
-**The Self-Review's correction #3 states a false reason.** It says R-S4C-5's refusal "cannot live in
-`assert_no_future_rows`... A truncated frame never contains its own origin." The removed draft is a
-counterexample: `assert_no_future_rows(frame, *, origin, periods)` taking the *untruncated* panel's
-periods can answer the question in the function the spec names. Putting the refusal in
-`rolling_origin_frames` is still defensible — it already holds the panel — but the *reason* is
-false as written and must not be inherited unexamined.
+**The Self-Review's correction #3 overstates its reason.** It says R-S4C-5's refusal "cannot live
+in `assert_no_future_rows`... A truncated frame never contains its own origin." The arithmetic is
+right; the impossibility is not. The removed draft is a counterexample:
+`assert_no_future_rows(frame, *, origin, periods)` taking the *untruncated* panel's periods answers
+the question inside the function the spec names. So the real constraint is the guard's SIGNATURE,
+not the geometry — a two-argument guard cannot ask, a three-argument one can. Task 2's choice
+stands (threading the pre-truncation universe through every caller to reach a one-frame guard is
+the worse trade), and its docstring now states that reason instead of the impossibility claim.
 
 **`metric_name` on the declines rows.** Global Constraints rule it "record, do not fix" because
 naming it would move a second golden column beyond what V3 authorises; the removed draft had the
@@ -2941,10 +3031,17 @@ golden gain `metric_name` too. Directly opposed, and unresolved.
   `assert_declared_provenance` (`:239-243`) loops over five columns and does not check `mask_arm`.
   The removed draft promised it; no task here does it. R-S4C-14 does not require it, so this is an
   opportunity rather than a gap.
-- **Unverifiable from the audit's snapshots** (`data/` and `runs/` are gitignored): whether
-  `runs/f03023ac9f3a/` still exists, and every D1 figure in this plan — the seven D1 origins in
-  Tasks 3 and 5, M1's "3,024 of 4,812 rows", M4's 147 declines, M5's 1,080 moved estimates, M6's
-  three-process nondeterminism, and V1's `f03023ac9f3a`. Treat them as unverified, not as false.
+- **D1 figures: MEASURED, not unverifiable.** An earlier version of this note said the D1 claims
+  could not be checked because `data/` is gitignored. That was true of the git snapshots the first
+  audit used and FALSE of this working tree, which carries all four `data/staged` parquets. Three
+  were then measured 2026-09-09 and all three hold exactly:
+    - `run_id(cfg, _input_digests(cfg))` == **`f03023ac9f3a`** — V1's literal is CURRENT, not
+      stale. Task 13 can pin it as written.
+    - Task 3's derivation yields exactly **seven** origins, `2018-01 … 2024-01`, on a panel of
+      `2017-01 … 2024-12` (height 4,812).
+    - M1 exact: origin `2022-01` leaves **3,024 of 4,812** rows.
+  Still unmeasured here: M4's 147 declines, M5's 1,080 moved estimates. M6 was reproduced on the
+  fixture layer instead (see Task 6 Step 2).
 
 **Re-measured first-hand in the project venv** (polars 1.44.1), because Task 11's correction turns
 on them: `pl.DataFrame().is_empty()` and `pl.DataFrame(schema=VALIDATION_METRIC_SCHEMA).is_empty()`
