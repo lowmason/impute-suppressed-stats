@@ -31,7 +31,7 @@ from ..baselines.runner import REGISTRY, run_baselines
 from ..config import Config
 from ..contracts import HarmonizedData, assert_declared_provenance
 from ..errors import ConceptViolationError
-from .leakage import assert_no_retained_truth
+from .leakage import assert_no_future_rows, assert_no_retained_truth
 from .mask import apply_mask
 from .metrics import (
     bound_metrics,
@@ -41,7 +41,7 @@ from .metrics import (
     probabilistic_metrics,
 )
 from .recover import MaskedSystem, mask_and_solve
-from .regimes import REGIME_SPECS, select_targets
+from .regimes import REGIME_SPECS, rolling_origin_frames, rolling_origins, select_targets
 from .scoreboard import assert_scored_cells_are_primary_like, build_scoreboard
 
 
@@ -113,6 +113,16 @@ def run_pseudo_suppression(
         # those must declare a reason. Do not add an `or "..."` fallback — that fallback would be
         # a shared template, which is the defect this replaced.
         if spec.select is None:
+            if spec.mechanism == "frame_truncation":
+                # §13.4 bullet 3, ON THE LIVE PATH. Measured 2026-09-08, `assert_no_future_rows`
+                # had zero callers in `src/` and ran only inside two test modules, so Stage 4's
+                # exit criterion "a rolling-origin run provably contains no future-period rows"
+                # was discharged by nothing a run executes. The origins are recorded because a
+                # guard that ran nowhere and a guard that ran everywhere both report success.
+                origins = rolling_origins(data.qcew_monthly, config=config)
+                for origin, frame in rolling_origin_frames(data.qcew_monthly, origins=origins):
+                    assert_no_future_rows(frame, origin=origin)
+                entry["origins_checked"] = list(origins)
             entry["reason"] = spec.no_score_reason
             regimes[name] = entry
             continue
