@@ -2271,9 +2271,54 @@ This matters most for **Task 12**, which adds `validate_frame` gates to `result.
 `result.scoreboard`. On the un-shaped path those gates fail with `missing=[20 columns]` /
 `missing=[13 columns]` — so Task 12 *widens* this exposure unless Step 4b lands first.
 
-REACHABILITY, stated honestly: `metrics.height == 0` needs a run where nothing scored at all. The
-D1 config does not produce one, and the 2026-09-09 audit did not observe this path firing. It is
-the path this task names as its own motivation, not a measured failure.
+REACHABILITY — **witnessed 2026-09-09, not hypothetical.** An earlier draft of this step called the
+path unobserved; it was then measured firing on the committed fixture layer, with no `data/staged`
+and in under a second:
+
+```
+run_pseudo_suppression(HarmonizedData.load("tests/fixtures/baselines"), [], cfg)
+  -> scores (0, 23) | metrics (0, 0) | scoreboard (0, 0), manifest carries all 13 regimes
+  -> validate_frame(metrics, VALIDATION_METRIC_SCHEMA, "validation_metrics")
+     SchemaMismatchError: missing=['regime', 'seed', 'mask_arm', 'estimator_id',
+                                   'metric_family', 'metric_name', ...]
+```
+
+An empty estimator list is the cheapest trigger. Note `scores` does NOT take its fallback there
+(`all_scores` is non-empty, giving `(0, 23)`); `metrics` and `board` both do. All three are shaped
+above anyway, because the scores fallback fires when no regime scores at all.
+
+- [ ] **Step 4c: Pin the empty run**
+
+Append to `tests/integration/test_stage4_acceptance.py` (Task 5's module), adding
+`from logging_employment import contracts` to its imports:
+
+```python
+def test_an_empty_run_reads_as_nothing_scored_rather_than_a_schema_failure():
+    """Step 4b. The distinction the gate must preserve: "this run scored nothing" is a RESULT;
+    "thirteen columns missing" is a schema failure, and reporting the second for the first is how
+    an empty run gets mistaken for a broken one.
+
+    An empty estimator list is the cheapest trigger — measured, it leaves `metrics` and
+    `scoreboard` bare while the manifest still carries all thirteen regimes.
+    """
+    result = run_pseudo_suppression(HarmonizedData.load(FIXTURE), [], _fixture_config())
+
+    assert result.metrics.height == 0
+    contracts.validate_frame(
+        result.metrics, contracts.VALIDATION_METRIC_SCHEMA, "validation_metrics"
+    )
+
+    assert result.scoreboard.height == 0
+    contracts.validate_frame(
+        result.scoreboard, contracts.VALIDATION_SCOREBOARD_SCHEMA, "validation_scoreboard"
+    )
+
+    # The run happened; it just scored nothing. That is what the shaped frames must not obscure.
+    assert len(result.manifest["regimes"]) == 13
+```
+
+Run it BEFORE Step 4b to see it fail — measured on the fixture layer, `validate_frame` on the
+metrics frame reports every column missing.
 
 - [ ] **Step 5: Add both §7 field lists to the spec**
 
@@ -2351,15 +2396,21 @@ release-table list does not name this artifact; it is written to the run directo
 
 - [ ] **Step 6: Run the tests**
 
-Run: `uv run pytest tests/unit/test_contracts_validation.py tests/integration/test_validation_golden.py -v`
-Expected: all pass.
+Run: `uv run pytest tests/unit/test_contracts_validation.py tests/integration/test_validation_golden.py tests/integration/test_stage4_acceptance.py -v`
+Expected: all pass. The acceptance module is included because Step 4c adds a test to it; without
+it, Steps 4b and 4c go unexercised by this task's own gate.
 
 - [ ] **Step 7: Commit**
 
 ```bash
 git add src/logging_employment/contracts.py src/logging_employment/validate/scoreboard.py \
-  specs/logging-employment-spec.md tests/unit/test_contracts_validation.py
-git commit -m "feat(contracts): declare validation_score and validation_scoreboard field lists"
+  src/logging_employment/validate/harness.py specs/logging-employment-spec.md \
+  tests/unit/test_contracts_validation.py tests/integration/test_stage4_acceptance.py
+git commit -m "feat(contracts): declare validation_score and validation_scoreboard field lists
+
+Also shapes the three empty-run fallbacks in \`run_pseudo_suppression\`, so a run that
+scores nothing reports that rather than failing Task 12's gate with every column
+missing -- measured on the fixture layer with an empty estimator list."
 ```
 
 ---
@@ -2865,7 +2916,7 @@ golden gain `metric_name` too. Directly opposed, and unresolved.
 | 9 | Interfaces claimed "Consumes: nothing from Tasks 1–8" while appending to the module Task 5 creates. | Dependency stated. |
 | 10 | Step 4 had the executor type "the null rode into every downstream read of the own/fallback split" into a docstring. Measured false: `build_scoreboard`'s `basis` select drops `mask_arm` before the join. | Claim narrowed to the persisted `validation_metrics` table. |
 | 11 | Step 1's motivation said `build_scoreboard` returns a bare frame on an empty run. It RAISES `ColumnNotFoundError`; the bare frame comes from `harness.py:168`. | Docstring corrected; the test exercises the shaped path and pins Step 4's early return separately; Step 2 names both red states in order. |
-| 11 | **Scope added, not a correction.** Step 4 does not reach the shipped empty path at all. | **New Step 4b** shapes the three `harness.py:166-168` fallbacks and widens the `contracts` import; `harness.py` added to Files; Step 4b marked as requiring Step 4. This is the one edit that changes what the plan *does* rather than what it says. |
+| 11 | **Scope added, not a correction — approved 2026-09-09.** Step 4 does not reach the shipped empty path at all. | **New Step 4b** shapes the three `harness.py:166-168` fallbacks and widens the `contracts` import; `harness.py` added to Files; Step 4b requires Step 4. **Step 4c** pins it with a test. The path was then WITNESSED firing on the committed fixture layer (`run_pseudo_suppression(data, [], cfg)` → `metrics` and `scoreboard` bare `(0, 0)`, `validate_frame` reporting every column missing), so the earlier "not a measured failure" caveat has been replaced by the measurement. |
 | 11 | "§15.1's nine-item list stops at `validation_metrics.parquet`" — the list continues. | Reworded; the substantive claim (no scoreboard in the spec) stands. |
 | 12 | The stated criterion was "arrives through a LEFT join ⇒ excluded", but the tuple includes `n_own_estimator` / `n_establishment_fallback`, which arrive through one. | Criterion restated as whether the join is TOTAL by construction. |
 | 12 | Task 12's gates widen the empty-run exposure Task 11 Step 4 aims at. | Cross-referenced in both directions. |
