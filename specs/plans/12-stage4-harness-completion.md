@@ -3193,14 +3193,55 @@ as a removed `ValidationConfig` field.
   are fixed. The 19 unexecuted are the `git add` / `git commit` blocks and Task 10's `cp` of the
   golden — mutations an audit must not perform, not unverified logic.
 
-### Two decisions this plan records rather than makes
+### Task 0 — a pre-flight commit, before Task 1
 
-1. **Which formatter this repo follows.** `black --check` is clean (158 files); `ruff format
-   --check` wants 8, because ruff ≥0.9 rewrites `assert (x), msg` into `assert x, (msg)`. Both are
-   declared in `pyproject.toml`. Task 13 Step 4 invokes ruff's; treat its 8 as pre-existing and
-   check the list did not grow, or settle the question first.
-2. **What V2's "byte-identical" means.** Task 13 asserts properties of a freshly computed board,
-   not bytes. The baseline above makes the byte comparison available if you want it — but the
-   roadmap records those shipped artifacts as written by code four commits stale, so a mismatch
-   against them is not by itself a regression.
+Both of the questions this plan used to leave open are settled below. The first needs one commit
+that is NOT part of plan 12, taken first.
+
+**Decision 1: this repo follows `ruff`. Drop `black`.** They genuinely disagree — `black --check`
+is clean at 158 files while `ruff format --check` wants 8, because ruff ≥0.9 rewrites
+`assert (x), msg` into `assert x, (msg)`. `pyproject.toml` declares both, so today the answer to
+"is the tree formatted?" depends on which command you happen to run. Settle it:
+
+```bash
+uv run ruff format src tests          # the 8 files; cosmetic only
+# then add docstrings to the four private helpers interrogate reports:
+#   config.py:204 _refuse_a_random_mask_only_design   validate/recover.py:50 _empty_truth
+#   validate/regimes.py:55 _small_cell                validate/regimes.py:195 _is_next_month
+# then remove `black>=25.0` from [dependency-groups].dev and the whole [tool.black] block
+uv run ruff check src tests && uv run ruff format --check src tests && uv run interrogate src
+git commit -m "chore: adopt ruff format as the single formatter, and reach 100% interrogate"
+```
+
+**Why before Task 1, not inside it.** Plan 12 is a declaration exercise — V1 and V2 assert that no
+number moves — so a formatting sweep tangled into its diff would make that claim unreviewable. The
+sweep is safe: the changes are cosmetic (the `src/` one is a `.cast()` call rejoined onto one
+line), and `run_id` hashes the resolved config and the input digests, NOT source, so V1 cannot
+move.
+
+**What this buys.** Task 13 Step 4's gates become true as originally written — `ruff check` clean,
+`ruff format --check` clean, `interrogate` 100% — instead of "red for eight pre-existing files and
+four pre-existing misses, check the list did not grow". A gate that is expected to be red is not a
+gate. Once this lands, simplify Step 4 back to `Expected: clean` and `expected 100%`.
+
+**Decision 2: assert the bytes, not just the properties — the staleness objection is void.** The
+roadmap warns that the shipped artifacts were written by stale code, citing 4,536 metric rows on
+disk against 4,530 re-measured. Measured 2026-09-09: `runs/f03023ac9f3a/validation_metrics.parquet`
+holds **4,530** rows and is dated **2026-09-08 11:27**, while the roadmap describes a file written
+`2026-09-07 16:49`. The artifacts were REGENERATED after that note. The roadmap's warning is the
+thing that is stale, not the artifacts — and the frozen baseline is therefore a legitimate V2
+comparand.
+
+So give Task 13 the byte assertion the spec actually asks for, against
+`runs/_baseline_pre_stage4c/shipped/validation_scoreboard.parquet`
+(`d4e1187b6e736b3e10b1310894f75a6d00a6bd3ae17a6b5a65523dc4cad63ca6`), and KEEP the four property
+assertions beside it. They do different jobs: the hash says *something* moved, the properties say
+*what* — and on a 13-column board that difference is the whole debugging cost.
+
+**Confirm before relying on it.** Row-count agreement is not byte-identity. Run
+`uv run logging-estimates validate --config config.yaml` once at pre-edit HEAD and check the
+scoreboard's sha256 against the digest above. That run REWRITES `runs/f03023ac9f3a/` — which is
+exactly why the freeze exists; restore from `runs/_baseline_pre_stage4c/shipped` if it diverges.
+If it does diverge, the byte assertion is not viable and the properties stand alone; say so rather
+than pinning a hash no run reproduces.
 
