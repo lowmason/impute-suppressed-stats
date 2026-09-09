@@ -7,6 +7,7 @@ import pytest
 from logging_employment.baselines.runner import REGISTRY, run_baselines
 from logging_employment.config import load_config
 from logging_employment.contracts import HarmonizedData
+from logging_employment.errors import LeakageError
 from logging_employment.reconcile.anchor import observed_partition
 from logging_employment.validate.leakage import (
     assert_no_future_rows,
@@ -23,7 +24,7 @@ def test_no_column_of_the_masked_frame_retains_a_held_out_value():
 
 def test_a_rolling_origin_frame_carrying_a_future_row_is_refused():
     data = HarmonizedData.load(Path("data/staged"))
-    with pytest.raises(AssertionError, match="future"):
+    with pytest.raises(LeakageError, match="future"):
         assert_no_future_rows(data.qcew_monthly, origin="2020-01")
 
 
@@ -108,5 +109,5 @@ def test_a_value_column_that_kept_the_truth_is_still_caught():
         .otherwise(pl.col("employment_raw"))
         .alias("employment_raw")
     )
-    with pytest.raises(AssertionError, match="employment_raw"):
+    with pytest.raises(LeakageError, match="employment_raw"):
         assert_no_retained_truth(dataclasses.replace(masked, qcew_monthly=leaky), truth)

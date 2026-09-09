@@ -19,6 +19,7 @@ from __future__ import annotations
 import polars as pl
 
 from ..contracts import HarmonizedData
+from ..errors import LeakageError
 
 # Columns that stay PUBLIC when a cell is suppressed, so a value of theirs equal to the withheld
 # employment is a coincidence rather than a retention. Excluded by name, and by name only, so that
@@ -79,10 +80,11 @@ def assert_no_retained_truth(masked: HarmonizedData, truth: pl.DataFrame) -> Non
         for column, value in cell.row(0, named=True).items():
             if column in _PUBLIC_UNDER_SUPPRESSION:
                 continue
-            assert str(value) != withheld, (
-                f"{column} on {row['state_fips']}/{row['reference_month']} retains the held-out "
-                f"value {withheld}"
-            )
+            if str(value) == withheld:
+                raise LeakageError(
+                    f"{column} on {row['state_fips']}/{row['reference_month']} retains the "
+                    f"held-out value {withheld}"
+                )
 
 
 def assert_no_future_rows(frame: pl.DataFrame, *, origin: str) -> None:
@@ -92,7 +94,8 @@ def assert_no_future_rows(frame: pl.DataFrame, *, origin: str) -> None:
     contains no future-period rows" is about — a mask hides values, it does not remove rows.
     """
     future = frame.filter(pl.col("reference_month") >= origin)
-    assert future.height == 0, (
-        f"{future.height} future rows at or after origin {origin}: "
-        f"{sorted(future['reference_month'].unique().to_list())[:5]}"
-    )
+    if future.height:
+        raise LeakageError(
+            f"{future.height} future rows at or after origin {origin}: "
+            f"{sorted(future['reference_month'].unique().to_list())[:5]}"
+        )

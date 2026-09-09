@@ -101,3 +101,16 @@ class NoHarvestFactorError(LoggingEmploymentError):
     behaviour. Stage 7 replaces that declining stub with a live baseline and owns the decision
     of when an absent factor is a halt instead; this class is held for that path.
     """
+
+
+class LeakageError(LoggingEmploymentError):
+    """§13.4's leakage controls found the thing they exist to find.
+
+    A typed raise rather than a bare `assert`, because `python -O` strips assert statements and
+    both guards run on the live path: `assert_no_retained_truth` from
+    `validate/harness.py::run_pseudo_suppression` inside the scoring loop, and
+    `assert_no_future_rows` once per rolling origin. Measured 2026-09-08 before this class existed,
+    the same call raised under `python` and returned silently under `python -O`. The package states
+    this convention in `run_pseudo_suppression`'s own docstring and these two functions were the
+    only places in it that violated the convention.
+    """
