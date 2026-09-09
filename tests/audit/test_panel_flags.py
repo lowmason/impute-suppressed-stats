@@ -102,9 +102,9 @@ def write_fixture(tmp_path, monkeypatch, extra_rows=()):
 def test_suppressed_is_boolean_never_null(tmp_path, monkeypatch):
     write_fixture(tmp_path, monkeypatch)
     panel = build_panel("5")
-    assert (
-        panel["suppressed"].null_count() == 0
-    ), "a null `suppressed` is dropped from every .mean() denominator"
+    assert panel["suppressed"].null_count() == 0, (
+        "a null `suppressed` is dropped from every .mean() denominator"
+    )
     assert panel["suppressed"].dtype == pl.Boolean
 
 
@@ -307,12 +307,12 @@ def test_the_derived_parquet_records_no_http_status(tmp_path, monkeypatch):
     main()
 
     (record,) = c.load_summary("qcew_panel")["extracts"]
-    assert record["url"].startswith(
-        "derived://"
-    ), "guard: this assertion is only about an extract that was never fetched over HTTP"
-    assert (
-        record["http_status"] is None
-    ), "a file built from disk has no HTTP status; 200 here is a fabricated measurement"
+    assert record["url"].startswith("derived://"), (
+        "guard: this assertion is only about an extract that was never fetched over HTTP"
+    )
+    assert record["http_status"] is None, (
+        "a file built from disk has no HTTP status; 200 here is a fabricated measurement"
+    )
 
 
 def test_the_derived_parquet_is_the_only_extract_and_it_is_on_disk(tmp_path, monkeypatch):

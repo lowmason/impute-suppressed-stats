@@ -48,6 +48,11 @@ def mask_and_solve(
 
 
 def _empty_truth() -> pl.DataFrame:
+    """The truth frame a no-target mask withholds: rowless but SHAPED.
+
+    A bare `pl.DataFrame()` would make every downstream join fail on a missing column, reporting a
+    schema error where the fact is that this replicate masked nothing.
+    """
     return pl.DataFrame(
         schema={
             "state_fips": pl.String,

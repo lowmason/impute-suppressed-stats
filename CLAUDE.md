@@ -18,7 +18,7 @@ stage is done; it also records what each stage re-validated about later ones. Pl
 
 ```
 uv run pytest                    # whole suite; NOT green without data/ (see gotchas)
-uv run black .                   # the tree IS black-formatted; never run `ruff format`
+uv run ruff format src tests     # the single formatter; NEVER `ruff format .` (see gotchas)
 uv run ruff check src tests      # clean; a bare `.` also lints scripts/ (see gotchas)
 uv run interrogate src           # docstring gate, fail-under = 100
 
@@ -116,14 +116,17 @@ synthetic masks. Outputs land in `runs/<run_id>/` beside one JSON manifest per c
   `tests/integration/test_validate_{leakage,exact_recovery}.py`. Those paths are **cwd-relative**,
   so run pytest from the repo root. `tests/integration/test_d1_*.py` do it properly, with
   `skipif`. Baseline HEAD before blaming your own change.
-- **`black` and `ruff format` disagree; the tree is black's.** At `8899b5f` with ruff 0.16.6,
-  `black --check .` passes (172 files) while `ruff format --check .` wants to rewrite 24 —
-  running it buries your change in an unrelated diff. Lint is scope-dependent: `ruff check src
-  tests` is **clean**, while `ruff check .` reports 24 findings (ISC004, TRY004, UP037, RUF100,
-  RET501, UP047) that all live in `scripts/`. `interrogate` is configured `fail-under = 100` and
-  currently fails at 98.9%, on four missing docstrings: `config.py::_refuse_a_random_mask_only_design`,
-  `validate/recover.py::_empty_truth`, `validate/regimes.py::_small_cell` and `:195`. Line length is 100 in both
-  formatters. None of that is yours.
+- **`ruff` is the only formatter, and its SCOPE is the gotcha.** Black was dropped 2026-09-09
+  (plan 12's Task 0): the two disagreed on eight files — ruff >=0.9 rewrites `assert (x), msg`
+  into `assert x, (msg)` and black leaves it — and `pyproject.toml` declared both, so "is the tree
+  formatted?" depended on which command you ran. Format `src tests`, **never `ruff format .`**:
+  measured, it rewrites `except (A, B):` into PEP 758's `except A, B:` in three `scripts/audit/`
+  files whose PEP 723 headers declare `>=3.12`, where that syntax does not parse. The reason now
+  lives beside `[tool.ruff]`. Lint is scope-dependent the same way: `ruff check src tests` is
+  **clean**, while `ruff check .` reports 24 findings (ISC004, TRY004, UP037, RUF100, RET501,
+  UP047) that all live in `scripts/`. `interrogate src` is `fail-under = 100` and now **passes at
+  100%** — the four long-standing misses got docstrings in that same commit, so a failure there is
+  yours.
 - **Adding a pydantic field to `Config` re-ids every run directory**: `resolved_dict` is
   `model_dump(mode="json")` and feeds `run_id`. For a CLI-only choice use `run_id`'s `overrides`,
   omitting the key when unset (`runs.py` docstring), so existing runs keep their id.

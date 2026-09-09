@@ -202,6 +202,13 @@ class ValidationConfig(_Strict):
 
     @model_validator(mode="after")
     def _refuse_a_random_mask_only_design(self) -> ValidationConfig:
+        """§13.2 forbids random masking as the ONLY validation design; refuse that config.
+
+        A validator rather than a check inside the harness, because the harness would discover it
+        one full pass late. `include_random_mask_sanity_check` is deliberately absent from the
+        disjunction: it names the design this rule exists to exclude, not one of the designed
+        regimes that satisfies it.
+        """
         designed = (
             self.include_primary_like
             or self.include_complementary_like

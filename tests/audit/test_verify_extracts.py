@@ -815,9 +815,7 @@ def test_the_empty_branch_claims_nothing_about_checks_that_did_not_run():
     assert all("did not run" not in f.detail for f in empty)
     assert all("the checks that" not in f.detail for f in empty)
     verdict_failure = next(f for f in empty if f.criterion == "E2")
-    assert (
-        verdict_failure.detail == "the finding file is empty, so it carries no verdict " "sentence"
-    )
+    assert verdict_failure.detail == "the finding file is empty, so it carries no verdict sentence"
 
     absent = m.check_document(None, {"industry_code_used": "113310"}, {"qcew": True})
     assert all("did not run" in f.detail for f in absent)

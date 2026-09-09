@@ -158,9 +158,9 @@ def test_every_suppressed_state_month_carries_a_bound_status(solved, config) -> 
     # a message renders only on an already-red assert -- but the frames behind them came through a
     # join, whose row order polars leaves unspecified, so the unsorted form makes the first three
     # names printed differ between runs of the same failure.
-    assert (
-        missing.is_empty()
-    ), f"suppressed state cells with no bound row: {sorted(missing['cell_id'].to_list())[:3]}"
+    assert missing.is_empty(), (
+        f"suppressed state cells with no bound row: {sorted(missing['cell_id'].to_list())[:3]}"
+    )
     # The anti-join says every suppressed cell has at least one bound row; this says at most one.
     # `semi` returns the matching left rows, so a duplicated bound row inflates it while the
     # anti-join stays empty.

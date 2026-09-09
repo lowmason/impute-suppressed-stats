@@ -103,9 +103,7 @@ def _select(frame: pl.DataFrame, kind: str, size_concept: str, value_column: str
         pl.col(value_column).alias("observed_value"),
         pl.col("snapshot_id").alias("source_snapshot_id"),
         pl.col("disclosure_code").alias("qcew_disclosure_code"),
-    ).cast(
-        TARGET_CELL_SCHEMA
-    )  # type: ignore[arg-type]
+    ).cast(TARGET_CELL_SCHEMA)  # type: ignore[arg-type]
 
 
 def state_total_cells(monthly: pl.DataFrame, *, size_concept: str) -> pl.DataFrame:

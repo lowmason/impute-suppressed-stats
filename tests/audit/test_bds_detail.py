@@ -52,9 +52,7 @@ HTML_CONTENT_TYPE = "text/html"
 # (confirmed live for NAICS=11: header ["YEAR","ESTAB","NAICS","state"], 2346 rows, 51 states,
 # years 1978-2023, every row's NAICS value literally "11").
 TABULAR_BODY = (
-    b'[["YEAR","ESTAB","NAICS","state"],'
-    b'["1978","1345","11","01"],'
-    b'["1979","1287","11","01"]]'
+    b'[["YEAR","ESTAB","NAICS","state"],["1978","1345","11","01"],["1979","1287","11","01"]]'
 )
 
 

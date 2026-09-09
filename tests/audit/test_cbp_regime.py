@@ -466,7 +466,7 @@ def test_variable_definition_summary_has_values_crosswalk_true_when_values_item_
 
 def test_emp_n_f_caveat_when_never_observed_in_any_response_says_so_and_names_the_label():
     text = m.emp_n_f_caveat(
-        observed_any=False, emp_n_f_label="Flag for Noise range for " "number of employees"
+        observed_any=False, emp_n_f_label="Flag for Noise range for number of employees"
     )
     assert "does not appear in any year's 113310 x state response header" in text
     assert "Flag for Noise range for number of employees" in text
@@ -475,7 +475,7 @@ def test_emp_n_f_caveat_when_never_observed_in_any_response_says_so_and_names_th
 
 def test_emp_n_f_caveat_when_observed_says_it_can_be_cross_checked():
     text = m.emp_n_f_caveat(
-        observed_any=True, emp_n_f_label="Flag for Noise range for " "number of employees"
+        observed_any=True, emp_n_f_label="Flag for Noise range for number of employees"
     )
     assert "cross-checked" in text
 

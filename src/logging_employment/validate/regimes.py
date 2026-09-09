@@ -53,6 +53,11 @@ class RegimeSpec:
 
 
 def _small_cell(monthly: pl.DataFrame, seed: int, config: Config) -> list[MaskTarget]:
+    """§13.3's small-cell-biased regime: the propensity draw itself, with no extra filter.
+
+    `sample_targets` is already propensity-WEIGHTED rather than uniform-then-sorted, so this regime
+    needs no pool of its own — narrowing the pool here as well would apply the same bias twice.
+    """
     return sample_targets(
         monthly, n=config.validation.replicates_per_regime, seed=seed, config=config
     )
@@ -193,6 +198,12 @@ def _regional(monthly: pl.DataFrame, seed: int, config: Config) -> list[MaskTarg
 
 
 def _is_next_month(previous: str, candidate: str) -> bool:
+    """Is `candidate` the calendar month directly after `previous`, across a year boundary?
+
+    String comparison cannot answer this — "2020-12" and "2021-01" are adjacent months but not
+    adjacent strings — and `_long_run` needs consecutiveness, not sort order, to find a genuine
+    blackout run rather than a gap-spanning one.
+    """
     py, pm = int(previous[:4]), int(previous[5:])
     cy, cm = int(candidate[:4]), int(candidate[5:])
     return (cy, cm) == (py + 1, 1) if pm == 12 else (cy, cm) == (py, pm + 1)

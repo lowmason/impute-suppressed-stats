@@ -606,9 +606,9 @@ def test_near_miss_rows_are_keyed_by_codes_the_publication_map_left_at_none():
     assignable = {"none"} | {
         m.level_of(row["industry_code"]) for row in findings["logging_industry_codes"]
     }
-    assert (
-        set(level.values()) <= assignable
-    ), f"map carries levels level_of cannot produce: {set(level.values()) - assignable}"
+    assert set(level.values()) <= assignable, (
+        f"map carries levels level_of cannot produce: {set(level.values()) - assignable}"
+    )
     for row in near_miss:
         assert level[row["state_code"]] == "none"
 

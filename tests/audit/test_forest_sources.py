@@ -1796,6 +1796,6 @@ def test_a_composed_fia_run_backs_every_scanned_page_with_a_hashed_extract(tmp_p
     hashed = {Path(e["path"]).name for e in written["extracts"]}
     scanned = set(written["findings"]["industry_concept_scan"]["pages_scanned"])
     assert scanned, "an empty corpus would make the subset check vacuous"
-    assert (
-        scanned <= hashed
-    ), f"pages_scanned names files no extract backs: {sorted(scanned - hashed)}"
+    assert scanned <= hashed, (
+        f"pages_scanned names files no extract backs: {sorted(scanned - hashed)}"
+    )
