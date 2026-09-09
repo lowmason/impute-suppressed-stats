@@ -173,6 +173,20 @@ class DisclosureConfig(_Strict):
 class ValidationConfig(_Strict):
     """§13's harness settings, adapted from Appendix A.
 
+    THE SEVEN `include_*` SWITCHES ARE THREE DIFFERENT KINDS OF THING, declared in
+    `contracts.VALIDATION_SWITCH_KINDS` and summarised here because this is where a reader meets
+    them. Four are REGIME SWITCHES and gate their regime in `validate/harness.py` (wired in the
+    commit after the one that declared these kinds; before it the harness read exactly one of the
+    seven, and read it to RAISE); two name INV-009 mask LABELS (§13.2 steps 3 and 8) and gate no
+    regime; one names a design with no implementation anywhere in the package and is an operand of
+    `_refuse_a_random_mask_only_design` below. Nine of the thirteen regimes have no switch at all,
+    so the set was never a partition.
+
+    NO FIELD MAY BE ADDED OR REMOVED. `runs.run_id` hashes `resolved_dict`, which is
+    `model_dump(mode="json")` — the whole model — so either direction re-identifies every run
+    directory and orphans `runs/f03023ac9f3a`. Changing a DEFAULT is free: `config.yaml` pins all
+    fourteen keys, so no default reaches the resolved config.
+
     `include_vintage_comparison` defaults False against Appendix A's True: measured 2026-09-07, no
     period in any staged table carries a second snapshot, and `release_vintage` is the reference
     quarter lowercased rather than a publication vintage. Turning it on is a fail-closed error in

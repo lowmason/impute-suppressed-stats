@@ -400,6 +400,46 @@ REGIME_DISPOSITIONS: dict[str, str] = {
     "cbp_size_gaps": "feasible",
 }
 
+# What KIND of thing each Appendix A `include_*` switch is. Measured 2026-09-08, the seven were
+# never a regime partition and every restatement that treated them as one has been wrong in a
+# different way: four name regimes, two name INV-009 mask LABELS, and one names a design with no
+# implementation anywhere in the package. Nine of the thirteen regimes have no switch at all.
+SWITCH_KINDS: tuple[str, ...] = (
+    "regime_switch",
+    "mask_label_switch",
+    "design_validity_operand",
+)
+
+VALIDATION_SWITCH_KINDS: dict[str, str] = {
+    "include_long_runs": "regime_switch",
+    "include_rolling_origin": "regime_switch",
+    "include_retrospective_smoothing": "regime_switch",
+    "include_vintage_comparison": "regime_switch",
+    # §13.2 steps 3 and 8, not regime selection. These name the INV-009 label a masked cell
+    # carries; every selector in `validate/regimes.py` constructs `primary_like` targets and
+    # `scoreboard.assert_scored_cells_are_primary_like` refuses anything else on the scoring arm,
+    # so the complementary half binds on the national-size March margin instead.
+    "include_primary_like": "mask_label_switch",
+    "include_complementary_like": "mask_label_switch",
+    # An operand of `ValidationConfig._refuse_a_random_mask_only_design`, and the ONLY flag not in
+    # that validator's disjunction — it is the design the §13.2 rule exists to exclude, not one of
+    # the designed regimes that satisfies it. It has no implementation and gates no selection.
+    "include_random_mask_sanity_check": "design_validity_operand",
+}
+
+# The four regime switches, as regime -> switch. NO FIELD IS ADDED OR REMOVED to build this:
+# `runs.run_id` hashes `config.resolved_dict`, which is the whole model, so either direction
+# re-identifies every run directory on disk and orphans `runs/f03023ac9f3a`. Changing a DEFAULT is
+# free, because `config.yaml` pins all fourteen keys and no default reaches the resolved config —
+# which is the opposite of what both `specs/deferred_items.md` and the roadmap asserted until
+# 8ed7ecd.
+REGIME_SWITCHES: dict[str, str] = {
+    "long_consecutive_runs": "include_long_runs",
+    "rolling_origin": "include_rolling_origin",
+    "retrospective_smoothing": "include_retrospective_smoothing",
+    "preliminary_to_final_vintage": "include_vintage_comparison",
+}
+
 MASK_ARMS: tuple[str, ...] = ("state_total", "national_size")
 
 INTERVAL_SOURCES: tuple[str, ...] = ("rolling_residual_ensemble", "none")

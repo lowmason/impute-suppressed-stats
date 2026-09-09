@@ -2162,13 +2162,22 @@ reconciliation:
 
 validation:
   pseudo_suppression_seeds: [1024, 2048, 4096]
+  # The seven include_* switches are THREE KINDS of thing, not one. Declared in
+  # contracts.VALIDATION_SWITCH_KINDS and enforced by tests/unit/test_validation_switch_kinds.py.
+  # design-validity operand: an operand of ValidationConfig._refuse_a_random_mask_only_design,
+  # naming the design §13.2 prohibits as the ONLY one. No implementation; gates no selection.
   include_random_mask_sanity_check: true
+  # mask-label switches: §13.2 steps 3 and 8. These name the INV-009 label a masked cell carries,
+  # not a regime. Neither is wired to regime selection and neither should be read as if it were.
   include_primary_like: true
   include_complementary_like: true
-  include_long_runs: true
-  include_rolling_origin: true
-  include_retrospective_smoothing: true
-  include_vintage_comparison: true
+  # regime switches: each gates one §13.3 regime. A regime excluded by its switch still appears in
+  # the run manifest with a reason naming the switch — it does not vanish. Nine of the thirteen
+  # regimes have no switch at all, so these four are not a partition of §13.3.
+  include_long_runs: true             # -> long_consecutive_runs
+  include_rolling_origin: true        # -> rolling_origin
+  include_retrospective_smoothing: true   # -> retrospective_smoothing
+  include_vintage_comparison: true    # -> preliminary_to_final_vintage
 
 promotion:
   minimum_wape_improvement: 0.05
