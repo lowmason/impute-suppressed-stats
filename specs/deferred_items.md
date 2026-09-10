@@ -1575,3 +1575,43 @@ that was skipped — work the close itself uncovered.
       will be scoring a perturbation of every state, not of the holed one.
       Size: design. Revisit if: `cbp_size_gaps` is wired to score, or `resolve_intensity` gains a
       way to take a caller-supplied national intensity.
+
+## 2026-09-09 system review — 2026-09-10
+
+Filed while amending the roadmap to what shipped. Both items are gaps the review
+names but no existing item owns; the Stage 4 `Exit:` line cites them.
+
+- [ ] `D-085` **§13.2 step 6 and §13.5's out-of-bounds rule are witnessed by tests, never enforced by the harness.**
+      Stage 4's `Exit:` claimed the harness "rejects a mask whose target remains exactly
+      recoverable" and that a truth outside the deterministic bounds "fails the run as a
+      constraint-data bug (§13.5)". Neither happens. `is_exactly_recoverable`
+      (`validate/recover.py:67`) and `mask_and_solve_size` (`:80`) have no caller anywhere in
+      `src/`; `validate/harness.py` raises only `ConceptViolationError` (`:76`, `:296`), never on
+      recoverability or on a bound violation. What ships instead is measurement:
+      `validate/metrics.py:45,52` emit `truth_in_bound_rate` and `exact_recovery_rate` as metric
+      rows, both present in `runs/f03023ac9f3a/validation_metrics.parquet`. The only executable
+      witnesses are `tests/integration/test_validate_exact_recovery.py`, which calls
+      `mask_and_solve_size` directly and skips unless a March with zero suppressed classes exists.
+      This is not a wrong number on D1: every state cell is `unbounded` with a null
+      `selected_upper`, so the bounds rule cannot fire on the state-total arm at all.
+      Target: Stage 6 — the first stage with a size-class estimator and state x size cells, which
+      is where both rules can first bind. Size: implementation.
+      Done when: a mask whose target stays exactly recoverable is rejected (or separately
+      labelled) by the harness rather than by a test, and a pseudo-hidden truth outside
+      `deterministic_bounds` fails the run with a named error.
+
+- [ ] `D-086` **Two of the four non-scoring regimes are owned by nothing.**
+      Nine of the thirteen §13.3 regimes score in the D1 acceptance run (measured from
+      `runs/f03023ac9f3a/validation_scoreboard.parquet`: `clustered_states_within_month`,
+      `concentration_proxy`, `long_consecutive_runs`, `naics_transition`, `regional_blocks`,
+      `small_cell_biased`, `structural_break`, `whole_seasonal_blocks`,
+      `whole_state_year_blocks`). Four do not. `D-071` owns two of them — `rolling_origin` and
+      `cbp_size_gaps` — and its closure condition is "decide what each regime scores".
+      `retrospective_smoothing` and `preliminary_to_final_vintage` are the other two and are named
+      by no open item: `D-076` mentions their `include_*` switches but is closed and is about the
+      switches gating no selection, not about the regimes scoring nothing.
+      Size: design. Revisit if: `D-071` is closed (the same "what does it score" question applies
+      to these two and should be answered in the same pass), or REQ-022 is re-scoped — the review
+      records that REQ-022 cannot honestly be called closed by Stage 4 while four regimes score
+      nothing.
+
