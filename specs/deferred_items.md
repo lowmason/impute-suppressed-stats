@@ -948,7 +948,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       future stage: Stage 1 is ticked COMPLETE (2026-09-05, plan 2), plan 2 records no deviation or
       exemption for these two commands, and the repo's own reading of the MUST already convicted
       the same shape elsewhere — `specs/findings/stage3-plan-audit.md` lists "`reconcile` wrote no
-      manifest, against §16.1's MUST" as a confirmed-and-fixed defect, and `cli.py:361` now quotes
+      manifest, against §16.1's MUST" as a confirmed-and-fixed defect, and `cli.py::reconcile_command` now quotes
       the sentence verbatim as the justification. Needs either two small writers or an explicitly
       recorded exemption for read-only check commands — but the roadmap's "each" forecloses
       assuming the latter. Related and deliberately excluded: `solve-bounds` also wrote no

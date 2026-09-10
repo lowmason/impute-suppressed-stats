@@ -40,11 +40,12 @@ estimator's considered refusal — never an exception.
    depth, since `national_residual` takes a `Partition` so a caller *can* mask partition-only (the
    unit tests do). R-COMP-8's residual cross-check is what actually fails a mismatch:
    `fallback.py::_assert_the_partition_is_the_anchors`::_assert_the_partition_is_the_anchors`.
-5. **Cite the spec by § number, never by line.** Two shipped `spec:NNN` citations have drifted:
-   `interfaces.py` cites `spec:942` for §10.1's "same ... reconciliation layer" sentence, which
-   now sits at spec line 977 (942 is a bare code fence); `historical.py` cites `spec:968-972` for
-   §10.3's five variants, which now sit at 1003-1007 (968 is a `bound_status` bullet). Do not trust
-   either number, and do not add more.
+5. **Cite the spec by § number, never by line.** This package now carries ZERO `spec:NNN`
+   citations — `grep -rn 'spec:' src/logging_employment/baselines/` matches only this file. The two
+   that prompted the rule (`interfaces.py` at `spec:942`, `historical.py` at `spec:968-972`) had
+   both drifted onto unrelated text and were removed in `c7200a5`; the rule is kept because the
+   hazard is re-importing a line pin from plan prose, not finding one in place. A line number is an
+   unchecked offset into a mutable file, and no test catches it when it rots.
 6. **A decline is a row, not an absence** (§7.13). `run_baselines` writes one null-estimate row per
    missing cell with `decline_reason` and a `decline_kind` from the closed set
    `contracts.DECLINE_KINDS` (`by_design` / `data_gap` / `reconciliation_failure`). Three call
