@@ -11,7 +11,8 @@ post-hoc cosmetic adjustment" — there is no config key to skip it.
 
 Nothing outside `baselines/` calls into this package. `baselines/runner.py::run_baselines` is the
 production path and calls, in order: `observed_partition` → `closure_audit` →
-`assert_universe_closes` → `national_residual` → `allocate` → `integerize`.
+`assert_universe_closes` → `national_residual` → `allocate` → `integerize`, and (since R-S5P-3)
+reads `scaling.Bounds` so `runner.assert_within_bounds` can enforce INV-002's per-cell half.
 `baselines/fallback.py::_assert_the_partition_is_the_anchors` also calls `national_residual`, to re-derive the residual from the
 context's partition and refuse an anchor that disagrees. The other six `baselines/` modules import
 `Weights` / `Anchor` / `Partition` as types only.

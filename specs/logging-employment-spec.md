@@ -2522,5 +2522,8 @@ Other §21 rows keep their Appendix A defaults until a stage's plan or finding c
 >   words.** `rolling_origin` and `cbp_size_gaps` are `feasible / scored=0` because neither
 >   produces a `MaskTarget` — one truncates the frame, the other drops CBP state-years;
 >   `retrospective_smoothing` and `preliminary_to_final_vintage` are excluded by their config
->   switches and remain IN the manifest saying so. Deciding what the first two SCORE is open in
->   `specs/deferred_items.md` and is not something Stage 5 should infer a design for.
+>   switches and remain IN the manifest saying so. Deciding what the first two SCORE was open in
+>   `specs/deferred_items.md`; it was RULED 2026-09-10 (`D-071`, now closed) that all four are
+>   declared-but-unscored by decision, REQ-022 is not closed by Stage 4, and Stage 5's §13.10 gate
+>   is applied over nine of the thirteen regimes. Stage 5 should not infer a design for the other
+>   four.

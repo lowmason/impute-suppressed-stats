@@ -229,7 +229,8 @@ DECLINE_KINDS: tuple[str, ...] = ("by_design", "data_gap", "reconciliation_failu
 def assert_declared_provenance(frame: pl.DataFrame) -> None:
     """Refuse a provenance value outside its declared tuple.
 
-    The three tuples above are the closed sets a baseline row's provenance may draw from, but
+    The five tuples this checks (`RECONCILIATION_STATUSES`, `WEIGHT_BASES`, `ANCHOR_BASES`,
+    `DECLINE_KINDS`, `SUPPRESSION_TYPES`) are the closed sets a baseline row's provenance may draw from, but
     `BASELINE_RESULT_SCHEMA` checks dtypes only -- `pl.String` accepts any string. `weight_basis`
     is the live exposure: `run_baselines` copies it from an estimator's own `outcome.basis`, so a
     third-party estimator's typo reached `baseline_results.parquet` and passed every test. Nulls

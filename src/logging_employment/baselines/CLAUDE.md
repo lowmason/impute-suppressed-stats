@@ -101,9 +101,9 @@ equals `REGISTRY`'s and pins the whole frame against a committed golden parquet.
 ## Commands (repo root)
 
 ```bash
-# 85 passed
+# 92 passed
 uv run pytest tests/unit/test_baseline_interfaces.py tests/unit/test_baselines_*.py
-# 13 passed, 5 skipped — the skips are all test_d1_baselines, which needs data/staged
+# 20 passed with data/staged; 15 passed + 5 skipped without (the 5 are test_d1_baselines)
 uv run pytest tests/integration/test_baseline_golden.py \
     tests/integration/test_baseline_cli.py tests/integration/test_d1_baselines.py
 ```
@@ -117,8 +117,10 @@ so no harvest-origin volume exists and §10.5 refuses a substitute proxy. That i
 expected shape, not a data gap — do not "fix" it.
 
 `logging-estimates run-baselines --config <path>` takes **only** `--config` (the `--estimators`
-subset option lives on `validate`), gates on an existing `runs/<id>/schema_manifest.json` from
-`build-constraints`, and writes `baseline_results/{baseline_results,anchor_audit}.parquet` plus a
+subset option lives on `validate`), gates on TWO existing artifacts —
+`runs/<id>/schema_manifest.json` from `build-constraints` and, since R-S5P-3,
+`runs/<id>/deterministic_bounds.parquet` from `solve-bounds` (INV-002's per-cell half is checked
+rather than skipped when its input is absent) — and writes `baseline_results/{baseline_results,anchor_audit}.parquet` plus a
 sibling `baseline_manifest.json` carrying `preferred_estimator`, `preferred_estimator_by_month`,
 `weight_basis_counts`, `declines` by kind, and each estimator's `fallback_intensity`. Do not run it
 to check a change — it writes into `runs/` under the real config.

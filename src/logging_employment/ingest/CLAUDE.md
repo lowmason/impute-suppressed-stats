@@ -82,8 +82,10 @@ The two QCEW tables do not share a column vocabulary (`size_class` vs `size_code
 | by-size zip does not hold exactly one CSV; boundary probe served no year | `ValueError` | `qcew_size.py::read_by_size_zip`, `qcew.py::probe_slice_boundary` |
 
 `base.HttpFetcher` returns a non-200 rather than raising (project `CLAUDE.md` has the reason);
-`fetching.py` classifies and `continue`s past it, which is why **CBP 2024 is simply absent from
-the store rather than an error**. CBP publishes 2017-2023 — Stage 0's recorded 404, spec line 2270,
+`fetching.py` classifies it. Since R-S5P-4 a non-200 or empty body RAISES `SourceFetchError`
+unless the exact `(source_id, year)` pair is enumerated in `fetching.DECLARED_ABSENCES`, which is
+why **CBP 2024 is absent from the store rather than an error** — it is the one declared entry, and
+an undeclared year answering the same 404 halts the run. CBP publishes 2017-2023 — Stage 0's recorded 404, spec line 2270,
 not a fetch performed for this file.
 
 ## Conventions

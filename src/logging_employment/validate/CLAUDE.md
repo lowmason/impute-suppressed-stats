@@ -92,8 +92,10 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
   QCEW cell (one truncates the frame, one drops CBP state-years), so neither produces a
   `MaskTarget`. `harness` short-circuits on `spec.select is None` *before* calling `select_targets`,
   so that function's own `return []` is unreachable for them and a fix aimed there would never run.
-  `specs/deferred_items.md` has the open item "Wire `rolling_origin` and `cbp_size_gaps` into the
-  harness scoring loop" — still open, because closing it means deciding what each regime SCORES.
+  `specs/deferred_items.md` had the open item "Wire `rolling_origin` and `cbp_size_gaps` into the
+  harness scoring loop". **CLOSED 2026-09-10 as `D-071`:** both regimes are declared-but-unscored
+  BY DECISION, REQ-022 is struck from Stage 4's `Gap closed:` line, and the §13.10 gate is applied
+  over nine of thirteen regimes.
   UPDATED 2026-09-09 (plan 12): each now states its OWN measured reason from
   `RegimeSpec.no_score_reason` rather than a `{name}` template shared between them (the shared one
   asserted of both that they are "exercised through their own entry point", which was true of one
@@ -180,18 +182,20 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
 uv run pytest tests/unit/test_validate_scoreboard.py tests/unit/test_validate_intervals.py \
   tests/unit/test_validate_metrics_point.py tests/unit/test_validate_metrics_bounds.py \
   tests/unit/test_validate_metrics_constraint.py        # 40 passed, 0.2s — no data/ needed
-uv run pytest tests/integration/test_validation_golden.py   # 5 passed, 11s — in-git fixtures
+uv run pytest tests/integration/test_validation_golden.py   # 7 passed, 11s — in-git fixtures
 uv run logging-estimates validate --config config.yaml [--estimators id,id]
 ```
 
-- **Seven of the sixteen `tests/unit/test_validate_*.py` modules load `data/staged` through a bare
-  relative path with no `skipif`**: `complementary`, `declared_regimes`, `mask`, `propensity`,
-  `recover`, `regimes`, `temporal_regimes`. Measured without `data/`,
-  `pytest tests/unit/test_validate_*.py` was **34 failed, 45 passed, 0 skipped** when this glob held
-  twelve modules. The 34 failures are unchanged — none of the four modules added 2026-09-09
-  (`cbp_gap`, `leakage_guards`, `regime_mechanisms`, `rolling_origins`) reads `data/staged`, and
-  they contribute 19 further passes on a bare checkout — but the pass count has not been re-measured
-  without `data/` since. The *integration*
+- **Every `tests/unit/test_validate_*.py` module that loads `data/staged` is now guarded**
+  (R-S5P-2, 2026-09-10). The seven that used to load it through a bare cwd-relative path with no
+  `skipif` — `complementary`, `declared_regimes`, `mask`, `propensity`, `recover`, `regimes`,
+  `temporal_regimes` — now import `STAGED` (absolute) and `requires_staged` from `tests/conftest.py`.
+  Four take a module-level `pytestmark`; the three MIXED ones (`declared_regimes`, `regimes`,
+  `temporal_regimes`) decorate per test, because a blanket mark there would skip five tests that
+  pass in a bare checkout. *Superseded reading, so a stale citation stays recognisable:* this bullet
+  used to say those seven had no `skipif` and that a dataless `pytest tests/unit/test_validate_*.py`
+  was **34 failed, 45 passed, 0 skipped**. Whole-suite measurement at 4cc0dfe: **1388 passed** with
+  `data/`, **1318 passed + 70 skipped + 0 failed** without. The *integration*
   modules that need it (`test_d1_validation.py`, `test_validate_cli.py`) do carry a `skipif`;
   `test_validation_golden.py` runs on `tests/fixtures/baselines/` and needs nothing. It also sets
   `replicates_per_regime: 3`, because at 20 the 12-month fixture trips `select_targets`' own

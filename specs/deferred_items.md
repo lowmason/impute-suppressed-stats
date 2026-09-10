@@ -916,7 +916,14 @@ which is why none was folded into the batch. See specs/plans/completed/7-p3-test
       plan 9's addition of the required `kind=` argument at that file's `Decline(` sites. The
       substance is unchanged — all five still carry the raw, undated count, and none acquired
       either resolution — so the item stays open with five decisions outstanding.
-      Size: design. Done when: each of the five sites carries either a run-time-derived share or an explicitly dated measured-on-D1 marker -- five decisions, not one rule.
+      **Inventory grew 2026-09-10 (plan 13): it is no longer five.** That branch added raw,
+      undated `1,227` claims at `baselines/runner.py::state_total_bounds` and in
+      `tests/unit/test_baselines_bounds.py`'s module docstring, of exactly the shape this item
+      governs. (One further site, that module's `test_the_d1_shape_...` docstring, now carries an
+      explicit `runs/f03023ac9f3a` measurement and already meets the condition.) Counting the
+      sites is part of the work, not a precondition for it.
+      Size: design. Done when: every live site carries either a run-time-derived share or an
+      explicitly dated measured-on-D1 marker -- one decision per site, not one rule.
 
 
 ## unregistered-work audit — 2026-09-07
@@ -1079,7 +1086,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       applied zero times — and `addopts` (`pyproject.toml:71`) contains no `-m 'not network'`, so
       nothing would deselect it if one did. There is no `.github/` and no workflow file in the
       repo, so "the default run" is a bare `pytest` that excludes nothing. The `slow` marker beside
-      it is applied at three sites and likewise not deselected, so `tests/integration/
+      it is applied at six sites (re-measured 2026-09-10; the item said three) and likewise not deselected, so `tests/integration/
       test_d1_acceptance.py` and `test_d1_baselines.py` run by default whenever `data/staged/` is
       populated. Needs a ruling on whether the marker is aspirational (delete it) or load-bearing
       (apply it and wire the deselection), and a separate one on whether this repo wants CI.
