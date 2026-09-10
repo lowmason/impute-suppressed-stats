@@ -6,9 +6,15 @@
 
 Source spec: `specs/logging-employment-spec.md` (v0.1). Derived 2026-09-03 from
 the spec **and** the three research reviews
-(`specs/logging-employment-research-{chatgpt,copilot,gemini}.md.md`), which the
+(`specs/logging-employment-research-{chatgpt,copilot,gemini}.md`), which the
 spec synthesizes. Supersedes the roadmap committed at `211bc03`, which was
 derived at `479c757` before the reviews were in the repository.
+
+`specs/logging-employment-research-fable.md` (added 2026-09-10, `c7abb05`) is a
+fifth review that postdates the synthesis and this derivation. It is filed as a
+post-synthesis document, not a source: no stage consumes it, and a stage plan
+that takes anything from it must record that as a deviation with its own
+evidence (spec §2.1 says why; the 2026-09-09 system review §10.3 assesses it).
 
 Decisions D1–D6 live in the spec's Rollout note; stages cite them and never
 restate them. Stage 0's finding lands in `specs/findings/source-audit.md`.

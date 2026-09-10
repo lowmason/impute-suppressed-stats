@@ -60,6 +60,18 @@ The common prompt supplies the requested scope and epistemic discipline. `suppre
 | Copilot report | Concise two-stage architecture; source compatibility; strong transparent baselines; Student-t AR(1); logistic-normal composition; bounded reconciliation; balanced rounding; and clear validation metrics. |
 | Gemini report | Clear economic decomposition into establishment exposure, size shares, and employment intensity; emphasis on TPO/FIA physical activity; source-specific measurement models; and staged production pipeline. |
 
+**Post-synthesis documents (not sources).** `specs/logging-employment-research-fable.md`
+(added 2026-09-10, commit `c7abb05`) is a fifth research review written after this specification
+was synthesized and after Stages 0–4 shipped. It is filed beside the three reports above for the
+record and is **not** a source of this specification: nothing in it was adopted, no row of this
+table or of Appendix C cites it, and no stage plan may cite it as a source. Its recommendations are
+assessed against this specification and the measured system in
+`docs/reviews/2026-09-09-system-review.md` §10.3; three of its load-bearing claims (an 80/3-derived
+bound, an establishment-count lower bound on employment, and an intensity prior centred at ~2 jobs
+per establishment) fail against §2.2 or the D1 measurements. Anything taken from it enters through
+a stage plan's `> Deviation` note or a spec amendment with its own evidence, never through this
+table.
+
 ### 2.2 Conflicts resolved
 
 The following decisions are binding unless later official-source verification changes them.
@@ -2289,11 +2301,11 @@ The vertical slice is not complete if it produces only point estimates, omits de
 
 This specification is a synthesis, not an independent source-verification report. The principal source locations used were:
 
-- `logging-prompt(1).md`, especially the target and compatibility requirements (lines 6–59), identification requirements (lines 164–205), Bayesian and reconciliation requirements (lines 255–419), validation and disclosure requirements (lines 439–487), and research standards (lines 531–585).
+- `specs/logging-prompt.md`, especially the target and compatibility requirements (lines 6–59), identification requirements (lines 164–205), Bayesian and reconciliation requirements (lines 255–419), validation and disclosure requirements (lines 439–487), and research standards (lines 531–585).
 - `suppressed-cell-estimation.md`, especially the identification-first conclusion and hybrid workflow (lines 5–25), rank and LP/MILP framework (lines 27–154), recommended four-layer architecture (lines 325–397), validation design (lines 400–523), and disclosure boundaries (lines 747–779).
-- `logging-research-chatgpt.md.md`, especially the verified target and source-dimensionality findings (lines 3–27), deterministic strategy (lines 133–226), model and reconciliation design (lines 228–499), validation and disclosure design (lines 501–575), and production requirements (lines 576–680).
-- `logging-research-copilot.md.md`, especially the core estimand and CBP finding (lines 7–17), deterministic bounds (lines 198–211), robust model and reconciliation (lines 213–287), and validation pipeline (lines 289–318).
-- `logging-research-gemini.md.md`, especially the decomposition and source roles (lines 3–15 and 120–163), model components (lines 164–233), and staged pipeline (lines 244–283). Claims about exact current suppression thresholds and universally available size constraints were not adopted.
+- `specs/logging-employment-research-chatgpt.md`, especially the verified target and source-dimensionality findings (lines 3–27), deterministic strategy (lines 133–226), model and reconciliation design (lines 228–499), validation and disclosure design (lines 501–575), and production requirements (lines 576–680).
+- `specs/logging-employment-research-copilot.md`, especially the core estimand and CBP finding (lines 7–17), deterministic bounds (lines 198–211), robust model and reconciliation (lines 213–287), and validation pipeline (lines 289–318).
+- `specs/logging-employment-research-gemini.md`, especially the decomposition and source roles (lines 3–15 and 120–163), model components (lines 164–233), and staged pipeline (lines 244–283). Claims about exact current suppression thresholds and universally available size constraints were not adopted.
 
 ---
 
