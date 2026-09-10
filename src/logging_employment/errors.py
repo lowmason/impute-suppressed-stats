@@ -37,6 +37,23 @@ class UnsupportedReferenceYearError(LoggingEmploymentError):
     """
 
 
+class SourceFetchError(LoggingEmploymentError):
+    """A source request answered a status or a body `fetch` cannot record, undeclared.
+
+    Raised rather than skipped (R-S5P-4, §18.3). `ingest/base.HttpFetcher` deliberately RETURNS a
+    non-200 so the caller classifies on content instead of status; this class is that
+    classification's refusing branch, and it lives in the caller so the fetcher's contract is
+    unchanged. Skipping is the behaviour it replaces, and skipping is unrecoverable downstream: a
+    dropped quarter narrows the window, `runs.run_id` hashes the inputs so the shortened run takes
+    a NEW id rather than colliding with the full one, and no manifest carries the fact that a
+    quarter is missing -- so every later stage proceeds on the shorter window and nothing says so.
+
+    The exceptions are declared in `fetching.DECLARED_ABSENCES`, keyed by (source, reference
+    year), so a genuine hole in the published record is a line of code carrying its measurement
+    rather than an incidental pass through the same branch a transient 500 takes.
+    """
+
+
 class SchemaMismatchError(LoggingEmploymentError):
     """A fetched file's columns do not match the schema the parser declares."""
 
