@@ -29,6 +29,7 @@ title — titles have been rewritten in place before (`e34ef16`).
       employment, or if an archived vintage is wanted as a §13.9 sensitivity
       arm — in which case the bridge needs the §8.6 fields and explicit
       source-vintage metadata, not a column rename.
+      Size: design. Revisit if: BEA republishes detailed state-industry employment, or an archived vintage is wanted as a §13.9 sensitivity arm -- in which case the bridge needs the §8.6 fields and explicit source-vintage metadata.
 
 ## 1-stage0-logging-employment-spec — 2026-09-04
 
@@ -74,6 +75,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       are different predicates — a configuration default versus a reachability
       measurement — so Stage 0 juxtaposes them in `specs/findings/source-audit.md`
       and deliberately does not reconcile them. **Stage 7's call.**
+      Size: design. Revisit if: Stage 7 needs the configuration default and the reachability measurement reconciled -- the item records this as Stage 7's call, and nothing before it reads the two predicates together.
 - [x] `D-004` **Stage 3 needs a substitute allocation anchor.** `SRC-QCEW-006` came back
       `decline` for UNVERIFIABILITY, not geography: every one of the 96 testable
       months carries at least one suppressed states+DC cell, so the employment
@@ -245,6 +247,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       plan-mandated names while carrying the identical over-collection (they are
       computed over all 55 codes). `series_by_state` has the same implication and no
       ruling. **Stage 7 consumers must read `states_dc_tally`, not the six counts.**
+      Size: design. Revisit if: a Stage 7 consumer reads the six `states_with_*` counts or `series_by_state` rather than `states_dc_tally` -- those still carry the 55-code over-collection, and `series_by_state` has no ruling.
 - [x] `D-018` **Two gate-work fixes ship without tests:** the `ces_levels` "sm.state codes"
       rewording (`tests/audit/test_ces_levels.py`'s `broader_code_note` tests never
       pinned that clause) and `cbp_regime`'s `max()` empty-list guard (no pure seam).
@@ -267,11 +270,13 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       implementer drift: the task briefs prescribe the typed values verbatim. The
       ambiguity is now documented beside `COVERAGE_KEYS` in `scripts/audit/_common.py`;
       **Stage 1 must not compare the key across sources without reading that note.**
+      Size: design. Revisit if: any stage compares `published_start`/`published_end` across sources -- the note beside `COVERAGE_KEYS` in `scripts/audit/_common.py` is the only thing carrying the ambiguity.
 - [ ] `D-020` **`bds/naics_11.json` is not hash-reproducible** — three fetches gave three
       hashes; rows are equal as sets but their order varies. Any future re-run of
       `bds_detail.py` will churn that extract's hash in the manifest. Similarly,
       FIA's `evalidator.jsp` flaps 403↔500 between runs and `/fullreport` drifts a
       few bytes, so `forest_sources.py` re-runs are not byte-stable either.
+      Size: design. Revisit if: `bds_detail.py` or `forest_sources.py` is re-run and the churned extract hashes matter to a manifest comparison.
 - [x] `D-021` **Repo-wide pre-existing `ruff I001` import-order noise**, untouched by this
       stage.
       **→ done 2026-09-05 (/deferred quick fix).** `ruff check --select I --fix` over
@@ -291,6 +296,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       the boundary. Left as the plan specifies it; revisit if the live run is slow
       or if BLS rate-limits. The full sweep does buy one thing an early exit would
       not: a complete per-year record of what the route served that run.
+      Size: quick-fix. Revisit if: the live run is slow or BLS rate-limits -- ascending sort makes `served[0]` and an early exit return the same value, so the fix is an early exit.
 - [x] `D-023` **`tests/audit/` also fails `black`, not just `ruff I001`.** The existing
       repo-wide I001 item above undercounts the debt: 14 files under `tests/audit/`
       would be reformatted. `src/logging_employment/` and `tests/unit/` are clean
@@ -348,6 +354,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       twice to prove byte-identity. If that run is slow, this is the first thing to
       look at — `pl.concat_str(...).hash()` is not a substitute (it is not sha256
       and not stable across Polars versions), so a native replacement needs care.
+      Size: plan. Revisit if: a `build-harmonized` rebuild is slow -- this is the first thing to look at, and a native replacement needs care because `pl.concat_str(...).hash()` is not a substitute.
 
 ### Raised during Tasks 11-16
 
@@ -370,6 +377,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       spec decision rather than an implementation one. **Stage 6's measurement
       model is the consumer that needs it** (SRC-CBP-004 enters CBP employment as a
       noisy measurement; noise magnitude is what that model would weight by).
+      Size: design. Done when: §7.5 and `CBP_STATE_SIZE_SCHEMA` carry `EMP_N_F` and the parser reads it back out of the stored bytes -- a fingerprint change and a spec decision, wanted by Stage 6's measurement model.
 
 - [ ] `D-027` **Nothing re-derives `EMPFLAG_WITHHELD_CODES` against a post-2017 layout.**
       The table is derived from the 2017 state record layout, which is the last year
@@ -378,6 +386,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       derivation has no later layout to check against and an unrecognized flag will
       halt the run — the intended §18.3 behaviour, but worth knowing before the run
       halts.
+      Size: plan. Revisit if: CBP is read outside 2017-2023 -- the derivation then has no later layout to check against, and an unrecognized flag halts the run.
 
 ### Raised during Task 16's live run
 
@@ -397,6 +406,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       content-independent identity alongside the hash. Neither is obviously right, so
       neither is done. **QCEW is unaffected** — all 32 quarters re-fetched to identical
       bytes.
+      Size: design. Revisit if: the store growing one object per CBP fetch becomes a problem -- neither recorded option (canonicalize the JSON before hashing, or record a content-independent identity) is obviously right.
 
 - [ ] `D-029` **`qcew_national_size` carries every industry, not just 113310.** 140,343 rows
       over the eight window years, against 1,298 for `cbp_state_size`. Task 10's parser
@@ -407,6 +417,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       harmonized layer's row count and every `build-harmonized` run pays for it twice
       under the byte-identity check. Revisit if the rebuild gets slow, together with the
       `map_elements` item above.
+      Size: plan. Revisit if: the `build-harmonized` rebuild gets slow, taken together with `D-025`.
 
 ## 3-stage2-logging-employment-spec — 2026-09-05
 
@@ -422,6 +433,7 @@ Nothing was descoped. The three items below are the ones the stage deliberately 
       deliberately did not make. Deferred by the plan itself ("Record it as a deferred item at
       completion"). Closing it means amending §7.8, adding the column to `CONSTRAINT_ROW_SCHEMA`
       in `src/logging_employment/contracts.py`, and dropping the prefix from the factory.
+      Size: design. Done when: §7.8 is amended, `CONSTRAINT_ROW_SCHEMA` carries an `evidence_kind` column, and the factory drops `EVIDENCE_PREFIX`.
 
 - [ ] `D-031` **No check covers a hard row spanning two area-months with differing release vintages.**
       `constraints/cells.py::_assert_one_vintage_per_cell` groups by `(area_fips,
@@ -440,6 +452,7 @@ Nothing was descoped. The three items below are the ones the stage deliberately 
       builder couples two periods (a Stage 6 model constraint, or any across-period margin). Closing it
       means carrying `release_vintage` onto `target_cell` — a §7.7 amendment — and feeding it to
       `vintage_status` alongside `naics_vintage`.
+      Size: design. Revisit if: a builder couples two periods (a Stage 6 model constraint, or any across-period margin) -- it is unreachable without one. Closing it carries `release_vintage` onto `target_cell`, a §7.7 amendment.
 
 - [ ] `D-032` **`classify_bound_status` labels an integer interval containing no integer
       `partially_identified`.** `constraints/bounds.py` applies §9.6's `ceil(L) == floor(U)` rule;
@@ -452,6 +465,7 @@ Nothing was descoped. The three items below are the ones the stage deliberately 
       so the behaviour is recorded rather than assumed. Closing it means deciding whether an
       empty integer interval is an infeasibility (raising) or a distinct `bound_status`, which is
       a §7.10 question.
+      Size: design. Revisit if: `constraints.enforce_integrality` is set to `false`, which is what makes the branch reachable. Closing it decides whether an empty integer interval raises or becomes a distinct `bound_status` -- a §7.10 question.
 
 ### Review-gate items (whole-branch review, 2026-09-05)
 
@@ -467,6 +481,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       a halted run. Unreachable through the shipped builders, which derive both endpoints from
       the same published establishment count. Closing it means giving the minimum-slack model
       slack variables on the column bounds too, and adding a diagnostics test for the box shape.
+      Size: plan. Revisit if: a builder emits a component that its column bounds alone can make infeasible -- the shipped ones derive both endpoints from the same published establishment count. Closing it gives the minimum-slack model slack on the column bounds and adds a box-shape diagnostics test.
 
 - [ ] `D-034` **`rank._shape_key` formats the matrix at `precision=12`.** Two equality matrices differing
       past the twelfth decimal share a CON-005 cache key, so the second component reports the
@@ -476,6 +491,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       `rank.numerical_rank_of` passes `rank_tolerance` to `np.linalg.matrix_rank` as an
       *absolute* singular-value threshold, which is equally fine at +/-1 and equally brittle if
       magnitudes grow.
+      Size: quick-fix. Revisit if: a later stage introduces fractional hard coefficients (a share, a deflator) -- every hard coefficient today is +/-1. The fix is `matrix.tobytes()` plus shape.
 
 - [x] `D-035` **`solve_bounds` rescans the frames once per component and once per row.**
       `constraints/bounds.py` runs a full `built.rows.filter(...)` per component and a full
@@ -504,6 +520,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       `deterministic_bounds` carry one column's information. §7.10 gives field names without
       definitions, and the agreement is *correct* when the MILP ran (`selected_*` are then the
       integer optima) -- but if the two are meant to differ, §7.10 has to say how first.
+      Size: design. Done when: §7.10 states whether the two fields may differ and, if they may, `classify_bound_status` implements the distinction -- the spec has to say how first.
 
 - [x] `D-037` **`cli._constraints_dir` derives §6.2's path instead of reading a config key.**
       `Path(cfg.storage.staged_uri).parent / "constraints"` silently relocates the constraint
@@ -605,6 +622,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       two commits, both in `reconcile/`. So a Stage 6 implementer following this item will search
       the CLI for a call site that has never existed. The guard is currently dead code, and the
       ruling needed is where to call it, not where to move it from.
+      Size: design. Done when: the ruling records where `require_supported_method` is called and it is called there, or the dead guard is deleted -- the ruling needed is where to call it, not where to move it from.
 
 - [x] `D-042` **`kl_project` returns silently on an infeasible bounded system.**
       Its loop breaks on step size, not on violation, so a fully-clipped update exits on iteration
@@ -719,6 +737,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       → `verify_extracts`) plus a one-cell change to `source-audit-extracts.csv` from
       `panel.parquet`'s restamped `retrieved_utc` — a different kind of change from the
       comparison fix it would have ridden on.
+      Size: plan. Done when: the key and its two restatements stop reading "nonzero", with the offline chain (`qcew_panel` -> `qcew_identity` -> `assemble_finding` -> `verify_extracts`) re-run and `source-audit-extracts.csv` restamped.
 
 ## 7-p3-test-coverage — 2026-09-06
 
@@ -740,6 +759,7 @@ which is why none was folded into the batch. See specs/plans/completed/7-p3-test
       times, producing four manifest rows against one content-addressed `raw_path` that
       `sorted(listed)` returns four times (INV-007 stacking). This is a delete-or-fix decision on
       dead code, not a condition to wait on. Touches `build.py` and `fetching.py`.
+      Size: design. Done when: the delete-or-fix decision is recorded and applied across `build.py` and `fetching.py` -- the item states this is a decision on dead code, not a condition to wait on.
 
 - [x] `D-050` **`BreakAdjustedShare`'s `<4` fallback is a design choice nobody chose.** The audit's own two
       options (`specs/findings/stage3-plan-audit.md:451`): scope the docstring — done in plan 7
@@ -873,6 +893,7 @@ which is why none was folded into the batch. See specs/plans/completed/7-p3-test
       `tests/audit/` was enumerated in a fresh `git clone`, not grepped; after plan 8 that
       directory has none left, and this is the site that would return if the skill file were
       removed from this machine.
+      Size: design. Done when: the ruling lands -- the quoted sentence is vendored into the repo with its provenance, or the test is dropped and the quotation is accepted as checked nowhere.
 
 - [ ] `D-056` **The other five `1,227` sites, where the count scopes a claim rather than decorating one.**
       Plan 8's R11 fixed `src/logging_employment/reconcile/anchor.py:9` only, where the number was
@@ -895,6 +916,7 @@ which is why none was folded into the batch. See specs/plans/completed/7-p3-test
       plan 9's addition of the required `kind=` argument at that file's `Decline(` sites. The
       substance is unchanged — all five still carry the raw, undated count, and none acquired
       either resolution — so the item stays open with five decisions outstanding.
+      Size: design. Done when: each of the five sites carries either a run-time-derived share or an explicitly dated measured-on-D1 marker -- five decisions, not one rule.
 
 
 ## unregistered-work audit — 2026-09-07
@@ -929,9 +951,14 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       manifest, against §16.1's MUST" as a confirmed-and-fixed defect, and `cli.py:361` now quotes
       the sentence verbatim as the justification. Needs either two small writers or an explicitly
       recorded exemption for read-only check commands — but the roadmap's "each" forecloses
-      assuming the latter. Related and deliberately excluded: `solve-bounds` also writes no
+      assuming the latter. Related and deliberately excluded: `solve-bounds` also wrote no
       manifest of its own, a weaker case because it runs inside a run directory whose
       `schema_manifest.json` is its own precondition gate.
+      **Superseded in part 2026-09-10 (R-S5P-5, plan 13 Task 6): `solve-bounds` now writes
+      `bounds_manifest.json`.** That half is closed. The two commands this item is actually
+      about are untouched -- `validate_config` and `registry_verify` still write nothing --
+      so the item stays open on its own terms.
+      Size: plan. Done when: `validate-config` and `registry verify` each write a machine-readable manifest, or an exemption for read-only check commands is recorded in §16.1 and in the roadmap's Stage 1 `Produces` line.
 
 - [ ] `D-058` **Three Stage 1 deliverables have builders in `src/` that nothing calls and no artifact on
       disk.** The roadmap marks Stage 1 COMPLETE and its Produces block names the `source_registry`
@@ -946,6 +973,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       function and its tests and never specified a wiring step. Needs a ruling per deliverable:
       wire it into `build_harmonized` and add it to `HarmonizedData`, or amend the roadmap's Stage
       1 Produces block to stop claiming it.
+      Size: design. Done when: each of the three is either wired into `build_harmonized` and declared on `HarmonizedData`, or struck from the roadmap's Stage 1 `Produces` block -- a ruling per deliverable.
 
 - [ ] `D-059` **`build-harmonized` writes no machine-readable manifest, and `BUILDER_VERSION` is stamped
       nowhere.** `build.py:17` defines `BUILDER_VERSION = "build_harmonized/1"` and nothing in
@@ -955,6 +983,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       builder. `build_harmonized_command` (`cli.py:77-92`) computes output hashes and only echoes
       them. Distinct from the item above: that one is about two commands writing nothing at all,
       this one is about a version constant that exists for stamping and stamps nothing.
+      Size: plan. Done when: `build-harmonized` writes a machine-readable manifest that stamps `BUILDER_VERSION` alongside its output hashes.
 
 - [ ] `D-060` **The CBP `EMPSZES` values-crosswalk route is dead: `discover_empszes` has no caller and
       `EMPSZES_URL` is never fetched.** `ingest/cbp.py:92 discover_empszes` implements the two
@@ -967,6 +996,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       second route, and the official 44-code 2017 crosswalk Stage 0 measured — shipped as
       `tests/fixtures/cbp/empszes_2017.json` — is never consulted. Same dead-but-declared shape as
       the recorded `read_bulk_zip` item at `:661`, and unrecorded until now.
+      Size: design. Done when: the official values-crosswalk route is called on the fetch path so SRC-CBP-001's first route runs, or `discover_empszes` and `EMPSZES_URL` are deleted.
 
 - [ ] `D-061` **`bounds.py`'s soft-row filter cites a schedule that has expired: three of the five
       `constraint_class` values have no producer.** `constraints/bounds.py:75-76` justifies
@@ -982,6 +1012,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       SRC-CBP-004's measurement *model*, not a constraint row — so the soft-constraint arm of
       §7.8/§9.3 currently has no home. Needs a ruling on which stage owns it, or the bounds
       docstring corrected to stop naming a stage that has passed.
+      Size: design. Done when: a stage owns the soft-constraint arm of §7.8/§9.3, or `constraints/bounds.py`'s docstring stops naming a stage that has passed.
 
 - [x] `D-062` **A `stage3-plan-audit` DEFECT was only half discharged: `intensity.py`'s "MEASURED" coverage
       enumeration names two states where five take the fallback.** Task 13 `[DEFECT] plan:3235,
@@ -1019,6 +1050,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       runs, so the missing-national-row case is noticed by nobody. `identity_evaluable_months` and
       `months_with_a_complete_state_sum` — the SRC-QCEW-006 per-month facts the module says "Stage
       2 needs in order to build constraints at all" — are computed only inside tests.
+      Size: plan. Done when: `state_universe_report` runs on the build path, or `assert_definitional_alignment`'s docstring stops delegating the missing-national-row case to a function no caller runs.
 
 - [ ] `D-064` **Four config keys govern nothing, and none is recorded as inert.** The repo's convention is
       to write inertness into the code (`matrix.py:3` "NO REAL INPUT UNTIL STAGE 6"; `rows.py:479`
@@ -1039,6 +1071,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       a future extension; what is missing is the refusal. Compare `reconciliation.general_method`,
       whose unsupported value at least has a written refusal, and `size_concept`, whose second
       value is at least read.
+      Size: plan. Done when: each of the four keys is wired, refused, or carries the inertness note the repo's own convention requires.
 
 - [ ] `D-065` **The `network` pytest marker is registered with a promise it does not keep, and there is no
       CI at all.** `pyproject.toml:73` registers "network: hits a live source endpoint; excluded
@@ -1050,6 +1083,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       test_d1_acceptance.py` and `test_d1_baselines.py` run by default whenever `data/staged/` is
       populated. Needs a ruling on whether the marker is aspirational (delete it) or load-bearing
       (apply it and wire the deselection), and a separate one on whether this repo wants CI.
+      Size: design. Done when: the `network` marker is deleted or applied and deselected in `addopts`, and the separate CI question is recorded either way.
 
 - [ ] `D-066` **The 24 pre-existing `ruff` violations in `scripts/audit/` are scoped out twice and tracked
       by no item.** The ticked `ruff I001` item at `:243` closes with "The remaining 24 (ISC004,
@@ -1061,6 +1095,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       gate enforces it: `[tool.ruff]` declares no `exclude`, so `ruff check .` does cover
       `scripts/audit/`, but with no CI it runs only when a human or a plan step invokes it, and
       `interrogate` is explicitly scoped to `src/`.
+      Size: plan. Done when: the 24 `scripts/audit/` findings are fixed or the count is held by a live gate rather than by a retired plan file.
 
 - [x] `D-067` **Three QCEW code constants are declared and then bypassed by inline literals in the
       parser.** `constants.py:22-24` declares `QCEW_NATIONAL_AGGLVL = "18"`, `QCEW_STATE_AGGLVL =
@@ -1177,6 +1212,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       selector applied to the TRUNCATED frame (the `assert_no_future_rows` guard already exists);
       `cbp_size_gaps` needs the CBP gap composed with a QCEW mask, since dropping CBP alone changes
       only `cbp_intensity`'s availability and produces no scored cell on its own.
+      Size: design. Done when: a ruling records what each regime scores -- or that both are declared-but-unscored by decision -- and the roadmap's REQ-022 claim matches it.
 - [ ] `D-072` **§13.7's CRPS is the harness's dominant cost, not `run_baselines`.**
       The plan's cost model (evidence §4) attributes ~30 s of a ~30.4 s replicate to
       `run_baselines`. Measured 2026-09-07 during execution, that is wrong once §13.7 is wired:
@@ -1191,6 +1227,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       the zero clip, so an incremental form would remove another factor of n. Revisit if
       `replicates_per_regime` is raised from 3 seeds toward Appendix A's 20 replicates, where the
       plan's ~2.2 h estimate applies.
+      Size: plan. Revisit if: `replicates_per_regime` is raised from 3 seeds toward Appendix A's 20 replicates, where the plan's ~2.2 h estimate applies.
 - [x] `D-073` **`validation_scores` / `validation_metrics` are written without `validate_frame`.**
       → done in plan 12 (2026-09-09). `cli.py::validate_command` now gates all THREE persisted
       validation tables — `validation_scoreboard` was ungated too, and undeclared — on both
