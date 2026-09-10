@@ -108,7 +108,7 @@ def test_the_interval_source_names_leave_one_out_rather_than_rolling(fixture_run
     columns, so `INTERVAL_SOURCES` is checked by nothing at runtime and this test IS the check.
 
     Scope is the label. A time-ordered rolling interval is explicitly NOT built here
-    (`specs/stage5-preconditions.md` §4).
+    (`specs/completed/stage5-preconditions.md` §4).
     """
     assert INTERVAL_SOURCES == ("leave_one_out_residual_ensemble", "none")
     golden = pl.read_parquet(GOLDEN)

@@ -33,7 +33,7 @@ KNOWN_SOURCES = ("qcew", "qcew_size", "cbp")
 #
 # A module constant and NOT a `Config` field: `config.resolved_dict` is `model_dump(mode="json")`
 # and feeds `runs.run_id`, so a new pydantic field -- default or not -- re-ids every existing
-# `runs/<id>/` directory, including the Stage 4 comparand `specs/stage5-preconditions.md` §4
+# `runs/<id>/` directory, including the Stage 4 comparand `specs/completed/stage5-preconditions.md` §4
 # protects. It is also not a per-run operator choice: it is the same class of audited fact as
 # `harmonize/disclosure.CBP_REGIME_BY_YEAR`, which is a module constant keyed by reference year
 # for the same reason. Deliberately NOT derived from that table, even though 2024 is missing from

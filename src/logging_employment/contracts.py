@@ -453,7 +453,7 @@ MASK_ARMS: tuple[str, ...] = ("state_total", "national_size")
 # siblings above, this tuple is enforced by nothing at runtime — `assert_declared_provenance` does
 # not cover `interval_source` — so `tests/integration/test_validation_golden.py` is its only check.
 # Renaming the value here does not build the rolling version; that is Stage 5's, per
-# `specs/stage5-preconditions.md` §4.
+# `specs/completed/stage5-preconditions.md` §4.
 INTERVAL_SOURCES: tuple[str, ...] = ("leave_one_out_residual_ensemble", "none")
 
 # One row per (regime, seed, replicate, estimator, cell): the raw scored observations, including
