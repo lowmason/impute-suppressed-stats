@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import polars as pl
+from tests.conftest import STAGED, requires_staged
 
 from logging_employment.config import load_config
 from logging_employment.contracts import HarmonizedData
@@ -8,9 +9,11 @@ from logging_employment.validate.mask import MaskTarget
 from logging_employment.validate.propensity import complementary_partners
 from logging_employment.validate.recover import mask_and_solve
 
+pytestmark = requires_staged
+
 
 def test_partners_share_the_targets_month_and_are_labelled_complementary():
-    monthly = HarmonizedData.load(Path("data/staged")).qcew_monthly
+    monthly = HarmonizedData.load(STAGED).qcew_monthly
     target = MaskTarget("41", "2019-06", "state_total", "primary_like")
     partners = complementary_partners(monthly, target, n=2, seed=1024)
     assert len(partners) == 2
@@ -26,7 +29,7 @@ def test_a_complementary_mask_changes_nothing_about_state_total_identification()
     SRC-QCEW-006's `decline` has been overturned somewhere. That is a finding, not a flake.
     """
     cfg = load_config(Path("config.yaml"))
-    data = HarmonizedData.load(Path("data/staged"))
+    data = HarmonizedData.load(STAGED)
     target = MaskTarget("41", "2019-06", "state_total", "primary_like")
     partners = complementary_partners(data.qcew_monthly, target, n=2, seed=1024)
     cell = "state_total|41|2019-06|5|113310|NAICS 2017|ALL"

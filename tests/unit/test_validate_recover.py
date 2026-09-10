@@ -1,11 +1,14 @@
 from pathlib import Path
 
 import polars as pl
+from tests.conftest import STAGED, requires_staged
 
 from logging_employment.config import load_config
 from logging_employment.contracts import HarmonizedData
 from logging_employment.validate.mask import MaskTarget
 from logging_employment.validate.recover import is_exactly_recoverable, mask_and_solve
+
+pytestmark = requires_staged
 
 
 def test_a_masked_state_total_is_unbounded_and_the_hash_moves():
@@ -15,7 +18,7 @@ def test_a_masked_state_total_is_unbounded_and_the_hash_moves():
     implements Stage 0's SRC-QCEW-006 `decline`, so no multi-cell row ever touches one.
     """
     cfg = load_config(Path("config.yaml"))
-    data = HarmonizedData.load(Path("data/staged"))
+    data = HarmonizedData.load(STAGED)
     base = mask_and_solve(data, [], cfg)
     masked = mask_and_solve(data, [MaskTarget("41", "2019-06", "state_total", "primary_like")], cfg)
     cell = "state_total|41|2019-06|5|113310|NAICS 2017|ALL"
@@ -30,7 +33,7 @@ def test_a_masked_state_total_is_unbounded_and_the_hash_moves():
 def test_exactly_identified_is_not_the_step_six_predicate():
     """A filter on `exactly_identified` would flag every published cell."""
     cfg = load_config(Path("config.yaml"))
-    data = HarmonizedData.load(Path("data/staged"))
+    data = HarmonizedData.load(STAGED)
     system = mask_and_solve(data, [], cfg)
     assert system.bounds.filter(pl.col("exactly_identified")).height > 1000
     assert system.bounds.filter(pl.col("bound_status") == "exactly_recoverable").height == 0

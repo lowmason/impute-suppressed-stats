@@ -1,14 +1,17 @@
 from pathlib import Path
 
 import polars as pl
+from tests.conftest import STAGED, requires_staged
 
 from logging_employment.config import load_config
 from logging_employment.contracts import HarmonizedData
 from logging_employment.validate.propensity import sample_targets, target_propensity
 
+pytestmark = requires_staged
+
 
 def _monthly() -> pl.DataFrame:
-    return HarmonizedData.load(Path("data/staged")).qcew_monthly
+    return HarmonizedData.load(STAGED).qcew_monthly
 
 
 def test_propensity_is_defined_on_every_eligible_cell_and_nowhere_else():

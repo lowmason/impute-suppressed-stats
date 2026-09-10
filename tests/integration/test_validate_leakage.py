@@ -3,6 +3,7 @@ from pathlib import Path
 
 import polars as pl
 import pytest
+from tests.conftest import STAGED, requires_staged
 
 from logging_employment.baselines.runner import REGISTRY, run_baselines
 from logging_employment.config import load_config
@@ -15,15 +16,17 @@ from logging_employment.validate.leakage import (
 )
 from logging_employment.validate.mask import MaskTarget, apply_mask
 
+pytestmark = requires_staged
+
 
 def test_no_column_of_the_masked_frame_retains_a_held_out_value():
-    data = HarmonizedData.load(Path("data/staged"))
+    data = HarmonizedData.load(STAGED)
     masked, truth = apply_mask(data, [MaskTarget("41", "2019-06", "state_total", "primary_like")])
     assert_no_retained_truth(masked, truth)
 
 
 def test_a_rolling_origin_frame_carrying_a_future_row_is_refused():
-    data = HarmonizedData.load(Path("data/staged"))
+    data = HarmonizedData.load(STAGED)
     with pytest.raises(LeakageError, match="future"):
         assert_no_future_rows(data.qcew_monthly, origin="2020-01")
 
@@ -39,7 +42,7 @@ def test_every_estimator_is_invariant_to_the_held_out_value():
     The structural half of the property is pinned by the partition test below.
     """
     cfg = load_config(Path("config.yaml"))
-    data = HarmonizedData.load(Path("data/staged"))
+    data = HarmonizedData.load(STAGED)
     target = MaskTarget("41", "2019-06", "state_total", "primary_like")
 
     masked_a, _ = apply_mask(data, [target])
@@ -68,7 +71,7 @@ def test_the_partition_the_runner_derives_carries_no_held_out_truth():
     so the missing set carries nulls. This test fails the moment anything reintroduces a
     partition built from unmasked data.
     """
-    data = HarmonizedData.load(Path("data/staged"))
+    data = HarmonizedData.load(STAGED)
     target = MaskTarget("41", "2019-06", "state_total", "primary_like")
     masked, truth = apply_mask(data, [target])
 
@@ -88,7 +91,7 @@ def test_a_public_column_coinciding_with_the_truth_is_not_a_leak():
     masked state cell whose truth happens to be 58 employees would trip a naive all-columns
     string comparison. 17/2021-06 is such a cell on D1 — it fired on the first full harness run.
     """
-    data = HarmonizedData.load(Path("data/staged"))
+    data = HarmonizedData.load(STAGED)
     masked, truth = apply_mask(data, [MaskTarget("17", "2021-06", "state_total", "primary_like")])
     assert truth["truth"].item() == 58
     row = masked.qcew_monthly.filter(
@@ -100,7 +103,7 @@ def test_a_public_column_coinciding_with_the_truth_is_not_a_leak():
 
 def test_a_value_column_that_kept_the_truth_is_still_caught():
     """The guard must not have been widened into uselessness by the exclusion list."""
-    data = HarmonizedData.load(Path("data/staged"))
+    data = HarmonizedData.load(STAGED)
     masked, truth = apply_mask(data, [MaskTarget("41", "2019-06", "state_total", "primary_like")])
     withheld = truth["truth"].item()
     leaky = masked.qcew_monthly.with_columns(

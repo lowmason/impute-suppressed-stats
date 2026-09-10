@@ -1,8 +1,8 @@
 import dataclasses
-from pathlib import Path
 
 import polars as pl
 import pytest
+from tests.conftest import STAGED, requires_staged
 
 from logging_employment.contracts import HarmonizedData
 from logging_employment.errors import ConceptViolationError
@@ -13,7 +13,7 @@ from logging_employment.validate.mask import (
     eligible_targets,
 )
 
-STAGED = Path("data/staged")
+pytestmark = requires_staged
 
 
 def _data() -> HarmonizedData:
