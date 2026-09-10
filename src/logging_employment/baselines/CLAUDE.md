@@ -72,9 +72,11 @@ optional keyword-only `bounds: Bounds | None`; `runner.state_total_bounds` turns
 `Decline` row, because unlike `WeightDomainError` this is not a data gap. Keyed by the seven-field
 `cell_id`, NOT `state_fips`: `scale_into_bounds` keys the same type by bare state, but that object
 is one month's feasible set while `run_baselines` walks the whole window in one call. Both the
-float and §12.6's integer release are checked. `cli.py` passes bounds; `validate/harness.py`
-deliberately does NOT (it would leak masked truth through the clip — see `validate/CLAUDE.md` and
-`D-087`).
+float and §12.6's integer release are checked, and a violation HALTS — nothing clips, so no
+estimate is ever silently moved into range. `cli.py` passes bounds; `validate/harness.py`
+deliberately does NOT, because halting is the wrong response on a scoring path and because the
+run directory's intervals were solved with the truth the harness hid still in the system (masked
+bounds do exist there — see `validate/CLAUDE.md` and `D-087`).
 
 Consumers outside this package: `validate/harness.py` imports `Estimator` and
 `runner.{REGISTRY, run_baselines}`; `validate/scoreboard.py` imports

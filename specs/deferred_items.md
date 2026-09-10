@@ -1681,10 +1681,26 @@ work the plan's changes either created, confirmed, or deliberately scoped out.
       were solved from a system containing the truth the harness scores against, and clipping to
       them would leak that truth into the estimates — §13.4 `LeakageError` territory. The
       consequence is that a harness estimate CAN sit outside its cell's deterministic interval
-      with nothing noticing, which is exactly the condition INV-002 exists to refuse. Closing it
-      needs bounds re-solved under the mask, which is a Stage 6 job, not a parameter change.
-      Size: design. Done when: the harness scores against bounds re-solved from the MASKED system,
-      and `run_baselines` is called with them.
+      with nothing noticing, which is exactly the condition INV-002 exists to refuse.
+      **CORRECTED 2026-09-10, before any work started: this item's original premise was false.**
+      It said closing this "needs bounds re-solved under the mask, which is a Stage 6 job, not a
+      parameter change". The re-solve already exists: `validate/harness.py:160` calls
+      `recover.mask_and_solve`, which rebuilds the constraint system from the MASKED frame and
+      solves it, returning `MaskedSystem.bounds` — one line before the `run_baselines` call on
+      :161. So masked, non-leaking bounds are already in hand at the call site, and wiring them in
+      is a small change, not a stage.
+      What is actually unresolved is what an out-of-interval estimate should MEAN here.
+      `assert_within_bounds` RAISES (it does not clip — it never modifies a value), and raising
+      aborts an entire validation run because one estimator missed one interval on one replicate,
+      which is the opposite of what a scoreboard is for. The real options are: score the violation
+      as an outcome (a column or a metric), refuse only the offending estimator-month, or keep
+      today's silence and say so. Also still true: the RUN DIRECTORY's
+      `deterministic_bounds.parquet` must NOT be used here, because its intervals were solved with
+      the truth this harness hid still in the system, so the check's verdict would depend on that
+      truth.
+      Size: design. Done when: a ruling records what an out-of-interval harness estimate does, and
+      `run_baselines` is called with `MaskedSystem.bounds` (never the run directory's) if the
+      ruling says to check at all.
 
 - [ ] `D-088` **Five test modules still spell out their own `STAGED` + skipif inline.** Plan 13
       Task 2 (R-S5P-2) put `STAGED` and `requires_staged` in `tests/conftest.py` and applied them
@@ -1693,8 +1709,13 @@ work the plan's changes either created, confirmed, or deliberately scoped out.
       `test_d1_baselines.py`, `test_d1_validation.py`, `test_validate_cli.py` and
       `test_stage4_acceptance.py`. So the suite now has two spellings of one predicate, and the
       conftest's own comment says so. Not a defect — those five skip correctly today — but the
-      inline copies use `Path("data/staged")`, which is cwd-relative and silently requires pytest
-      to be invoked from the repo root, where the shared constant is absolute.
+      inline copies each re-derive their own absolute `STAGED` from `__file__` via a module-level
+      `REPO`. **CORRECTED 2026-09-10: an earlier draft of this item said they use a cwd-relative
+      `Path("data/staged")`. They do not** — measured, four of the five spell
+      `STAGED = REPO / "data" / "staged"` and the fifth (`test_validate_cli.py`) defines no
+      `STAGED` at all. The cwd-relative spelling belonged to the NINE modules plan 13 already
+      converted, and attributing it here inflated the defect. What is actually left is duplication:
+      two spellings of one predicate, which is a tidying, not a correctness fix.
       Size: quick-fix. Done when: the five import `STAGED` / `requires_staged` from
       `tests.conftest` and the conftest comment listing them is deleted.
 

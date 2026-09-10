@@ -322,12 +322,24 @@ def run_baselines(
     `bounds` turns on INV-002's per-cell half, and defaults to `None` -- no bound known, no check
     -- for two different reasons that must not be conflated. For a unit test it is convenience:
     a toy `HarmonizedData` has no Stage 2 run behind it, exactly as with `constraint_set_hash`.
-    For `validate/harness.py`'s caller it is CORRECTNESS: `deterministic_bounds.parquet` still
-    carries the published value for a cell the pseudo-suppression mask hides, so its intervals
-    were solved from a system containing the truth the harness is scoring against. Handing them to
-    a masked run would leak that truth into the estimates through the clip, which is §13.4's
-    `LeakageError` territory. The production caller is `cli.py`; the harness must keep passing
-    nothing until Stage 6 re-solves bounds under the mask.
+    For `validate/harness.py`'s caller it is a DESIGN QUESTION that is still open, and the
+    distinction matters because two different objects could be passed there.
+
+    Passing the RUN DIRECTORY's `deterministic_bounds.parquet` would be wrong: it still carries
+    the published value for a cell the pseudo-suppression mask hides, so its intervals were solved
+    from a system containing the truth the harness is scoring against, and whether the check
+    passed would then be a function of the hidden value -- §13.4's `LeakageError` territory. Note
+    that the leak would be in the SIGNAL, not in the numbers: nothing here clips. `bounds` reaches
+    exactly one consumer, `assert_within_bounds`, which compares and raises; no estimate is ever
+    modified by it.
+
+    Passing MASKED bounds would not leak, and they already exist -- `validate/harness.py` calls
+    `recover.mask_and_solve` one line before this function and gets a `MaskedSystem.bounds` solved
+    from the masked system. What is unresolved is what an out-of-interval estimate should MEAN on
+    a scoring path: raising aborts a whole validation run because one estimator missed one
+    interval, which is the opposite of what a scoreboard is for. That ruling is `D-087`, not a
+    missing input. The production caller is `cli.py`, where raising is correct because the values
+    are being released.
     """
     partitions = observed_partition(data.qcew_monthly)
     audit = closure_audit(data.qcew_monthly, partitions)
