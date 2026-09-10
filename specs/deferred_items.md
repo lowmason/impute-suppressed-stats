@@ -1595,7 +1595,7 @@ names but no existing item owns; the Stage 4 `Exit:` line cites them.
       This is not a wrong number on D1: every state cell is `unbounded` with a null
       `selected_upper`, so the bounds rule cannot fire on the state-total arm at all.
       Target: Stage 6 — the first stage with a size-class estimator and state x size cells, which
-      is where both rules can first bind. Size: implementation.
+      is where both rules can first bind. Size: plan.
       Done when: a mask whose target stays exactly recoverable is rejected (or separately
       labelled) by the harness rather than by a test, and a pseudo-hidden truth outside
       `deterministic_bounds` fails the run with a named error.
