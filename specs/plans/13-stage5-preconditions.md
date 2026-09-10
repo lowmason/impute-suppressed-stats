@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: implement this plan task-by-task via subagent-driven-development (the default) — or executing-plans when your human partner chose inline execution at the handoff. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status: COMPLETE (2026-09-10)** — executed via executing-plans; deferred items in specs/deferred_items.md
+
 **Goal:** Make `logging_employment` runnable in a clean environment and make its record true, so Stage 5 (the state-total Bayesian model) can be planned against a system that starts and a roadmap that does not lie.
 
 **Architecture:** Nine independent remediations against a shipped, green codebase. Seven touch code or tests; two are record-only. No new subsystem, no new module boundary — every change lands inside an existing file. Tasks 1–2 come first because they make every later task's test cycle trustworthy: until `python-dotenv` is a runtime dependency and the 42 data-dependent tests skip rather than fail, "the suite is green" is not a statement anyone can check on a fresh clone.
@@ -36,14 +38,18 @@
 - Consumes: nothing.
 - Produces: a package whose CLI imports without the dev group. Every later task's `uv run` benefits; none depends on it by symbol.
 
-- [ ] **Step 1: Reproduce the failure**
+- [x] **Step 1: Reproduce the failure**
+
+> Deviation: ran `uv run --no-dev ...` rather than bare `uv run`. After `uv sync --no-dev`, a
+> bare `uv run` re-syncs the dev group and reinstalls `python-dotenv`, which would have masked
+> the very failure this step reproduces. Same for Step 3's verification.
 
 ```bash
 uv sync --no-dev && uv run logging-estimates validate-config --config config.yaml
 ```
 Expected: `ModuleNotFoundError: No module named 'dotenv'` — `config.py` imports it at module scope.
 
-- [ ] **Step 2: Move the dependency**
+- [x] **Step 2: Move the dependency**
 
 In `pyproject.toml`, add `"python-dotenv>=1.2",` to `[project].dependencies` (alphabetical, between `pydantic>=2.13` and `pyyaml>=6.0`) and delete it from `[dependency-groups].dev`.
 
@@ -62,21 +68,21 @@ dependencies = [
 ]
 ```
 
-- [ ] **Step 3: Verify the clean-environment install works**
+- [x] **Step 3: Verify the clean-environment install works**
 
 ```bash
 uv sync --no-dev && uv run logging-estimates validate-config --config config.yaml
 ```
 Expected: the command's normal `OK` output, no traceback.
 
-- [ ] **Step 4: Restore the dev environment and confirm the suite still runs**
+- [x] **Step 4: Restore the dev environment and confirm the suite still runs**
 
 ```bash
 uv sync && uv run pytest tests/unit/test_config.py -q
 ```
 Expected: all pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add pyproject.toml uv.lock
@@ -104,14 +110,14 @@ git commit -m "fix(deps): python-dotenv is a runtime dependency, not a dev one"
 
 **The trap:** three of the nine are MIXED. `test_validate_regimes.py` (2), `test_validate_declared_regimes.py` (2) and `test_validate_temporal_regimes.py` (1) hold five tests that PASS today with no `data/`. A blanket `pytestmark` in all nine still reports "0 failed" while silently converting those five passes into skips. **The acceptance check is arithmetic, not "0 failed":** skipped must rise by exactly 42 and passed must not fall.
 
-- [ ] **Step 1: Record the red baseline**
+- [x] **Step 1: Record the red baseline**
 
 ```bash
 mv data data.bak && uv run pytest -q ; mv data.bak data
 ```
 Expected: `42 failed, 1286 passed, 28 skipped`.
 
-- [ ] **Step 2: Add the guard to the root conftest**
+- [x] **Step 2: Add the guard to the root conftest**
 
 Diff of tests/conftest.py (the whole guard; the other nine files are the shapes in `test_code`):
 
@@ -168,7 +174,15 @@ fine for test modules, and it is why the alternative (a registered `requires_sta
 `pytest_collection_modifyitems` hook) was considered and dropped: it would need a `pyproject.toml`
 markers edit and buys nothing measured.
 
-- [ ] **Step 3: Apply it in the nine modules**
+- [x] **Step 3: Apply it in the nine modules**
+
+> Deviation: the plan says `test_validate_regimes.py` has "6 functions decorated"; measured, it
+> is 5 functions / 10 items (one is a 6-way parametrize). The undecorated list the plan names is
+> correct. Decoration was derived from the actual dataless failure list, not from the counts.
+> Trap confirmed the hard way: a blanket rewrite of `HarmonizedData.load(Path("data/staged"))`
+> also hits the `textwrap.dedent` subprocess script, where `STAGED` is undefined in the CHILD
+> interpreter. Caught by reading the diff and fixed with the plan's own argv form (Pattern B').
+> `@requires_staged` also has to be placed explicitly ABOVE `@pytest.mark.parametrize`.
 
 THE GUARD IS THE CHANGE, so "test code" here is the exact edit shape applied to the nine modules. Both patterns are verified by running them.
 
@@ -270,7 +284,7 @@ edited file, `compile()`d it, and ran it with a bogus path. Child died at exactl
   FileNotFoundError: /tmp/not-a-real-staged-dir/qcew_monthly.parquet is missing; run `logging-estimates build-harmonized` first
 which proves the `import sys` line, the argv[1] plumbing and the script's syntax/imports.
 
-- [ ] **Step 4: Verify — arithmetic, not "0 failed"**
+- [x] **Step 4: Verify — arithmetic, not "0 failed"**
 
 ```bash
 mv data data.bak && uv run pytest -q ; mv data.bak data
@@ -283,7 +297,7 @@ uv run pytest -q
 ```
 Expected: `1356 passed` — the guard is inert when the data is there.
 
-- [ ] **Step 5: Gates and commit**
+- [x] **Step 5: Gates and commit**
 
 ```bash
 uv run ruff format src tests && uv run ruff check src tests && uv run interrogate src
@@ -311,7 +325,7 @@ git commit -m "test: skip the staged-data tests when data/staged is absent"
 
 > The spec originally said "8 of 11 ... leaving 3". That was internally inconsistent: `model` is one of the 11 and is out of scope, so it cannot be among those removed. Corrected in `bbd9348`; the verified post-change count is 4.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Added to /Users/lowell/Projects/impute-suppressed-stats/.claude/worktrees/wf_c524c67f-109-4/tests/unit/test_config.py (new imports: `re`, `typing.Any`, `yaml`, `logging_employment.config.Config`, `logging_employment.runs.run_id`; new module constants `REPO_ROOT`, `SPEC`, `INACTIVE_SOURCES`). Exact verified source:
 
@@ -466,14 +480,20 @@ def test_the_shipped_configs_run_id_is_unmoved_by_the_inactive_source_fields() -
 
 Also renamed (mechanical): the module constant `APPENDIX_A` -> `APPENDIX_A_AS_THE_CODE_REQUIRES` (13 sites) with a header comment naming the four ways it differs from the real fence, and `test_appendix_a_config_parses` -> `test_the_code_shaped_config_parses` with a docstring saying why.
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```bash
 uv run pytest tests/unit/test_config.py -q -k appendix
 ```
 Expected: FAIL — 11 errors reported where 4 were asserted.
 
-- [ ] **Step 3: Implement**
+> Deviation: `-k appendix` does not select the new tests (none carries "appendix" in its
+> name) — it matched only 3 pre-existing ones and reported green. Ran the whole module
+> instead: 4 failed, 15 passed, red on `extra_forbidden` x 7 as intended. The run-id canary
+> passed BEFORE the change, which is what pins `39d1d0859838` as the pre-change value.
+> Separately, the constant differs from the real fence in FIVE measured ways, not four.
+
+- [x] **Step 3: Implement**
 
 Exact verified diff of /Users/lowell/Projects/impute-suppressed-stats/.claude/worktrees/wf_c524c67f-109-4/src/logging_employment/config.py:
 
@@ -551,7 +571,7 @@ APPROACH CHOSEN — one shared `InactiveSourceConfig` model, seven `exclude=True
 
 RUN_ID VERDICT — PLAINLY: `resolved_dict` for the CURRENT `config.yaml` is byte-identical. Measured before the change: sha256 `cd32de5ed6422422c892098822d04316ab685b6031e3b2e595bac186a66e7262`, `run_id(cfg, {})` = `39d1d0859838`, `sources` block `{"cbp": {...}, "qcew": {...}, "qcew_size": {...}}`. Measured after (and again after the `config.yaml` comment edit): identical on all three. `runs/f03023ac9f3a` is not orphaned. Confirmed `exclude=True` cannot leak elsewhere: `grep -rn "model_dump\|model_dump_json" src/` shows the only Config-level dump is `config.py::resolved_dict`; the other hit is `registry/loader.py` dumping `SourceRegistryRow`. Also confirmed the seven fields are read nowhere outside `config.py` (`cfg.sources` is read only at `build.py:179`, `build.py:209`, `fetching.py:129`, `fetching.py:159`, all on qcew/cbp).
 
-- [ ] **Step 4: Verify, including that `run_id` did not move**
+- [x] **Step 4: Verify, including that `run_id` did not move**
 
 ```bash
 uv run pytest tests/unit/test_config.py tests/unit/test_runs.py -q
@@ -567,7 +587,7 @@ print('model' in resolved_dict(load_config(Path('config.yaml'))))
 ```
 Expected: `False` — no new key reaches the resolved config, so `runs/f03023ac9f3a` keeps its id.
 
-- [ ] **Step 5: Gates and commit**
+- [x] **Step 5: Gates and commit**
 
 ```bash
 uv run ruff format src tests && uv run ruff check src tests && uv run interrogate src
@@ -581,6 +601,10 @@ git commit -m "fix(config): accept Appendix A's inactive sources with enabled: f
 ### Task 4: Enforce INV-002's per-cell bounds on the baseline path
 
 **Implements:** R-S5P-3
+
+> Deviation (Files list): this block names `tests/integration/test_constraint_cli.py`, but Step 3's
+> diffs actually touch `tests/integration/conftest.py` (staged_repo now runs solve-bounds) and
+> append two tests to `tests/integration/test_baseline_cli.py`. The Step-3 diffs are what shipped.
 
 **Files:**
 - Modify: `src/logging_employment/errors.py`
@@ -597,7 +621,7 @@ git commit -m "fix(config): accept Appendix A's inactive sources with enabled: f
 
 **Keying is the subtle part.** `Bounds` here is keyed by the seven-field `cell_id`, NOT by `state_fips`. `scale_into_bounds` keys its `Bounds` by whatever `anchor.missing_cells` carries — a bare state — but that object is one month's feasible set, while `run_baselines` walks all 96 months in one call. State `04` has one interval in January and another in February; a state-keyed mapping would apply one month's bound to all 96 and no lookup would ever fail.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 NEW FILE: tests/unit/test_baselines_bounds.py (7 tests, no data/ needed)
 
@@ -842,14 +866,14 @@ def test_a_finite_upper_below_the_estimate_halts_the_production_path(staged_repo
   import polars as pl
   from logging_employment.errors import BoundViolationError)
 
-- [ ] **Step 2: Run them and watch them fail**
+- [x] **Step 2: Run them and watch them fail**
 
 ```bash
 uv run pytest tests/unit/test_baselines_bounds.py -q
 ```
 Expected: FAIL — `BoundViolationError` does not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 EXACT VERIFIED DIFF (git diff at 0106056, worktree left dirty).
 
@@ -1153,7 +1177,7 @@ COST OF (3), measured, not estimated:
   harness scores against; clipping to them would leak it. That is why the default is `None` and
   why the docstring says so.
 
-- [ ] **Step 4: Verify, including the tamper test**
+- [x] **Step 4: Verify, including the tamper test**
 
 ```bash
 uv run pytest tests/unit/test_baselines_bounds.py tests/integration/test_baseline_cli.py -v -p no:randomly
@@ -1162,7 +1186,7 @@ uv run pytest tests/unit/test_baselines_bounds.py tests/integration/test_baselin
 ```
 Expected: PASS. The tamper test runs the real CLI, halves one `selected_upper` in the run dir's `deterministic_bounds.parquet` below an estimate that cell already received, and asserts the next invocation raises `BoundViolationError` naming that `cell_id`. It needs no `data/` — `tests/integration/conftest.py::staged_repo` builds a tmp repo from committed fixtures.
 
-- [ ] **Step 5: Gates and commit**
+- [x] **Step 5: Gates and commit**
 
 ```bash
 uv run ruff format src tests && uv run ruff check src tests && uv run interrogate src
@@ -1199,7 +1223,7 @@ git commit -m "fix(baselines): raise BoundViolationError when an estimate leaves
 
 **CBP 2024 must keep working.** It is genuinely absent (404, vintage not published). The declaration mechanism is a real design choice — see the verified notes below for the options and their costs. Do **not** add a `Config` pydantic field without accounting for the run-id re-hash.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Appended to tests/unit/test_fetching.py (imports added at top: `yaml`, `from typer.testing import CliRunner`, `from logging_employment.cli import app`, `from logging_employment.errors import SourceFetchError`).
 
@@ -1368,14 +1392,14 @@ def test_a_cbp_data_leg_that_fails_after_its_metadata_succeeded_halts(
     assert not (tmp_path / "source_manifest.parquet").exists()
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```bash
 uv run pytest tests/unit/test_fetching.py -q
 ```
 Expected: FAIL — the 500 is currently swallowed by `continue`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Two files. Exact diff, verbatim from `git diff` in the worktree.
 
@@ -1504,14 +1528,14 @@ class SourceFetchError(LoggingEmploymentError):
 
 WHY NO OTHER CHANGE IS NEEDED: `merge_source_manifest` is called AFTER the `try/finally`, so an exception from inside the loop propagates past it. `finally: fetcher.close()` still runs; the manifest is never written. Bytes already put in the content-addressed store stay there, which is harmless — `build.snapshot_paths` reads the run manifest, not the store directory, so a fetch that halted contributes nothing downstream. `cli.py::fetch` needs no edit: the uncaught `SourceFetchError` gives exit code 1.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 ```bash
 uv run pytest tests/unit/test_fetching.py -q
 ```
 Expected: PASS, including that no manifest row is written for the failed quarter.
 
-- [ ] **Step 5: Gates and commit**
+- [x] **Step 5: Gates and commit**
 
 ```bash
 uv run ruff format src tests && uv run ruff check src tests && uv run interrogate src
@@ -1540,7 +1564,7 @@ git commit -m "fix(fetching): fail closed on a non-200 or empty body"
 
 **Note the path correction:** `tests/unit/test_constraint_cli.py` does **not** exist. The real file is `tests/integration/test_constraint_cli.py`, and it runs fine without `data/` — its `workspace` fixture builds a tmp repo from committed `tests/fixtures/constraints/*.parquet` and runs `build-constraints` + `solve-bounds` in about a second.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ### tests/unit/test_runs.py — header change
 
@@ -1663,14 +1687,14 @@ def test_every_manifest_stamps_the_code_that_wrote_it(workspace: Path) -> None:
     assert stamps[0]["code_commit"] == stamps[1]["code_commit"]
     assert stamps[0]["uv_lock_sha256"] == stamps[1]["uv_lock_sha256"]
 
-- [ ] **Step 2: Run them and watch them fail**
+- [x] **Step 2: Run them and watch them fail**
 
 ```bash
 uv run pytest tests/unit/test_runs.py tests/integration/test_constraint_cli.py -q
 ```
 Expected: FAIL — no `code_commit` key, and no `bounds_manifest.json`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ### 1. src/logging_employment/runs.py — appended after `run_dir` (no other change to the file;
 ### `hashlib` and `Path` are already imported at module level)
@@ -1852,7 +1876,7 @@ def _write_manifest(path: Path, payload: Mapping[str, object]) -> None:
 -    )
 +    typer.echo(f"flagged {narrow} narrow, {exact} exact")
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 ```bash
 uv run pytest tests/unit/test_runs.py tests/integration/test_constraint_cli.py -q
@@ -1863,7 +1887,7 @@ uv run pytest -q
 ```
 Expected: PASS.
 
-- [ ] **Step 5: Gates and commit**
+- [x] **Step 5: Gates and commit**
 
 > **Watch the formatter here.** During verification `uv run ruff format src tests` rewrote
 > `except (OSError, subprocess.SubprocessError):` into PEP 758's `except OSError, subprocess.SubprocessError:`
@@ -1901,7 +1925,7 @@ git commit -m "feat(runs): stamp code identity into run manifests; add bounds_ma
 
 **The golden CAN be regenerated here**, contrary to the usual assumption: `test_validation_golden.py`'s inputs are `tests/fixtures/baselines/`, which is in git, not sliced from `data/staged`. Verified: `uv run pytest tests/integration/test_validation_golden.py -q` -> `5 passed in 16.39s` with no `data/`. Per §17.6, regenerate with a hand-derived oracle row beside the whole-frame `equals`, never from the code under test alone.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Appended to tests/integration/test_validation_golden.py (plus `import numpy as np` and `INTERVAL_SOURCES` added to the existing `logging_employment.contracts` import block). Exact post-`ruff format` text:
 
@@ -1963,14 +1987,14 @@ def test_a_hand_derived_row_reproduces_the_golden_interval(fixture_run):
     assert _value("coverage_0.90") == pytest.approx(covered / pool.size)
     assert _value("mean_interval_width_0.90") == pytest.approx(float(np.mean(widths)))
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```bash
 uv run pytest tests/integration/test_validation_golden.py -q
 ```
 Expected: FAIL on the old label.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Three source diffs (all verified applied, gates green).
 
@@ -2095,7 +2119,7 @@ old: [(None, 840), ('none', 27), ('rolling_residual_ensemble', 301)]
 new: [(None, 840), ('leave_one_out_residual_ensemble', 301), ('none', 27)]
 REGENERATED .../tests/fixtures/validation/validation_metrics_golden.parquet
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 ```bash
 uv run pytest tests/integration/test_validation_golden.py -q     # run from the repo root; needs NO data/ (inputs are tests/fixtures/baselines/, in git)
@@ -2103,7 +2127,7 @@ grep -rn "rolling_residual_ensemble" src/
 ```
 Expected: tests PASS; the grep returns nothing.
 
-- [ ] **Step 5: Gates and commit**
+- [x] **Step 5: Gates and commit**
 
 ```bash
 uv run ruff format src tests && uv run ruff check src tests && uv run interrogate src
@@ -2134,7 +2158,7 @@ watch item. There is no `Target:` field; a named trigger IS a `Revisit if:`.
 **Measured at `bbd9348`:** 41 open items; **33 lack `Size:`** and the same 33 lack both closure conditions.
 `D-078` is the model to copy.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 """The deferred register's own schema, enforced (R-S5P-8).
@@ -2185,7 +2209,7 @@ def test_every_open_item_declares_a_closure_condition() -> None:
     assert not missing, f"{len(missing)} open items with no closure condition: {missing}"
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```bash
 uv run pytest tests/unit/test_deferred_register.py -q
@@ -2199,7 +2223,7 @@ Expected: **2 failed** — `test_every_open_item_declares_a_size` and
 > corrected to `plan` before this plan was finalised. If that third assertion fails when you run
 > it, someone has since added another out-of-set size — fix the item, not the test.
 
-- [ ] **Step 3: List exactly what needs a line**
+- [x] **Step 3: List exactly what needs a line**
 
 ```bash
 uv run python -c "
@@ -2213,7 +2237,14 @@ for part in re.split(r'(?m)^(?=- \[)', txt):
 "
 ```
 
-- [ ] **Step 4: Add the two lines to each, in the file, matching `D-078`'s shape**
+- [x] **Step 4: Add the two lines to each, in the file, matching `D-078`'s shape**
+
+> Deviation: `references/deferred-backlog.md` — the schema this task cites as its authority —
+> says "never rewrite an old item just to add the fields, and never treat a missing field as a
+> defect" for items predating the schema, and ALL 33 predate it. Raised during execution; the
+> maintainer ruled to proceed as planned as a deliberate repo-local decision under R-S5P-8.
+> Every condition was derived from a sentence in the item's own body; none had to be dropped.
+> Also corrected `D-057`, whose "`solve-bounds` also writes no manifest" claim Task 6 falsified.
 
 Append to each item's body, at its existing indent (six spaces):
 
@@ -2228,7 +2259,7 @@ Rules, so this stays a record change and not a re-triage:
 - `Done when:` for work with a definite finish; `Revisit if:` for a watch item.
 - Do not edit any ticked item, and do not renumber anything.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 ```bash
 uv run pytest tests/unit/test_deferred_register.py -q
@@ -2274,7 +2305,10 @@ roadmap that says REQ-022 is closed while four of thirteen regimes score nothing
 REQ-022 (`specs/logging-employment-spec.md:2142`) is *"Separate rolling forecasts and retrospective
 smoothing."* **Both** of its named regimes score zero, and Stage 4's `Gap closed:` line lists REQ-022.
 
-- [ ] **Step 1: Put the choice to your human partner, with the costs**
+- [x] **Step 1: Put the choice to your human partner, with the costs**
+
+> Deviation: asked at the START of execution rather than here — it blocks nothing else, and
+> neither option writes code. Ruled: **Option B**.
 
 This step ends the task's automated portion. Present exactly this, and wait:
 
@@ -2289,14 +2323,18 @@ This step ends the task's automated portion. Present exactly this, and wait:
 > declared-but-unscored by decision. Size: quick-fix. Costs nothing now; means Stage 5's promotion gate
 > is applied with nine regimes and says so.
 
-- [ ] **Step 2: Record the ruling**
+- [x] **Step 2: Record the ruling**
 
 Whichever is chosen, write it in three places so no reader has to reconstruct it:
 1. `D-071` and `D-086` — the ruling as a `Done when:` (Option A) or a tick with the reason (Option B).
 2. The roadmap's Stage 4 `Gap closed:` line — REQ-022 stays only if Option A is chosen AND lands.
 3. `specs/findings/stage-4-log.md` — a dated entry, since this supersedes a claim the block made.
 
-- [ ] **Step 3: If Option B, apply the roadmap edits**
+- [x] **Step 3: If Option B, apply the roadmap edits**
+
+> Deviation: also re-pointed the requirements-table row (`:59`, `| REQ-022 | ... | Stage 4 |`),
+> which the plan does not mention. Leaving it would have kept REQ-022 assigned to the stage the
+> ruling just said does not close it.
 
 Strike `REQ-022` from Stage 4's `Gap closed:` line and add to Stage 5's `Consumes:`:
 
@@ -2305,7 +2343,7 @@ REQ-022 is NOT closed by Stage 4: four of §13.3's thirteen regimes score nothin
 (`D-071`, `D-086`), so the §13.10 gate is applied over nine.
 ```
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 ```bash
 uv run pytest tests/unit/test_deferred_register.py -q
@@ -2313,7 +2351,7 @@ grep -n "REQ-022" specs/logging-employment-spec-roadmap.md
 ```
 Expected: the register test passes; REQ-022 appears where the ruling put it and nowhere else.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add specs/

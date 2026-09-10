@@ -1666,3 +1666,60 @@ names but no existing item owns; the Stage 4 `Exit:` line cites them.
       `cbp_size_gaps` needs the CBP gap composed with a QCEW mask) and was judged not worth
       blocking Stage 5's planning on. Recorded at `specs/findings/stage-4-log.md`.
 
+
+## 13-stage5-preconditions — 2026-09-10
+
+Raised during plan 13's execution. All nine tasks shipped; nothing was descoped. These four are
+work the plan's changes either created, confirmed, or deliberately scoped out.
+
+- [ ] `D-087` **INV-002's per-cell half is enforced on the production path only, not on the
+      validation harness.** Plan 13 Task 4 (R-S5P-3) wired `bounds` into `run_baselines` and made
+      `solve-bounds` a precondition of `run-baselines` in `cli.py`, so every released estimate is
+      now checked against its §9 interval. `validate/harness.py:161` deliberately keeps passing
+      nothing, and `run_baselines`' own docstring records why: `deterministic_bounds.parquet`
+      carries the published value for a cell the pseudo-suppression mask hides, so its intervals
+      were solved from a system containing the truth the harness scores against, and clipping to
+      them would leak that truth into the estimates — §13.4 `LeakageError` territory. The
+      consequence is that a harness estimate CAN sit outside its cell's deterministic interval
+      with nothing noticing, which is exactly the condition INV-002 exists to refuse. Closing it
+      needs bounds re-solved under the mask, which is a Stage 6 job, not a parameter change.
+      Size: design. Done when: the harness scores against bounds re-solved from the MASKED system,
+      and `run_baselines` is called with them.
+
+- [ ] `D-088` **Five test modules still spell out their own `STAGED` + skipif inline.** Plan 13
+      Task 2 (R-S5P-2) put `STAGED` and `requires_staged` in `tests/conftest.py` and applied them
+      to the nine modules that were FAILING without `data/`. It did not fold in the five that
+      already had a working inline guard: `tests/integration/test_d1_acceptance.py`,
+      `test_d1_baselines.py`, `test_d1_validation.py`, `test_validate_cli.py` and
+      `test_stage4_acceptance.py`. So the suite now has two spellings of one predicate, and the
+      conftest's own comment says so. Not a defect — those five skip correctly today — but the
+      inline copies use `Path("data/staged")`, which is cwd-relative and silently requires pytest
+      to be invoked from the repo root, where the shared constant is absolute.
+      Size: quick-fix. Done when: the five import `STAGED` / `requires_staged` from
+      `tests.conftest` and the conftest comment listing them is deleted.
+
+- [ ] `D-089` **`DECLARED_ABSENCES` will silently excuse a real CBP 2024 failure once Census
+      publishes that year.** Plan 13 Task 5 (R-S5P-4) made `fetch` halt on any undeclared non-200
+      or empty body, with `fetching.DECLARED_ABSENCES[("cbp", 2024)]` as the single exception,
+      carrying its measurement (SRC-CBP-003, SRC-CBP-004: a real 404, and 2024 absent from
+      `cbp_metadata.years_available`). A published 2024 needs no change to keep working — `_usable`
+      returns True on any 200 with a body before it consults the table — but the entry would then
+      be excusing a year that is no longer absent, so a transient 500 on 2024 would drop it
+      silently, which is the precise behaviour R-S5P-4 removed everywhere else.
+      Size: quick-fix. Revisit if: Census publishes a 2024 CBP dataset — the entry must be deleted
+      in the same change that first fetches it.
+
+- [ ] `D-090` **This repo's deferred-register test and the shared backlog reference disagree about
+      pre-schema items.** `tests/unit/test_deferred_register.py` (added by plan 13 Task 8,
+      R-S5P-8) requires `Size:` and a closure condition on EVERY open item.
+      `~/.claude/skills/writing-plans/references/deferred-backlog.md` says the opposite for items
+      written before that schema landed: "never rewrite an old item just to add the fields, and
+      never treat a missing field as a defect." The backfill was ruled through deliberately on
+      2026-09-10 as a repo-local decision, so the divergence is recorded rather than resolved. It
+      is dormant while every open item complies, and bites only if a future item is imported or
+      restored in the old shape — the test would then report a defect the shared reference says is
+      not one. Recorded because the ruling was made once, in one session, and nothing else carries
+      it.
+      Size: quick-fix. Revisit if: an item lands that the test rejects and the reference exempts —
+      then either the reference gains a carve-out or this repo's test narrows to post-schema
+      sections.
