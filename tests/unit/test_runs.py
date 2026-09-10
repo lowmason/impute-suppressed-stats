@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 
 from logging_employment.config import Config, resolved_dict
-from logging_employment.runs import RUN_ID_LENGTH, run_id
+from logging_employment.runs import RUN_ID_LENGTH, code_provenance, run_id
 
 DIGESTS = {"qcew_monthly": "aa" * 32, "bridge": "bb" * 32}
 
@@ -56,3 +57,54 @@ def test_an_estimator_subset_gets_its_own_run_id(appendix_a_config: Config) -> N
         appendix_a_config, DIGESTS, overrides={"estimators": ["establishment_proportional"]}
     )
     assert len({full, subset, other}) == 3
+
+
+def test_the_code_stamp_records_unknown_rather_than_halting_a_run(tmp_path: Path) -> None:
+    """R-S5P-5: the one deliberate exception to §18.3's fail-closed default, pinned as a test.
+
+    `tmp_path` has no `uv.lock` in any ancestor, which is the tarball/sdist install -- reached
+    without mocking `subprocess` or `PATH`. Fail-closed guards values that would corrupt an
+    estimate; a missing commit id corrupts none, and refusing to run without `git` on PATH turns a
+    provenance diagnostic into an outage. BOTH keys go unknown together: `uv.lock` is the anchor
+    the git probe is rooted at, so half an answer here would mean a lock digest from one checkout
+    beside a commit from whatever repository happened to enclose it.
+    """
+    assert code_provenance(tmp_path) == {"code_commit": "unknown", "uv_lock_sha256": "unknown"}
+
+
+def test_a_tree_with_a_lock_and_no_git_history_stamps_half_an_answer(tmp_path: Path) -> None:
+    """The sdist case, and the ONLY test that reaches the `git` probe's failure path.
+
+    hatchling ships `uv.lock` (it is tracked) and never ships `.git`, so an sdist install has a
+    readable lock digest and an unanswerable commit. Half an answer is the right answer: guessing
+    the commit from whatever repository encloses the install directory would be a lie, and halting
+    would make the package unusable exactly where it is most often installed. Measured: `git -C`
+    on a directory outside any repository exits 128, which is the `returncode != 0` branch.
+    """
+    (tmp_path / "uv.lock").write_bytes(b"lock bytes")
+    assert code_provenance(tmp_path) == {
+        "code_commit": "unknown",
+        "uv_lock_sha256": hashlib.sha256(b"lock bytes").hexdigest(),
+    }
+
+
+def test_no_code_stamp_reaches_the_payload_the_run_id_hashes(appendix_a_config: Config) -> None:
+    """The HARD constraint: stamping code identity must renumber no run directory.
+
+    Two assertions, guarding two different routes in. The first is the id itself, still equal to
+    the derivation that predates provenance -- that is the one that fires if `run_id` starts
+    folding the stamp into its own payload. The second guards the route the first cannot see:
+    a `code_commit` or `uv_lock_sha256` field added to `Config` would reach `resolved_dict`, and
+    both the id and its pre-provenance re-derivation would move together, silently and in step.
+    So the second reconstructs the payload from `resolved_dict` and names the keys that must not
+    appear in it, at the point of entry rather than as a changed digest nobody can attribute.
+    """
+    assert run_id(appendix_a_config, DIGESTS) == _payload_before_overrides_existed(
+        appendix_a_config
+    )
+    payload = json.dumps(
+        {"config": resolved_dict(appendix_a_config), "inputs": DIGESTS}, sort_keys=True
+    )
+    assert not set(code_provenance()) & set(json.loads(payload)["config"])
+    assert "code_commit" not in payload
+    assert "uv_lock_sha256" not in payload

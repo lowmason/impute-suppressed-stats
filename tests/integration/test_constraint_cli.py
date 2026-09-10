@@ -83,6 +83,63 @@ def test_solve_bounds_writes_bounds_ranks_and_flags(workspace: Path) -> None:
     assert (run / "disclosure_flags.parquet").exists()
 
 
+def test_solve_bounds_writes_a_manifest_naming_every_output_it_wrote(workspace: Path) -> None:
+    """R-S5P-5: §16.1 requires a machine-readable manifest per command; this one wrote none.
+
+    The digests are checked against the files rather than merely asserted present -- a manifest
+    whose `output_hashes` are stale describes some other run, which is worse than no manifest.
+    """
+    _run(workspace, "build-constraints")
+    _run(workspace, "solve-bounds")
+    cfg = load_config(workspace)
+    run = next(Path(cfg.storage.output_uri).iterdir())
+    manifest = json.loads((run / "bounds_manifest.json").read_text())
+    assert set(manifest["output_hashes"]) == {
+        "deterministic_bounds",
+        "component_rank",
+        "disclosure_flags",
+    }
+    for table, digest in manifest["output_hashes"].items():
+        assert _digest(run / f"{table}.parquet") == digest
+    built = json.loads((run / "schema_manifest.json").read_text())
+    assert manifest["constraint_set_hash"] == built["constraint_set_hash"]
+    bounds = pl.read_parquet(run / "deterministic_bounds.parquet")
+    assert manifest["bound_status_counts"] == dict(
+        bounds.group_by("bound_status").len().iter_rows()
+    )
+
+
+def test_a_refused_solve_bounds_leaves_no_manifest_behind(workspace: Path) -> None:
+    """The manifest is written on the success path only, or it would assert a run that failed."""
+    result = CliRunner().invoke(app, ["solve-bounds", "--config", str(workspace)])
+    assert result.exit_code != 0
+    output_root = Path(load_config(workspace).storage.output_uri)
+    assert not list(output_root.rglob("bounds_manifest.json"))
+
+
+def test_every_manifest_stamps_the_code_that_wrote_it(workspace: Path) -> None:
+    """R-S5P-5: `run_id` hashes config and inputs but NOT source, so a run directory can be stale.
+
+    Deliberately NOT pinned to a value: `code_commit` moves with every commit and carries a
+    `-dirty` suffix in any working tree, so a literal would be re-typed forever. What must hold is
+    that the keys exist on every manifest and carry something a reader can compare -- and that the
+    two commands writing into one directory agree, since they ran from one checkout.
+    """
+    _run(workspace, "build-constraints")
+    _run(workspace, "solve-bounds")
+    cfg = load_config(workspace)
+    run = next(Path(cfg.storage.output_uri).iterdir())
+    stamps = [
+        json.loads((run / name).read_text())
+        for name in ("schema_manifest.json", "bounds_manifest.json")
+    ]
+    for manifest in stamps:
+        assert manifest["code_commit"]
+        assert manifest["uv_lock_sha256"]
+    assert stamps[0]["code_commit"] == stamps[1]["code_commit"]
+    assert stamps[0]["uv_lock_sha256"] == stamps[1]["uv_lock_sha256"]
+
+
 def test_solve_bounds_without_a_prior_build_names_what_is_missing(workspace: Path) -> None:
     result = CliRunner().invoke(app, ["solve-bounds", "--config", str(workspace)])
     assert result.exit_code != 0

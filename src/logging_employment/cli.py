@@ -10,6 +10,8 @@ import typer
 from .config import load_config
 
 if TYPE_CHECKING:  # annotations only; keeps CLI start-up cheap
+    from collections.abc import Mapping
+
     from .config import Config
 
 app = typer.Typer(add_completion=False, help="Monthly state Logging employment estimates.")
@@ -97,6 +99,27 @@ def _constraints_dir(cfg: Config) -> Path:
     return Path(cfg.storage.constraints_uri)
 
 
+def _write_manifest(path: Path, payload: Mapping[str, object]) -> None:
+    """Write one run manifest, stamped with the code identity that produced it.
+
+    THE point of funnelling all five manifests through one writer. `run_id` covers config and
+    input data but deliberately not source (`runs.code_provenance`), so `code_commit` and
+    `uv_lock_sha256` are the only things in `runs/<id>/` that can answer "was this directory
+    written by the code I am reading?". A per-command `json.dumps` at each site made adding them
+    five edits, and made forgetting them on the sixth manifest the default outcome.
+
+    The stamp is merged LAST so no caller can shadow or drop it, and the JSON keeps the
+    `indent=2, sort_keys=True` shape every one of these files already had -- `solve-bounds` reads
+    `schema_manifest.json` as a precondition gate and an integration test pins its bytes, so the
+    formatting is not free to drift.
+    """
+    import json
+
+    from .runs import code_provenance
+
+    path.write_text(json.dumps({**payload, **code_provenance()}, indent=2, sort_keys=True))
+
+
 def _input_digests(cfg: Config) -> dict[str, str]:
     """A sha256 per harmonized input, which is what makes the run id a function of the data."""
     import hashlib
@@ -113,7 +136,6 @@ def build_constraints_command(
     config: Path = typer.Option(..., "--config", exists=True, dir_okay=False),
 ) -> None:
     """Assemble the constraint system from the harmonized layer and persist it."""
-    import json
 
     import highspy
     import yaml
@@ -147,26 +169,23 @@ def build_constraints_command(
     run = run_dir(cfg, run_id(cfg, _input_digests(cfg)))
     run.mkdir(parents=True, exist_ok=True)
     (run / "config.resolved.yaml").write_text(yaml.safe_dump(resolved_dict(cfg), sort_keys=True))
-    (run / "schema_manifest.json").write_text(
-        json.dumps(
-            {
-                "constraint_set_hash": built.constraint_set_hash,
-                "output_hashes": hashes,
-                "schema_fingerprints": {
-                    "target_cell": schema_fingerprint(TARGET_CELL_SCHEMA),
-                    "constraint_row": schema_fingerprint(CONSTRAINT_ROW_SCHEMA),
-                    "constraint_coefficient": schema_fingerprint(CONSTRAINT_COEFFICIENT_SCHEMA),
-                },
-                "compatibility_report": built.compatibility_report,
-                # REQ-029 names the solver among the fail-closed surfaces, and §18.1 wants a run
-                # reproducible from its manifest. `config.resolved.yaml` records that the solver is
-                # HiGHS; only this records which HiGHS.
-                "solver": cfg.constraints.solver,
-                "solver_version": highspy.Highs().version(),
+    _write_manifest(
+        run / "schema_manifest.json",
+        {
+            "constraint_set_hash": built.constraint_set_hash,
+            "output_hashes": hashes,
+            "schema_fingerprints": {
+                "target_cell": schema_fingerprint(TARGET_CELL_SCHEMA),
+                "constraint_row": schema_fingerprint(CONSTRAINT_ROW_SCHEMA),
+                "constraint_coefficient": schema_fingerprint(CONSTRAINT_COEFFICIENT_SCHEMA),
             },
-            indent=2,
-            sort_keys=True,
-        )
+            "compatibility_report": built.compatibility_report,
+            # REQ-029 names the solver among the fail-closed surfaces, and §18.1 wants a run
+            # reproducible from its manifest. `config.resolved.yaml` records that the solver is
+            # HiGHS; only this records which HiGHS.
+            "solver": cfg.constraints.solver,
+            "solver_version": highspy.Highs().version(),
+        },
     )
     write_parquet_deterministic(
         graph.component_provenance(built), run / "constraint_manifest.parquet"
@@ -205,16 +224,43 @@ def solve_bounds_command(
     flags = build_flags(result.bounds, built.cells, cfg.disclosure)
 
     run.mkdir(parents=True, exist_ok=True)
-    write_parquet_deterministic(result.bounds, run / "deterministic_bounds.parquet")
-    write_parquet_deterministic(result.components, run / "component_rank.parquet")
-    write_parquet_deterministic(flags, run / "disclosure_flags.parquet")
+    # The return values are the outputs' sha256s, exactly as `build-constraints` and
+    # `run-baselines` collect them; this command was throwing all three away.
+    hashes = {
+        "deterministic_bounds": write_parquet_deterministic(
+            result.bounds, run / "deterministic_bounds.parquet"
+        ),
+        "component_rank": write_parquet_deterministic(
+            result.components, run / "component_rank.parquet"
+        ),
+        "disclosure_flags": write_parquet_deterministic(flags, run / "disclosure_flags.parquet"),
+    }
     counts = result.bounds.group_by("bound_status").len().sort("bound_status")
+    narrow = int(flags["narrow_feasible_interval_flag"].sum())
+    exact = int(flags["exact_reconstruction_flag"].sum())
+    # §16.1: "Every command MUST write a machine-readable manifest." `solve-bounds` wrote none, so
+    # the §9 bounds were the one stage whose outputs a reader could only re-hash by hand, and the
+    # §9.8 flag counts -- §14's disclosure surface -- survived only in the terminal scrollback.
+    # Written AFTER the three tables and only on the success path: a refused run must leave the
+    # directory with no artifact of any kind claiming these inputs were bounded.
+    _write_manifest(
+        run / "bounds_manifest.json",
+        {
+            # The gate `load_system` was pinned to, restated where the outputs are. This is what
+            # ties `runs/<id>/deterministic_bounds.parquet` to the constraint tables in
+            # `data/constraints/`, which the run id does not cover.
+            "constraint_set_hash": built.constraint_set_hash,
+            "output_hashes": hashes,
+            "bound_status_counts": {
+                row["bound_status"]: row["len"] for row in counts.iter_rows(named=True)
+            },
+            "narrow_feasible_interval_flags": narrow,
+            "exact_reconstruction_flags": exact,
+        },
+    )
     for row in counts.iter_rows(named=True):
         typer.echo(f"{row['bound_status']} {row['len']}")
-    typer.echo(
-        f"flagged {flags['narrow_feasible_interval_flag'].sum()} narrow, "
-        f"{flags['exact_reconstruction_flag'].sum()} exact"
-    )
+    typer.echo(f"flagged {narrow} narrow, {exact} exact")
 
 
 @app.command("run-baselines")
@@ -305,29 +351,26 @@ def run_baselines_command(
     }
     # A SIBLING manifest. `schema_manifest.json` is `solve-bounds`'s precondition gate and an
     # idempotence test pins its bytes, so nothing here may write to it.
-    (run / "baseline_manifest.json").write_text(
-        json.dumps(
-            {
-                "preferred_estimator": preferred_estimator(results),
-                "preferred_estimator_by_month": preferred_estimator_by_month(results),
-                "output_hashes": hashes,
-                "schema_fingerprints": {
-                    "baseline_results": schema_fingerprint(BASELINE_RESULT_SCHEMA),
-                    "anchor_audit": schema_fingerprint(ANCHOR_AUDIT_SCHEMA),
-                },
-                "weight_basis_counts": basis_counts,
-                "fallback_intensity": fallback_intensity,
-                "declines": declines,
-                "anchor": {
-                    "basis": "declared_national_total",
-                    "months_gated": audit.height,
-                    "months_anchored": int(audit["anchored"].sum()),
-                    "establishment_gap_max": int(audit["establishment_gap"].abs().max()),
-                },
+    _write_manifest(
+        run / "baseline_manifest.json",
+        {
+            "preferred_estimator": preferred_estimator(results),
+            "preferred_estimator_by_month": preferred_estimator_by_month(results),
+            "output_hashes": hashes,
+            "schema_fingerprints": {
+                "baseline_results": schema_fingerprint(BASELINE_RESULT_SCHEMA),
+                "anchor_audit": schema_fingerprint(ANCHOR_AUDIT_SCHEMA),
             },
-            indent=2,
-            sort_keys=True,
-        )
+            "weight_basis_counts": basis_counts,
+            "fallback_intensity": fallback_intensity,
+            "declines": declines,
+            "anchor": {
+                "basis": "declared_national_total",
+                "months_gated": audit.height,
+                "months_anchored": int(audit["anchored"].sum()),
+                "establishment_gap_max": int(audit["establishment_gap"].abs().max()),
+            },
+        },
     )
     typer.echo(f"preferred {preferred_estimator(results)}")
     for estimator_id, counts in sorted(basis_counts.items()):
@@ -350,7 +393,6 @@ def reconcile_command(
     draws reconcile separately from the estimators that seeded them.
     """
     import hashlib
-    import json
 
     import polars as pl
 
@@ -376,18 +418,15 @@ def reconcile_command(
     # §16.1: "Every command MUST write a machine-readable manifest and MUST be idempotent for the
     # same inputs." A verifier that only echoes leaves nothing for §18.1 to reproduce against, so
     # the verdict and the digest of what was checked are persisted beside the results.
-    (run / "reconcile_manifest.json").write_text(
-        json.dumps(
-            {
-                "checked_pairs": drift.height,
-                "max_residual_drift": worst,
-                "tolerance": cfg.reconciliation.tolerance,
-                "within_tolerance": within_tolerance,
-                "baseline_results_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-            },
-            indent=2,
-            sort_keys=True,
-        )
+    _write_manifest(
+        run / "reconcile_manifest.json",
+        {
+            "checked_pairs": drift.height,
+            "max_residual_drift": worst,
+            "tolerance": cfg.reconciliation.tolerance,
+            "within_tolerance": within_tolerance,
+            "baseline_results_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        },
     )
     typer.echo(f"checked {drift.height} (estimator, month) pairs")
     typer.echo(f"max residual drift {worst:.3e}")
@@ -430,7 +469,6 @@ def validate_command(
     ),
 ) -> None:
     """Run §13's pseudo-suppression harness and persist its metrics and scoreboard."""
-    import json
 
     from .baselines.runner import resolve_estimators
     from .build import write_parquet_deterministic
@@ -495,6 +533,6 @@ def validate_command(
         "estimators": [estimator.estimator_id for estimator in chosen],
         "output_hashes": hashes,
     }
-    (run / "validation_manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True))
+    _write_manifest(run / "validation_manifest.json", manifest)
     for regime, entry in sorted(result.manifest["regimes"].items()):
         typer.echo(f"{regime} {entry['disposition']} scored={entry['n_scored']}")
