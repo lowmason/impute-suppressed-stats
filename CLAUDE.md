@@ -31,8 +31,13 @@ build-harmonized → build-constraints → solve-bounds → run-baselines → re
 ```
 
 Every command takes `--config config.yaml` and must be idempotent for the same inputs (§16.1);
-each gates on the previous one's artifact and refuses with the missing path (`cli.py::solve_bounds_command`, `:250`,
-`:349`). `validate --estimators a,b` scores a subset in its own run dir. `--help` is the real
+each gates on the previous one's artifact and refuses with the missing path
+(`cli.py::{solve_bounds_command, run_baselines_command, reconcile_command}` — symbols, not line
+numbers, because plan 13 drifted the old `:250` / `:349` pins by inserting above them).
+**`run-baselines` gates on TWO** as of plan 13 (R-S5P-3): `schema_manifest.json` *and*
+`deterministic_bounds.parquet`, so `solve-bounds` is a hard precondition rather than an advisory
+step in the documented order — every estimate is checked against its §9 interval (INV-002's
+per-cell half) instead of the check being skipped when its input is absent. `validate --estimators a,b` scores a subset in its own run dir. `--help` is the real
 command list — five of §16.1's fifteen do not exist yet (`fit-state-model`, `fit-size-model`,
 `disclosure-review`, `publish`, `run-all`).
 
@@ -73,7 +78,12 @@ synthetic masks. Outputs land in `runs/<run_id>/` beside one JSON manifest per c
 - **Run ids are derived, not stamped.** `runs.run_id` = sha256 of `{config: resolved_dict(cfg),
   inputs: {stem: sha256}}`, truncated to 12, over `data/staged/*.parquet` (`runs.py::run_id`,
   `cli.py::_input_digests`); optional keys are *omitted*, never null, so they do not re-id existing runs. The
-  id therefore covers config + input data but **not source code**.
+  id therefore covers config + input data but **not source code** — which is why every manifest
+  also carries `code_commit` and `uv_lock_sha256` from `runs.code_provenance` (plan 13, R-S5P-5),
+  written through the single `cli.py::_write_manifest`. Those sit BESIDE the id, never inside it:
+  hashing the commit in would rename every run directory on every commit. `code_provenance`
+  records, never raises — `"unknown"` when unanswerable — and marks a dirty tree `<sha>-dirty`,
+  because a bare sha from a dirty worktree is a false "this run matches that commit".
 - **Schemas are ordered `dict[str, pl.DataType]` literals in `contracts.py`, and the order is
   load-bearing** — `schema_fingerprint` hashes the ordered pairs, so reordering fields is
   a schema change. `validate_frame` matches names and dtypes exactly and checks no values;
@@ -109,13 +119,20 @@ synthetic masks. Outputs land in `runs/<run_id>/` beside one JSON manifest per c
 
 ## Gotchas
 
-- **`data/` (~564 MB) and `runs/` are gitignored, and the suite is not green without them.**
-  Measured at `8899b5f` with no `data/`: `uv run pytest` → **42 failed, 1238 passed, 26 skipped**.
-  Every failure is a `validate/` test calling `HarmonizedData.load(Path("data/staged"))` with no
-  skip guard — 34 across seven `tests/unit/test_validate_*.py` modules, 8 across
-  `tests/integration/test_validate_{leakage,exact_recovery}.py`. Those paths are **cwd-relative**,
-  so run pytest from the repo root. `tests/integration/test_d1_*.py` do it properly, with
-  `skipif`. Baseline HEAD before blaming your own change.
+- **`data/` (~564 MB) and `runs/` are gitignored, but the suite IS green without them** — as of
+  plan 13 (R-S5P-2). Measured at `4cc0dfe`: `uv run pytest` is **1388 passed** with `data/` and
+  **1318 passed, 70 skipped, 0 failed** without it. The arithmetic is the check worth repeating:
+  `1318 + 70 == 1388`, so a dataless run skips exactly the data-bound tests and loses no coverage.
+  *Superseded reading, so a stale citation is recognisable:* until plan 13 this said "the suite is
+  not green without them — 42 failed, 1238 passed, 26 skipped at `8899b5f`", and the 42 were
+  `validate/` tests calling `HarmonizedData.load(Path("data/staged"))` with no skip guard.
+  `tests/conftest.py` now owns `STAGED` (**absolute**, so the old cwd-relative requirement to run
+  pytest from the repo root is gone) and `requires_staged`, a skipif keyed on
+  `qcew_monthly.parquet` existing. Six modules take a module-level `pytestmark`; three MIXED
+  modules take per-test decorators, because a blanket mark there would convert five tests that
+  pass in a bare checkout into skips while still reporting "0 failed". **If you add a data-bound
+  test, guard it and re-check by arithmetic — skipped must rise by exactly the number you added
+  and passed must not fall.** Five modules still carry their own inline guard (`D-088`).
 - **`ruff` is the only formatter, and its SCOPE is the gotcha.** Black was dropped 2026-09-09
   (plan 12's Task 0): the two disagreed on eight files — ruff >=0.9 rewrites `assert (x), msg`
   into `assert x, (msg)` and black leaves it — and `pyproject.toml` declared both, so "is the tree

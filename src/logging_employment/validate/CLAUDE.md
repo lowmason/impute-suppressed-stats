@@ -131,6 +131,11 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
   `deterministic_bounds.parquet`** — that table still holds the published value for a cell this
   harness just hid. `MaskedSystem` is always a full rebuild, because `constraint_set_hash` is a
   stored field and `dataclasses.replace` would copy the unmasked hash onto a different system.
+  **Corollary, and why this package calls `run_baselines` WITHOUT bounds** (plan 13, R-S5P-3):
+  the production path now clips every estimate to §9's interval, but handing the harness those
+  same intervals would leak the truth it is scoring against straight through the clip. So INV-002's
+  per-cell half is enforced on the production path and deliberately NOT here. Closing that gap
+  needs bounds re-solved from the MASKED system — a Stage 6 job, registered as `D-087`.
 - **The truth join is INNER**, so a scored row that was never masked is impossible by construction
   rather than by assertion.
 - **Eligibility is `area_type == 'state' & observed & qtrly_establishments > 0`.** Admitting a

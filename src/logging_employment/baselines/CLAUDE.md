@@ -65,10 +65,22 @@ model" structural rather than stated. `allocate.check_domain` (`reconcile/alloca
 any vector whose domain is not exactly `anchor.missing_cells`, or that is non-positive/non-finite,
 or that lacks a per-cell `basis`.
 
+**The runner enforces INV-002's per-cell half** (plan 13, R-S5P-3). `run_baselines` takes an
+optional keyword-only `bounds: Bounds | None`; `runner.state_total_bounds` turns §7.10's
+`deterministic_bounds` table into it and `runner.assert_within_bounds` raises
+`errors.BoundViolationError` for a released value outside its own `[L, U]` — a RAISE, not a
+`Decline` row, because unlike `WeightDomainError` this is not a data gap. Keyed by the seven-field
+`cell_id`, NOT `state_fips`: `scale_into_bounds` keys the same type by bare state, but that object
+is one month's feasible set while `run_baselines` walks the whole window in one call. Both the
+float and §12.6's integer release are checked. `cli.py` passes bounds; `validate/harness.py`
+deliberately does NOT (it would leak masked truth through the clip — see `validate/CLAUDE.md` and
+`D-087`).
+
 Consumers outside this package: `validate/harness.py` imports `Estimator` and
 `runner.{REGISTRY, run_baselines}`; `validate/scoreboard.py` imports
 `runner.{FALLBACK_RUNGS, PREFERRABLE, RUNG_OF}`; `cli.py` imports `runner.{REGISTRY,
-run_baselines, resolve_estimators, preferred_estimator, preferred_estimator_by_month}`. Nothing
+run_baselines, resolve_estimators, preferred_estimator, preferred_estimator_by_month,
+state_total_bounds}`. Nothing
 outside imports an estimator class directly.
 
 ## Adding an estimator
