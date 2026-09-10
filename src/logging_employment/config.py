@@ -9,7 +9,7 @@ from typing import Literal
 
 import yaml
 from dotenv import dotenv_values
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 _MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
@@ -85,12 +85,52 @@ class CbpSourceConfig(_Strict):
     fail_on_unknown_disclosure_regime: bool
 
 
+class InactiveSourceConfig(_Strict):
+    """An Appendix A source entry that carries nothing but `enabled: false`.
+
+    `enabled` is `Literal[False]`, not `bool`: this package has no ingest module, no registry row
+    (`registry/sources.yaml` lists three) and no `fetch --source` branch for any of these seven, so
+    `enabled: true` names a source nothing can acquire. Accepting it would defer the failure to a
+    `fetch` that reports an unknown source; refusing it at load is §18.3's fail-closed rule, and
+    `validate-config` is where the operator is already looking.
+    """
+
+    enabled: Literal[False] = False
+
+
 class SourcesConfig(_Strict):
-    """The three sources Stage 1 ingests. Later stages add their own keys."""
+    """The three sources Stage 1 ingests, plus Appendix A's seven declared-inactive entries.
+
+    Appendix A's `sources:` block lists ten. Seven of them -- `tpo`, `fia`, `ces`, `susb`, `bds`,
+    `nonemployer`, `bea` -- carry `enabled: false` and belong to Stages 4-8; before they were
+    declared here, `extra="forbid"` made the spec's own reference configuration unloadable, which
+    is `R-S5P-6`'s defect (`specs/stage5-preconditions.md`) and what this fixes. `R-S5P-6` scopes
+    only these seven: Appendix A's `model:` block and its three MISSING keys are left failing on
+    purpose, and `tests/unit/test_config.py` asserts exactly what still fails.
+
+    They are declared as fields rather than admitted by `extra="allow"`
+    so that a MISSPELLED source name is still a load-time error and so that `enabled: true` on an
+    unimplemented source is refused (`InactiveSourceConfig`); `extra="allow"` would have accepted
+    both silently.
+
+    EVERY ONE OF THE SEVEN IS `exclude=True`, so none of them reaches `resolved_dict` and none can
+    move a run id. That is deliberate and load-bearing, not a serialization detail: `runs.run_id`
+    hashes `resolved_dict`, and a source that is `enabled: false` contributes no bytes to any
+    stage -- nothing outside this module reads these fields. Emitting them would re-identify every
+    run directory on disk (orphaning `runs/f03023ac9f3a`) in exchange for a key that cannot change
+    what a run computes. It is the same omitted-not-null rule `runs.run_id` applies to `overrides`.
+    """
 
     qcew: QcewSourceConfig
     qcew_size: QcewSizeSourceConfig
     cbp: CbpSourceConfig
+    tpo: InactiveSourceConfig | None = Field(default=None, exclude=True)
+    fia: InactiveSourceConfig | None = Field(default=None, exclude=True)
+    ces: InactiveSourceConfig | None = Field(default=None, exclude=True)
+    susb: InactiveSourceConfig | None = Field(default=None, exclude=True)
+    bds: InactiveSourceConfig | None = Field(default=None, exclude=True)
+    nonemployer: InactiveSourceConfig | None = Field(default=None, exclude=True)
+    bea: InactiveSourceConfig | None = Field(default=None, exclude=True)
 
 
 class ConstraintsConfig(_Strict):
