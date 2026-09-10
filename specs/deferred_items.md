@@ -1177,7 +1177,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
 
 ## 11-stage4-logging-employment-spec — 2026-09-07
 
-- [ ] `D-071` **Wire `rolling_origin` and `cbp_size_gaps` into the harness scoring loop.**
+- [x] `D-071` **Wire `rolling_origin` and `cbp_size_gaps` into the harness scoring loop.**
       Both regimes are declared `feasible` in `contracts.REGIME_DISPOSITIONS` and both are
       implemented — `validate/regimes.py` ships `rolling_origin_frames` (frame truncation) and
       `cbp_size_gap_keys` / `apply_cbp_gap` (CBP state-year removal). Neither produces a
@@ -1213,6 +1213,13 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       `cbp_size_gaps` needs the CBP gap composed with a QCEW mask, since dropping CBP alone changes
       only `cbp_intensity`'s availability and produces no scored cell on its own.
       Size: design. Done when: a ruling records what each regime scores -- or that both are declared-but-unscored by decision -- and the roadmap's REQ-022 claim matches it.
+      **CLOSED 2026-09-10 by ruling (plan 13 Task 9, Option B).** The four regimes are
+      declared-but-unscored BY DECISION, not by oversight. REQ-022 is struck from Stage 4's
+      `Gap closed:` line and named in Stage 5's `Consumes:` as still open, so the §13.10
+      promotion gate is applied over nine regimes and the record says so. Wiring either regime
+      is design work (`rolling_origin` needs a target selector on the truncated frame;
+      `cbp_size_gaps` needs the CBP gap composed with a QCEW mask) and was judged not worth
+      blocking Stage 5's planning on. Recorded at `specs/findings/stage-4-log.md`.
 - [ ] `D-072` **§13.7's CRPS is the harness's dominant cost, not `run_baselines`.**
       The plan's cost model (evidence §4) attributes ~30 s of a ~30.4 s replicate to
       `run_baselines`. Measured 2026-09-07 during execution, that is wrong once §13.7 is wired:
@@ -1637,7 +1644,7 @@ names but no existing item owns; the Stage 4 `Exit:` line cites them.
       labelled) by the harness rather than by a test, and a pseudo-hidden truth outside
       `deterministic_bounds` fails the run with a named error.
 
-- [ ] `D-086` **Two of the four non-scoring regimes are owned by nothing.**
+- [x] `D-086` **Two of the four non-scoring regimes are owned by nothing.**
       Nine of the thirteen §13.3 regimes score in the D1 acceptance run (measured from
       `runs/f03023ac9f3a/validation_scoreboard.parquet`: `clustered_states_within_month`,
       `concentration_proxy`, `long_consecutive_runs`, `naics_transition`, `regional_blocks`,
@@ -1651,4 +1658,11 @@ names but no existing item owns; the Stage 4 `Exit:` line cites them.
       to these two and should be answered in the same pass), or REQ-022 is re-scoped — the review
       records that REQ-022 cannot honestly be called closed by Stage 4 while four regimes score
       nothing.
+      **CLOSED 2026-09-10 by ruling (plan 13 Task 9, Option B).** The four regimes are
+      declared-but-unscored BY DECISION, not by oversight. REQ-022 is struck from Stage 4's
+      `Gap closed:` line and named in Stage 5's `Consumes:` as still open, so the §13.10
+      promotion gate is applied over nine regimes and the record says so. Wiring either regime
+      is design work (`rolling_origin` needs a target selector on the truncated frame;
+      `cbp_size_gaps` needs the CBP gap composed with a QCEW mask) and was judged not worth
+      blocking Stage 5's planning on. Recorded at `specs/findings/stage-4-log.md`.
 

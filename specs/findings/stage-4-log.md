@@ -61,3 +61,37 @@ in this roadmap: two plans shipped this stage.
 This resolves the review's Q-02 ("which of the three completion dates is
 authoritative"): the stamp's, 2026-09-09. The `SHIPPED` line's `2026-09-07` is the
 date plan 11 retired, not the date the stage completed.
+
+## 2026-09-10 — Stage 4's `Gap closed:` claimed REQ-022, which it did not close
+
+**Superseded claim** (roadmap Stage 4 `Gap closed:`, until this entry):
+
+> REQ-013 (§10.7 intervals), REQ-021, REQ-022, REQ-023, REQ-024 (scoreboard)
+
+**Why it changed.** REQ-022 (`specs/logging-employment-spec.md:2142`) is *"Separate
+rolling forecasts and retrospective smoothing."* Measured from
+`runs/f03023ac9f3a/validation_manifest.json`, BOTH of its named regimes score zero:
+
+| Regime | Disposition | `n_scored` |
+|---|---|---|
+| `rolling_origin` | `feasible` | 0 |
+| `retrospective_smoothing` | `vacuous_on_registry` | 0 |
+| `cbp_size_gaps` | `feasible` | 0 |
+| `preliminary_to_final_vintage` | `cannot_run_on_d1` | 0 |
+| the other nine | `feasible` | 120–8,690 |
+
+The stage's own `Exit:` line was already honest — it says nine of thirteen score and
+names `rolling_origin` and `cbp_size_gaps`. Only `Gap closed:` disagreed, and a
+requirement listed there is one a reader takes as discharged.
+
+**The ruling (2026-09-10, Option B of plan 13 Task 9).** REQ-022 is struck from
+Stage 4's `Gap closed:` and named in Stage 5's `Consumes:` as still open. The four
+regimes are **declared-but-unscored by decision**, not by oversight: `rolling_origin`
+would need a target selector applied to the truncated frame, and `cbp_size_gaps` the
+CBP gap composed with a QCEW mask, since dropping CBP alone changes only
+`cbp_intensity`'s availability and produces no scored cell on its own. Both are
+design work, and neither was worth blocking Stage 5's planning on.
+
+**Consequence to carry forward:** Stage 5's §13.10 promotion gate is applied over
+NINE regimes, and the record now says so rather than implying thirteen. `D-071` and
+`D-086` are closed by this ruling.
