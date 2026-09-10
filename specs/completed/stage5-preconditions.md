@@ -4,7 +4,11 @@
 
 # Stage 5 preconditions: make the system runnable and the record true
 
-**Status:** NOT STARTED — requirements input for `writing-plans`.
+**Status:** COMPLETE (2026-09-10) — all nine requirements (R-S5P-1..9) shipped by
+`specs/plans/completed/13-stage5-preconditions.md`. Retired to `specs/completed/`.
+R-S5P-9 was ruled Option B: REQ-022 is re-scoped rather than closed, so Stage 5's §13.10
+gate is applied over nine of thirteen regimes. Four follow-ups are registered as
+`D-087`..`D-090` in `specs/deferred_items.md`.
 
 **Source:** `docs/reviews/2026-09-09-system-review.md` §7.1 (R-01..R-11) and §7.5's first
 bullet, routed here rather than to a roadmap stage by
