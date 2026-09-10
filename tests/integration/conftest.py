@@ -2,8 +2,8 @@
 
 `staged_repo` gives a command a complete, self-contained repository to run against: a config whose
 storage roots point inside `tmp_path`, a staged layer copied from the COMMITTED fixture under
-`tests/fixtures/baselines/`, and a completed `build-constraints` run so `schema_manifest.json`
-exists — `run-baselines` gates on that file the same way `solve-bounds` does.
+`tests/fixtures/baselines/`, and completed `build-constraints` and `solve-bounds` runs, so both
+`schema_manifest.json` and `deterministic_bounds.parquet` exist — `run-baselines` gates on both.
 
 Copying a committed fixture rather than slicing `data/staged` at test time is the point. `data/`
 is gitignored, so a fixture derived from it at run time is pinned to untracked, rebuildable data
@@ -55,6 +55,10 @@ def staged_repo(tmp_path: Path) -> StagedRepo:
     config_path.write_text(yaml.safe_dump(raw, sort_keys=False))
 
     result = CliRunner().invoke(app, ["build-constraints", "--config", str(config_path)])
+    assert result.exit_code == 0, result.output
+    # `solve-bounds` runs here too, as of R-S5P-3: `run-baselines` now checks every estimate
+    # against `deterministic_bounds.parquet` (INV-002's per-cell half) and gates on the file.
+    result = CliRunner().invoke(app, ["solve-bounds", "--config", str(config_path)])
     assert result.exit_code == 0, result.output
     cfg = load_config(config_path)
     return StagedRepo(

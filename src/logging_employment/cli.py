@@ -231,6 +231,7 @@ def run_baselines_command(
         preferred_estimator,
         preferred_estimator_by_month,
         run_baselines,
+        state_total_bounds,
     )
     from .build import write_parquet_deterministic
     from .contracts import (
@@ -250,8 +251,22 @@ def run_baselines_command(
             f"{manifest_path} is missing: no `build-constraints` run matches the harmonized "
             "inputs currently in the staged directory. Run `build-constraints` first"
         )
+    # A SECOND PRECONDITION, new with R-S5P-3. INV-002's per-cell half checks every estimate
+    # against §9's solved interval, so `solve-bounds` joins `build-constraints` as a gate rather
+    # than the check being skipped when its input happens to be absent. A silently-skipped
+    # invariant is the failure this requirement exists to remove, and the documented pipeline
+    # order already runs `solve-bounds` before `run-baselines`.
+    bounds_path = run / "deterministic_bounds.parquet"
+    if not bounds_path.exists():
+        raise typer.BadParameter(
+            f"{bounds_path} is missing: every baseline estimate is checked against its per-cell "
+            "deterministic bounds (INV-002), and this run has none. Run `solve-bounds` first"
+        )
     results, audit = run_baselines(
-        data, cfg, constraint_set_hash=json.loads(manifest_path.read_text())["constraint_set_hash"]
+        data,
+        cfg,
+        constraint_set_hash=json.loads(manifest_path.read_text())["constraint_set_hash"],
+        bounds=state_total_bounds(pl.read_parquet(bounds_path)),
     )
 
     out = run / "baseline_results"

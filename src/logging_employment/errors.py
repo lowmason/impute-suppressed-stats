@@ -114,3 +114,23 @@ class LeakageError(LoggingEmploymentError):
     this convention in `run_pseudo_suppression`'s own docstring and these two functions were the
     only places in it that violated the convention.
     """
+
+
+class BoundViolationError(LoggingEmploymentError):
+    """A released point estimate falls outside its own `deterministic_bounds` interval (INV-002).
+
+    INV-002 has two halves. The adding-up half -- every estimate sums to the anchor's residual --
+    has been enforced on the baseline path since Stage 3 by `allocate` and
+    `InfeasibleResidualError`. The per-cell half was not: §9's LP/MILP interval is a hard public
+    accounting fact, and nothing in `baselines/` read it, so an estimate above a solved upper
+    bound shipped as `anchored_and_reconciled` with no signal at all.
+
+    A RAISE, NOT A `Decline` ROW, and that is a deliberate break with the runner's other
+    post-allocation failure. `WeightDomainError` out of `allocate` becomes a
+    `reconciliation_failure` row because it is a DATA gap -- one cell with no usable input must
+    not abort ten estimators across 96 months. This is not a data gap: the bound and the estimate
+    are both this pipeline's own output, and INV-002 admits no per-month refusal. Filing it as a
+    decline would let the run ship, with a violated accounting fact recorded as an estimator's
+    considered opinion. §18.3's "fail rather than guess" governs, and R-S5P-3 says so in words:
+    "a violation MUST raise a named error from the `LoggingEmploymentError` hierarchy".
+    """
