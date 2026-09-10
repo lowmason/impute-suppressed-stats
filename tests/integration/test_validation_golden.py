@@ -18,12 +18,14 @@ refusal count.
 
 from pathlib import Path
 
+import numpy as np
 import polars as pl
 import pytest
 
 from logging_employment.baselines.runner import REGISTRY
 from logging_employment.config import Config, load_config
 from logging_employment.contracts import (
+    INTERVAL_SOURCES,
     VALIDATION_METRIC_SCHEMA,
     HarmonizedData,
     validate_frame,
@@ -93,3 +95,62 @@ def test_the_arm_comes_from_the_mask_rather_than_a_literal(fixture_run):
     """
     assert fixture_run.metrics["mask_arm"].unique().to_list() == ["state_total"]
     assert fixture_run.scores["mask_arm"].unique().to_list() == ["state_total"]
+
+
+def test_the_interval_source_names_leave_one_out_rather_than_rolling(fixture_run):
+    """R-S5P-7: `interval_source` names what is computed, and `rolling_` named something else.
+
+    `probabilistic_metrics` builds each ensemble from `np.delete(residual_pool, position)` — the
+    pool is every OTHER scored residual in the same (regime, seed, arm, estimator) group, with no
+    time ordering and no window. Nothing rolls. The old value `rolling_residual_ensemble` promised
+    §13.10's coverage gate a time-ordered interval that the code never computed, and the gate
+    cannot tell the difference: `interval_source` is outside `assert_declared_provenance`'s five
+    columns, so `INTERVAL_SOURCES` is checked by nothing at runtime and this test IS the check.
+
+    Scope is the label. A time-ordered rolling interval is explicitly NOT built here
+    (`specs/stage5-preconditions.md` §4).
+    """
+    assert INTERVAL_SOURCES == ("leave_one_out_residual_ensemble", "none")
+    golden = pl.read_parquet(GOLDEN)
+    for frame, origin in ((golden, "golden"), (fixture_run.metrics, "produced")):
+        sources = set(frame["interval_source"].drop_nulls().to_list())
+        assert sources <= set(INTERVAL_SOURCES), f"{origin} carries {sorted(sources)}"
+        assert "leave_one_out_residual_ensemble" in sources, origin
+
+
+def test_a_hand_derived_row_reproduces_the_golden_interval(fixture_run):
+    """The oracle beside the whole-frame `equals`: one row derived from numpy, not from the code.
+
+    `test_the_metrics_match_the_golden` compares the golden against the function that wrote it, so
+    it detects drift and cannot detect a value that was wrong when it was frozen. This re-derives
+    §13.7's 90% coverage and mean width for the widest interval-bearing group in the fixture
+    (`whole_seasonal_blocks` x `cbp_intensity`, 37 scored cells) from the SCORES — which are data —
+    without calling `probabilistic_metrics`. It is also what proves R-S5P-7 moved a label only: it
+    passes unchanged on both sides of the rename.
+    """
+    regime, estimator = "whole_seasonal_blocks", "cbp_intensity"
+    group = fixture_run.scores.filter(
+        (pl.col("regime") == regime)
+        & (pl.col("seed") == 1024)
+        & (pl.col("estimator_id") == estimator)
+    ).filter(pl.col("estimate").is_not_null())
+    pool = (group["estimate"] - group["truth"]).to_numpy()
+    assert pool.size == 37
+    covered, widths = 0, []
+    for position, row in enumerate(group.iter_rows(named=True)):
+        ensemble = np.maximum(np.delete(pool, position) + float(row["estimate"]), 0.0)
+        lo, hi = np.quantile(ensemble, 0.05), np.quantile(ensemble, 0.95)
+        covered += int(lo <= row["truth"] <= hi)
+        widths.append(hi - lo)
+    golden = pl.read_parquet(GOLDEN).filter(
+        (pl.col("regime") == regime)
+        & (pl.col("estimator_id") == estimator)
+        & (pl.col("metric_family") == "probabilistic")
+    )
+
+    def _value(name: str) -> float:
+        return golden.filter(pl.col("metric_name") == name)["value"].item()
+
+    assert covered == 33
+    assert _value("coverage_0.90") == pytest.approx(covered / pool.size)
+    assert _value("mean_interval_width_0.90") == pytest.approx(float(np.mean(widths)))

@@ -177,7 +177,7 @@ def probabilistic_metrics(
         n = len(crps_values)
         common = {
             **base,
-            "interval_source": "rolling_residual_ensemble",
+            "interval_source": "leave_one_out_residual_ensemble",
             "calibration_sample_size": n,
         }
         for level in _LEVELS:
