@@ -4,9 +4,17 @@ Unticked items are the deferred-work backlog; `/deferred` owns triage.
 Live roadmap stages (`specs/*-roadmap.md`) are out of scope here — the
 roadmap is its own backlog.
 
+**Every item carries a stable `D-nnn` id.** D-001..D-084 were assigned in file
+order on 2026-09-10 and cross-checked row-by-row against the 84-row ledger in
+`docs/reviews/2026-09-09-system-review.md` §4.1, so that review's D-citations
+resolve here. **Ids are permanent and are never renumbered**: a new item takes
+the next unused number regardless of where it is inserted, and a closed item
+keeps its id so a citation to it never dangles. Cite an item by id, never by
+title — titles have been rewritten in place before (`e34ef16`).
+
 ## logging-employment-spec-roadmap derivation — 2026-09-03
 
-- [ ] **SRC-OTH-005 — BEA detailed state-industry employment bridge.**
+- [ ] `D-001` **SRC-OTH-005 — BEA detailed state-industry employment bridge.**
       `specs/logging-employment-spec.md` §8.5 SRC-OTH-005 requires BEA detailed
       employment to be treated as optional historical input and bridged
       explicitly (§5.3, §11.11 BEA row). Deferred rather than staged because
@@ -32,7 +40,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
 
 ### Open questions routed to later stages
 
-- [x] **The no-retabulation premise is carried by no cited source.** All eight
+- [x] `D-002` **The no-retabulation premise is carried by no cited source.** All eight
       `naics_vintage_by_year` entries in `data/raw/audit/qcew_codes/summary.json`
       rest on it, and it is honestly marked as uncited rather than asserted. A
       real BLS citation would close it. Touches `scripts/audit/qcew_codes.py`.
@@ -60,13 +68,13 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       the key sentence's tense, so neither was used for a quotation; every quoted string was read
       character-for-character out of the rendered page, including collapsed accordion content that
       `innerText` hides.
-- [ ] **Appendix A vs the forest-source verdicts.**
+- [ ] `D-003` **Appendix A vs the forest-source verdicts.**
       `specs/logging-employment-spec.md` Appendix A ships `tpo.enabled: false` and
       `fia.enabled: false`; Stage 0 measured both `access.status: verified`. These
       are different predicates — a configuration default versus a reachability
       measurement — so Stage 0 juxtaposes them in `specs/findings/source-audit.md`
       and deliberately does not reconcile them. **Stage 7's call.**
-- [x] **Stage 3 needs a substitute allocation anchor.** `SRC-QCEW-006` came back
+- [x] `D-004` **Stage 3 needs a substitute allocation anchor.** `SRC-QCEW-006` came back
       `decline` for UNVERIFIABILITY, not geography: every one of the 96 testable
       months carries at least one suppressed states+DC cell, so the employment
       identity is untestable on a complete published state sum. Stage 3 must name
@@ -84,7 +92,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       `anchor.py`'s docstring says so. The stamped value is pinned by
       `tests/unit/test_anchor.py`, not by `ANCHOR_BASES`, which an open item below records as
       constraining nothing.
-- [x] **`cbp_metadata.lfo_by_year` is null for all eight window years** — the one
+- [x] `D-005` **`cbp_metadata.lfo_by_year` is null for all eight window years** — the one
       roadmap-named field that shipped no value. Human ruling at this gate: carry
       as a §1.2 row rather than re-run. The "why" is recorded in the summary's
       sibling `notes` key and in `specs/findings/source-audit-notes.md`, and the
@@ -97,7 +105,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       code the window queries filter on. The response is shipped as
       `tests/fixtures/cbp/data_113310_2023_live.json` and pinned by
       `test_the_live_response_serves_the_lfo_label_the_query_asks_for`.
-- [x] **`cbp_regime.unknown_years = [2024]`.** CBP's 2024 disclosure regime is
+- [x] `D-006` **`cbp_regime.unknown_years = [2024]`.** CBP's 2024 disclosure regime is
       undetermined because the vintage is not published yet. Stage 1 fails closed on
       an unknown regime, which is the correct behaviour; revisit when 2024 CBP ships.
       **Closed 2026-09-05 by Stage 1 Tasks 12 and 16.** `harmonize.disclosure`
@@ -115,7 +123,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
 
 ### Reviewer Minors triaged as defer
 
-- [x] **`scripts/audit/qcew_identity.py`: two sets named by predicates that
+- [x] `D-007` **`scripts/audit/qcew_identity.py`: two sets named by predicates that
       over-collect.** `NO_OTHER_AREA` conflates "no such area" with "area exists but
       published nothing"; `states_dc_short_span_areas` is built by grouping present
       rows, so it is structurally incapable of reporting a zero-row area — which is
@@ -130,7 +138,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       recorded it. The derived note names the 51-code universe too, because `states_dc_areas`
       (50) and `states_dc_area_months_absent` (84) are both denominated against PRESENT areas.
       Artifact regenerated offline; the rename touched no artifact.
-- [x] **`scripts/audit/qcew_panel.py`: `emplvl_raw_nonzero_rows` uses
+- [x] `D-008` **`scripts/audit/qcew_panel.py`: `emplvl_raw_nonzero_rows` uses
       `strict=False` + `fill_null(0)`,** so a non-numeric raw value on a suppressed
       row counts as "not nonzero" — the one case the counter exists to catch. Not
       live (every real value parses). Fix the comparison or narrow the docstring;
@@ -142,7 +150,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       an explicit `is_not_null()` keeps all three cases apart. Measured on
       `["-", "0", "5", None]`: old 1, naive fix 3, shipped 2. Artifact-neutral — the live panel
       has 0 nulls and 0 unparseable, so the count stays 3558.
-- [x] **`scripts/audit/qcew_panel.py`: `build_panel` and `main` are two independent
+- [x] `D-009` **`scripts/audit/qcew_panel.py`: `build_panel` and `main` are two independent
       call sites** of the same `build_long` → `_conform` composition. They agree
       today; nothing enforces it. Having `build_panel` return `(panel, predicates)`
       removes the seam.
@@ -151,7 +159,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       exists only there and `disclosure_code_values` reads it. A `PanelBuild` NamedTuple returns
       all three and `build()` is the single composition site; `build_panel` survives as
       `build(own).panel`, so all eight existing test call sites are untouched.
-- [x] **`scripts/audit/qcew_routes.py`: the multi-year bulk-disagreement branch is
+- [x] `D-010` **`scripts/audit/qcew_routes.py`: the multi-year bulk-disagreement branch is
       unexercised** — `bulk_years_required` is `[]`, so no real data reaches it.
       Correct by inspection; a synthetic dict through the reduction would make it
       demonstrated rather than reasoned.
@@ -167,7 +175,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       including `:79`, this branch's else arm. The item's *premise* stands — `bulk_years_required`
       is still `[]` — and is pinned separately at `verify_extracts.py:125-128`, whose
       `LEGITIMATELY_EMPTY_FINDINGS` lists `("qcew_routes", "bulk_years_required")` first.
-- [x] **`html_title` exists in three byte-identical copies**
+- [x] `D-011` **`html_title` exists in three byte-identical copies**
       (`cbp_metadata.py`, `bds_detail.py`, `susb_layout.py`), justified as "audit
       scripts are standalone PEP 723 files with no import between them" — true of
       script-to-script imports, but every one of them imports `_common`, which is
@@ -177,7 +185,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       `body` isn't HTML at all" clause the other two carry. So this repaired existing drift
       rather than preventing hypothetical drift. Now `_common.html_title`, with the corrected
       rationale recorded rather than dropped. 13 test assertions repointed.
-- [x] **`scripts/audit/cbp_metadata.py`: three request sites remain unguarded by
+- [x] `D-012` **`scripts/audit/cbp_metadata.py`: three request sites remain unguarded by
       `fetch_json_or_none`** (the dataset re-fetch, `variables.json`, and
       `geography.json`), plus `vresp.json()["variables"]` which raises `KeyError` on
       an unexpected shape. A 404 or malformed body there still crashes mid-loop and
@@ -191,7 +199,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       malformed geography body reached `zero_pull_cause` as `state_available=False` and
       persisted "geography_unavailable" — a fetch failure recorded as a fact about CBP.
       Verified by unit tests on extracted pure helpers; the script was NOT run.
-- [x] **`scripts/audit/verify_extracts.py`: `enabled.setdefault(current, False)`
+- [x] `D-013` **`scripts/audit/verify_extracts.py`: `enabled.setdefault(current, False)`
       types a default.** All ten Appendix A sources carry an explicit `enabled:`
       line today, so nothing false ships — but a future spec source without one
       would render `false`, indistinguishable from a spec-declared false, **with a
@@ -200,7 +208,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       was flipped rather than deleted — its assertion WAS the defect. Artifact-neutral, proven
       by regeneration: all ten sources declare `enabled:`, so no cell becomes "not declared".
       That left the new branch dead on today's spec, so it is pinned by its own unit test.
-- [x] **`scripts/audit/verify_extracts.py`: `classification_block`'s `Raises:`
+- [x] `D-014` **`scripts/audit/verify_extracts.py`: `classification_block`'s `Raises:`
       paragraph names the error that is lost but not the return value that replaces
       it** — when a fence follows an unclosed §3.1 fence it returns lines spanning
       later sections, departing from its own summary line. Unreachable on today's
@@ -212,7 +220,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       handler. Worth recording: the bad return reaches `assemble_finding`, which writes it into
       the tracked document's Classification paragraph, so the consequence was a wrong value in a
       deliverable, not just a confused gate. A characterization test pins it.
-- [x] **`scripts/audit/verify_extracts.py`: `check_roadmap_fields`'s
+- [x] `D-015` **`scripts/audit/verify_extracts.py`: `check_roadmap_fields`'s
       document-presence check matches a quoted key name anywhere in the document**
       rather than in the owning source's fence. Measured safe today (zero
       double-quoted `ROADMAP_FIELDS` keys appear in the hand-written notes).
@@ -221,7 +229,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       in the notes, but twelve of twenty appear there backticked. The cost is recorded in the
       code — the gate now depends on three literals the assembler emits, so renaming any of them
       breaks the gate on correct work. Verified: EXIT CRITERIA still PASS over all 20 entries.
-- [x] **`specs/findings/source-audit.md`'s seam signpost has a second, weaker
+- [x] `D-016` **`specs/findings/source-audit.md`'s seam signpost has a second, weaker
       exception:** the whitespace-collapsed `> **Recorded access reason:**`
       blockquote. The extract-count exception is now named; this one is not.
       **→ done 2026-09-05 (/deferred quick fix).** Named in `assemble_finding.py`'s
@@ -231,13 +239,13 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       (`fia`, `tpo` carry no newline, tab or double space), so the sentence states the
       transform without asserting it changes anything. Two tests — one pins the sentence, one
       pins that it is true of the artifact.
-- [ ] **Two vocabularies now ship side by side in the `ces` findings.**
+- [ ] `D-017` **Two vocabularies now ship side by side in the `ces` findings.**
       `publication_level_by_sm_state_code` and `near_miss_sm_state_codes` were
       renamed at this gate, but the six `states_with_*` counts keep their
       plan-mandated names while carrying the identical over-collection (they are
       computed over all 55 codes). `series_by_state` has the same implication and no
       ruling. **Stage 7 consumers must read `states_dc_tally`, not the six counts.**
-- [x] **Two gate-work fixes ship without tests:** the `ces_levels` "sm.state codes"
+- [x] `D-018` **Two gate-work fixes ship without tests:** the `ces_levels` "sm.state codes"
       rewording (`tests/audit/test_ces_levels.py`'s `broader_code_note` tests never
       pinned that clause) and `cbp_regime`'s `max()` empty-list guard (no pure seam).
       Both are visible in the shipped artifacts, so regression would not be silent.
@@ -252,19 +260,19 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       true and a helper was deliberately NOT extracted — `main()` is drivable offline with
       `AUDIT_ROOT` and `build_client` monkeypatched, which buys the coverage without touching a
       script that renders into `specs/findings/source-audit.md:1167-1168`.
-- [ ] **`published_start` / `published_end` have no defined semantics.** They mean
+- [ ] `D-019` **`published_start` / `published_end` have no defined semantics.** They mean
       three different things across sibling summaries — measured publication bounds
       in `qcew_routes`, the window restated in `qcew_codes` (whose titles files are
       not year-indexed at all) and in `qcew_size`. This is a plan defect, not
       implementer drift: the task briefs prescribe the typed values verbatim. The
       ambiguity is now documented beside `COVERAGE_KEYS` in `scripts/audit/_common.py`;
       **Stage 1 must not compare the key across sources without reading that note.**
-- [ ] **`bds/naics_11.json` is not hash-reproducible** — three fetches gave three
+- [ ] `D-020` **`bds/naics_11.json` is not hash-reproducible** — three fetches gave three
       hashes; rows are equal as sets but their order varies. Any future re-run of
       `bds_detail.py` will churn that extract's hash in the manifest. Similarly,
       FIA's `evalidator.jsp` flaps 403↔500 between runs and `/fullreport` drifts a
       few bytes, so `forest_sources.py` re-runs are not byte-stable either.
-- [x] **Repo-wide pre-existing `ruff I001` import-order noise**, untouched by this
+- [x] `D-021` **Repo-wide pre-existing `ruff I001` import-order noise**, untouched by this
       stage.
       **→ done 2026-09-05 (/deferred quick fix).** `ruff check --select I --fix` over
       `scripts/audit` and `tests/audit`: all 22 I001 gone, 46 → 24 total violations with every
@@ -276,14 +284,14 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
 
 ### Raised during Tasks 7–11
 
-- [ ] **`probe_slice_boundary` probes every candidate year rather than stopping at
+- [ ] `D-022` **`probe_slice_boundary` probes every candidate year rather than stopping at
       the first one served.** Ascending sort makes `served[0]` and an early exit
       return the same value, so this is cost, not correctness — but Task 16's live
       run pays it as ~17 sequential `data.bls.gov` requests where ~5 would settle
       the boundary. Left as the plan specifies it; revisit if the live run is slow
       or if BLS rate-limits. The full sweep does buy one thing an early exit would
       not: a complete per-year record of what the route served that run.
-- [x] **`tests/audit/` also fails `black`, not just `ruff I001`.** The existing
+- [x] `D-023` **`tests/audit/` also fails `black`, not just `ruff I001`.** The existing
       repo-wide I001 item above undercounts the debt: 14 files under `tests/audit/`
       would be reformatted. `src/logging_employment/` and `tests/unit/` are clean
       under both, so a `black`/`ruff` gate can be enforced on the package today and
@@ -306,7 +314,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       alternative that was not taken. The guard is instead SCOPE — format `src tests`, never `ruff format .` — recorded beside
       `[tool.ruff]` and in `CLAUDE.md`. Read this item's last sentence as history, not as
       configuration that exists.
-- [x] **The bulk-route branch is exercised only under a synthetic boundary.**
+- [x] `D-024` **The bulk-route branch is exercised only under a synthetic boundary.**
       Stage 0 measured `bulk_years_required = []`, so with the boundary where it
       sits today no window year routes to bulk and no live run will ever take that
       path. `route_for_year` is tested by passing `earliest_slice_year=2020`, and
@@ -334,7 +342,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       prose — `test_every_window_year_still_routes_to_the_slice_endpoint` derives the boundary and
       the window from the tracked findings document at runtime and reddens if a re-audit moves
       it.
-- [ ] **`source_row_hash` is computed with `map_elements`,** i.e. one Python call
+- [ ] `D-025` **`source_row_hash` is computed with `map_elements`,** i.e. one Python call
       per output row. Fine at the 5,430 rows one quarter produces; the full D1
       window is 32 quarters across three sources, and Task 14 rebuilds all of it
       twice to prove byte-identity. If that run is slow, this is the first thing to
@@ -343,7 +351,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
 
 ### Raised during Tasks 11-16
 
-- [ ] **`cbp_state_size` has no column for `EMP_N_F`, the only field that carries
+- [ ] `D-026` **`cbp_state_size` has no column for `EMP_N_F`, the only field that carries
       CBP's per-cell noise magnitude.** §7.5's field list was written against the
       columns Stage 0's query selected, and Stage 0 never selected `EMP_N_F`
       (`emp_n_f_in_response: false` for all eight years), so the omission is a spec
@@ -363,7 +371,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       model is the consumer that needs it** (SRC-CBP-004 enters CBP employment as a
       noisy measurement; noise magnitude is what that model would weight by).
 
-- [ ] **Nothing re-derives `EMPFLAG_WITHHELD_CODES` against a post-2017 layout.**
+- [ ] `D-027` **Nothing re-derives `EMPFLAG_WITHHELD_CODES` against a post-2017 layout.**
       The table is derived from the 2017 state record layout, which is the last year
       EMPFLAG was used, so it is correct for the D1 window. A test re-derives it from
       the shipped copy of that document. If CBP is ever read outside 2017–2023, the
@@ -373,7 +381,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
 
 ### Raised during Task 16's live run
 
-- [ ] **CBP responses are not byte-reproducible, so the immutable store cannot
+- [ ] `D-028` **CBP responses are not byte-reproducible, so the immutable store cannot
       deduplicate them.** Measured this run: two fetches of `2023/cbp` minutes apart
       returned rows that are *identical as sets* (188 each, zero rows in one and not
       the other) in a **different order**, so the content sha256 differs and
@@ -390,7 +398,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       neither is done. **QCEW is unaffected** — all 32 quarters re-fetched to identical
       bytes.
 
-- [ ] **`qcew_national_size` carries every industry, not just 113310.** 140,343 rows
+- [ ] `D-029` **`qcew_national_size` carries every industry, not just 113310.** 140,343 rows
       over the eight window years, against 1,298 for `cbp_state_size`. Task 10's parser
       filters to national geography and to size codes other than "all sizes", and uses
       its `industry` argument only for the dimensionality assertion, never as a row
@@ -405,7 +413,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
 Stage 2 shipped every task and every roadmap `Exit:` clause, verified on the real D1 window.
 Nothing was descoped. The three items below are the ones the stage deliberately did not close.
 
-- [ ] **`evidence_kind` has no column of its own.** §7.8's field list has no place for the warrant
+- [ ] `D-030` **`evidence_kind` has no column of its own.** §7.8's field list has no place for the warrant
       behind a restriction, so `constraints/rows.py` writes it into `provenance_text` behind a
       fixed `EVIDENCE_PREFIX` (`evidence_kind=`). That keeps it queryable in the persisted
       `constraint_row` table and lets §9.3's forbidden warrants be refused by name, but it is
@@ -415,7 +423,7 @@ Nothing was descoped. The three items below are the ones the stage deliberately 
       completion"). Closing it means amending §7.8, adding the column to `CONSTRAINT_ROW_SCHEMA`
       in `src/logging_employment/contracts.py`, and dropping the prefix from the factory.
 
-- [ ] **No check covers a hard row spanning two area-months with differing release vintages.**
+- [ ] `D-031` **No check covers a hard row spanning two area-months with differing release vintages.**
       `constraints/cells.py::_assert_one_vintage_per_cell` groups by `(area_fips,
       reference_month)` and catches one area-month published under two release vintages.
       `constraints/rows.py::vintage_status` reads `naics_vintage`, which is the only vintage
@@ -433,7 +441,7 @@ Nothing was descoped. The three items below are the ones the stage deliberately 
       means carrying `release_vintage` onto `target_cell` — a §7.7 amendment — and feeding it to
       `vintage_status` alongside `naics_vintage`.
 
-- [ ] **`classify_bound_status` labels an integer interval containing no integer
+- [ ] `D-032` **`classify_bound_status` labels an integer interval containing no integer
       `partially_identified`.** `constraints/bounds.py` applies §9.6's `ceil(L) == floor(U)` rule;
       for an interval like `[41.2, 41.9]` that is false, so the cell is reported as partially
       identified even though an integer-valued cell cannot lie anywhere in it. Unreachable while
@@ -451,7 +459,7 @@ The review returned no Critical findings. All six Important findings were fixed 
 before merge and pinned by tests. The items below are the Minor findings judged not worth fixing
 now; each is unreachable at Stage 2's scale or coefficients, and each names what makes it reachable.
 
-- [ ] **The §9.7 diagnostic degrades silently on a box-shaped infeasibility.**
+- [ ] `D-033` **The §9.7 diagnostic degrades silently on a box-shaped infeasibility.**
       `constraints/diagnostics.py` adds slack to coupling rows only, so a component made
       infeasible by its column bounds alone (a malformed class band with `n*lower > n*upper`)
       reports `minimum slack: 0`, `irreducible infeasible subsystem: unavailable` and `candidate
@@ -460,7 +468,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       the same published establishment count. Closing it means giving the minimum-slack model
       slack variables on the column bounds too, and adding a diagnostics test for the box shape.
 
-- [ ] **`rank._shape_key` formats the matrix at `precision=12`.** Two equality matrices differing
+- [ ] `D-034` **`rank._shape_key` formats the matrix at `precision=12`.** Two equality matrices differing
       past the twelfth decimal share a CON-005 cache key, so the second component reports the
       first's rank. Every hard coefficient this stage emits is +/-1, so it cannot bite today. It
       becomes reachable if a later stage introduces fractional hard coefficients (a share, a
@@ -469,7 +477,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       *absolute* singular-value threshold, which is equally fine at +/-1 and equally brittle if
       magnitudes grow.
 
-- [x] **`solve_bounds` rescans the frames once per component and once per row.**
+- [x] `D-035` **`solve_bounds` rescans the frames once per component and once per row.**
       `constraints/bounds.py` runs a full `built.rows.filter(...)` per component and a full
       `built.coefficients.filter(...)` per row, and `column_specs` is computed twice per component
       (once in `solve_bounds`, again inside `solve_component`) -- roughly 28,000 full scans for
@@ -491,13 +499,13 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       parquet hashes, zero differing), with the dormant integer re-solve forced and diffed
       separately, because the test suite provably cannot see a permuted coefficient order.
 
-- [ ] **`exactly_identified` and `integer_exactly_identified` never disagree.**
+- [ ] `D-036` **`exactly_identified` and `integer_exactly_identified` never disagree.**
       `classify_bound_status` assigns both the same value on the integer branch, so two columns of
       `deterministic_bounds` carry one column's information. §7.10 gives field names without
       definitions, and the agreement is *correct* when the MILP ran (`selected_*` are then the
       integer optima) -- but if the two are meant to differ, §7.10 has to say how first.
 
-- [x] **`cli._constraints_dir` derives §6.2's path instead of reading a config key.**
+- [x] `D-037` **`cli._constraints_dir` derives §6.2's path instead of reading a config key.**
       `Path(cfg.storage.staged_uri).parent / "constraints"` silently relocates the constraint
       tables if `staged_uri` is ever pointed outside `data/`. A `StorageConfig.constraints_uri`
       would make the location configured rather than inferred.
@@ -512,7 +520,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
 
 ## 4-stage3-logging-employment-spec — 2026-09-05
 
-- [x] **`MAX_SCALE_RATIO = 100.0` is an originated tripwire with no spec warrant.**
+- [x] `D-038` **`MAX_SCALE_RATIO = 100.0` is an originated tripwire with no spec warrant.**
       `baselines/interfaces.py` refuses a composite whose two arms' medians differ by more than
       100x. The factor is this package's decision, chosen to sit far above any honest
       employees-vs-employees ratio and far below the ~1e4 units mismatch it was written to catch.
@@ -530,7 +538,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       its module docstring: a corrupt column or a moved CBP vintage changes the NUMBERS while every
       arm stays honestly typed, and the golden is now the only check that reddens on either.
 
-- [x] **§10.3's fallback scales by the DISCLOSED intensity; §10.4's uses the NATIONAL one.**
+- [x] `D-039` **§10.3's fallback scales by the DISCLOSED intensity; §10.4's uses the NATIONAL one.**
       Both put the fallback arm in employees, and each is defensible on its own terms — §10.4's is
       exactly its own n->0 shrinkage limit, §10.3 has no such limit to appeal to and uses a
       published ratio of two published sums. But two baselines answering "how many employees does
@@ -549,7 +557,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       two values were never far apart (disclosed 5.442-6.380, national 5.914-6.139) — this was an
       unexplained divergence in a layer Stage 4 is about to score, not a numerical error.
 
-- [x] **`disclosed_intensity` reads the partition from the context while the residual comes from
+- [x] `D-040` **`disclosed_intensity` reads the partition from the context while the residual comes from
       the anchor.** `baselines/simple.py` looks up `context.partitions[anchor.reference_month]`,
       but `national_residual` was handed a `Partition` argument directly. Under a Stage 4
       pseudo-suppression mask the two agree only if the harness rebuilds
@@ -582,7 +590,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       `tests/integration/test_validate_leakage.py::test_the_partition_the_runner_derives_carries_no_held_out_truth`,
       which fails the moment anything reintroduces a partition built from unmasked data.
 
-- [ ] **The `general_method` guard lives at the CLI, not in the reconciliation layer.**
+- [ ] `D-041` **The `general_method` guard lives at the CLI, not in the reconciliation layer.**
       `require_supported_method` is exported from `reconcile.projection` but is called only where
       config is read. `reconcile_matrix` takes no config argument, so Stage 6 must call the guard
       itself when it wires the matrix path — nothing in the layer forces it to.
@@ -598,7 +606,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       the CLI for a call site that has never existed. The guard is currently dead code, and the
       ruling needed is where to call it, not where to move it from.
 
-- [x] **`kl_project` returns silently on an infeasible bounded system.**
+- [x] `D-042` **`kl_project` returns silently on an infeasible bounded system.**
       Its loop breaks on step size, not on violation, so a fully-clipped update exits on iteration
       one: `kl_project(seed=[1,1], margins=[[1,1]], targets=[10], upper=[1,1])` returns `[1., 1.]`
       with violation 8.0 and no exception. `reconcile_matrix` compensates with its own post-check,
@@ -613,7 +621,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       fix — the branch not taken is recorded so it is not re-opened as one. `reconcile_matrix`
       formats the returned value rather than recomputing it.
 
-- [x] **The three provenance enums are declared but never enforced.**
+- [x] `D-043` **The three provenance enums are declared but never enforced.**
       `RECONCILIATION_STATUSES`, `WEIGHT_BASES` and `ANCHOR_BASES` in `contracts.py` constrain
       nothing: `run_baselines` writes string literals and only `BASELINE_RESULT_SCHEMA`'s dtypes
       are checked, so a typo reaches `baseline_results.parquet` and passes every test. Validate
@@ -625,7 +633,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       than building one. Nulls stay legal and are pinned, so declines remain representable. The
       shipped D1 run's 12,270 rows already conform — this guards drift, it did not fix live data.
 
-- [x] **`integerize` has three bound-handling gaps, all latent on D1 and all live in Stage 6.**
+- [x] `D-044` **`integerize` has three bound-handling gaps, all latent on D1 and all live in Stage 6.**
       No `lower <= upper` check (a contradictory pair silently violates the lower bound); the cap
       loop iterates `upper` rather than `values`, so a cap for an absent cell injects a phantom
       entry; and the ordering key is the raw fractional part, which is no longer largest-remainder
@@ -638,7 +646,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       4,000 bounded inputs they differ in 118, all from the ordering fix, with no bound violation and
       no sum error. Every pre-existing test passes unchanged.
 
-- [x] **`BreakAdjustedShare` collapses to `RollingMedianShare` below four shares.**
+- [x] `D-045` **`BreakAdjustedShare` collapses to `RollingMedianShare` below four shares.**
       The pre-execution audit measured 111 of 360 cells taking that branch, and
       `test_section_10_3_ships_exactly_five_variants` only checks that five distinct estimator ids
       exist — nothing detects two variants computing the same number. (Whole-branch review, Minor.)
@@ -656,7 +664,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       Scope held to test-only plus one docstring reword that the new tests would otherwise have
       contradicted; the threshold itself is deferred below.
 
-- [x] **`NoHarvestFactorError` is defined and never raised.**
+- [x] `D-046` **`NoHarvestFactorError` is defined and never raised.**
       `errors.py` declares it for §10.5, but `HarvestProportional` returns a `Decline` instead,
       which is the correct behaviour. Either remove the class or document it as reserved for the
       Stage 7 path that will raise it.
@@ -666,7 +674,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       eight bullets carry no missing-harvest-factor condition, so it names Stage 7 as owning
       the halt-vs-decline decision instead.
 
-- [x] **Task 18's property tests and four of the five cross-cutting audit units never ran.**
+- [x] `D-047` **Task 18's property tests and four of the five cross-cutting audit units never ran.**
       The plan audit was stopped early after its subagents wrote into the working tree (see
       specs/findings/stage3-plan-audit.md). The four cross-cutting checks were re-run inline by
       hand and came back clean — mask-signature, call-site arity, anti-drift in test blocks, and
@@ -701,7 +709,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
 
 ## 6-stage0-audit-hardening — 2026-09-05
 
-- [ ] **`emplvl_raw_nonzero_rows` now means "not a published zero", but three things still say
+- [ ] `D-048` **`emplvl_raw_nonzero_rows` now means "not a published zero", but three things still say
       "nonzero".** The comparison was fixed in plan 6 so an unparseable raw value is counted; the
       key name in `scripts/audit/qcew_panel.py`, the interpolated note at `qcew_panel.py:369` and
       its restatement at `:390` all still read "with a nonzero employment level in the source
@@ -717,7 +725,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
 Raised during plan 7's recon and its adversarial verification pass. None is test-coverage work,
 which is why none was folded into the batch. See specs/plans/completed/7-p3-test-coverage.md.
 
-- [ ] **The QCEW bulk route has no build-side consumer, and its fetch arm is unreachable.**
+- [ ] `D-049` **The QCEW bulk route has no build-side consumer, and its fetch arm is unreachable.**
       `fetch_source` can acquire and store a bulk zip (`src/logging_employment/fetching.py:117-121`),
       but `build_harmonized` reads only `*.csv` through `read_slice_csv` (`build.py:174-183`) and
       `read_bulk_zip` has no caller in `src/` at all. The arm is unreachable for **any** probe
@@ -733,7 +741,7 @@ which is why none was folded into the batch. See specs/plans/completed/7-p3-test
       `sorted(listed)` returns four times (INV-007 stacking). This is a delete-or-fix decision on
       dead code, not a condition to wait on. Touches `build.py` and `fetching.py`.
 
-- [x] **`BreakAdjustedShare`'s `<4` fallback is a design choice nobody chose.** The audit's own two
+- [x] `D-050` **`BreakAdjustedShare`'s `<4` fallback is a design choice nobody chose.** The audit's own two
       options (`specs/findings/stage3-plan-audit.md:451`): scope the docstring — done in plan 7
       Task 4 — or return `None` below a minimum segment length so the cell takes the declared §10.2
       fallback. Whoever takes it needs a new fixture: `tests/fixtures/baselines/` has only three
@@ -755,7 +763,7 @@ which is why none was folded into the batch. See specs/plans/completed/7-p3-test
       that a refused cell is COMPOSED onto the §10.2 fallback rather than declined. The item's
       "roughly a third" was right: 101 of 342 own-weight cells, 29.5%.
 
-- [x] **`historical.py:227`'s `segment = shares[cut:] or shares` — the `or shares` arm is
+- [x] `D-051` **`historical.py:227`'s `segment = shares[cut:] or shares` — the `or shares` arm is
       unreachable.** For n ≥ 4, `steps` has n−1 entries so `cut ∈ [1, n-1]` and the slice always has
       at least one element; below 4 the early return fires first. Verified exhaustively for
       n = 4..40. Delete the arm or record why it stands. Do not budget a test for it.
@@ -782,7 +790,7 @@ which is why none was folded into the batch. See specs/plans/completed/7-p3-test
       `test_the_baseline_output_matches_its_golden_fixture`, so the expression is discriminated.
       The item's one instruction that was exactly right: no test was added.
 
-- [x] **`projection.py:98`'s zero-seed floor is redundant with the clip at `:118`.** Deleting
+- [x] `D-052` **`projection.py:98`'s zero-seed floor is redundant with the clip at `:118`.** Deleting
       `x = np.maximum(np.asarray(seed, dtype=float), floor)` leaves all 1123 tests passing — and
       that is the correct answer, **not** a hole. `:118` is
       `x = np.clip(x, np.maximum(lower, floor), upper)` and runs on the full vector after every
@@ -820,7 +828,7 @@ which is why none was folded into the batch. See specs/plans/completed/7-p3-test
       *"All 1123 tests" is stale* — 1137 today, and they pass with the deletion in place, which is
       exactly why the item read as settled.
 
-- [x] **Four anti-drift breaches in `tests/integration/test_d1_acceptance.py`.** Found by plan 7's
+- [x] `D-053` **Four anti-drift breaches in `tests/integration/test_d1_acceptance.py`.** Found by plan 7's
       machine run of the `anti-drift in test blocks` cross-cutting unit. The Stage 3 plan's Global
       Constraint says every count in it is a measurement dated 2026-09-05 — compute at run time,
       assert on structure, never on the literal. These assert literals against the gitignored
@@ -841,7 +849,7 @@ which is why none was folded into the batch. See specs/plans/completed/7-p3-test
       of the same family, so the fix is not confined to inherited Stage 2 code.
       → done in plan 8.
 
-- [x] **`tests/audit/test_ces_levels.py`'s three artifact tests skip in a clean clone.** `:534`,
+- [x] `D-054` **`tests/audit/test_ces_levels.py`'s three artifact tests skip in a clean clone.** `:534`,
       `:544` and `:556` read `data/raw/audit/ces/summary.json` through `_ces_summary()`, and `data/`
       is gitignored in its entirety, so none runs on a fresh checkout or in CI. Plan 7 Task 1
       deliberately reads the tracked `specs/findings/source-audit.md` instead, which is why its
@@ -851,7 +859,7 @@ which is why none was folded into the batch. See specs/plans/completed/7-p3-test
 
 ## 8-test-assertion-integrity — 2026-09-06
 
-- [ ] **`tests/audit/test_qcew_codes.py:378` reads a personal skill file outside the repo.**
+- [ ] `D-055` **`tests/audit/test_qcew_codes.py:378` reads a personal skill file outside the repo.**
       `test_period_basis_quotes_the_reference_verbatim_where_the_reference_is_readable` opens
       `~/.claude/skills/bls-data-context/references/qcew.md` and skips when it is absent, so it
       passes on this machine and would skip on every other one — CI included. Inventoried during
@@ -866,7 +874,7 @@ which is why none was folded into the batch. See specs/plans/completed/7-p3-test
       directory has none left, and this is the site that would return if the skill file were
       removed from this machine.
 
-- [ ] **The other five `1,227` sites, where the count scopes a claim rather than decorating one.**
+- [ ] `D-056` **The other five `1,227` sites, where the count scopes a claim rather than decorating one.**
       Plan 8's R11 fixed `src/logging_employment/reconcile/anchor.py:9` only, where the number was
       load-bearing on nothing — the §5.5 dimension-matching argument reads identically with "many".
       The remaining five are not the same edit and were left rather than swept:
@@ -908,7 +916,7 @@ keys for consumers. NOT covered: `specs/findings/` beyond a deferral-promise gre
 under `specs/completed/`, the 29 nits in the Stage 3 plan audit, and anything requiring network
 access. Live roadmap stages remain out of scope per this file's header rule.
 
-- [ ] **§16.1's manifest MUST is unimplemented for `validate-config` and `registry verify`.**
+- [ ] `D-057` **§16.1's manifest MUST is unimplemented for `validate-config` and `registry verify`.**
       §16.1 says "Every command MUST write a machine-readable manifest and MUST be idempotent for
       the same inputs", and the roadmap's Stage 1 Produces line names all four Stage 1 commands as
       "each writing a machine-readable manifest". Two of the four write nothing: `validate_config`
@@ -925,7 +933,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       manifest of its own, a weaker case because it runs inside a run directory whose
       `schema_manifest.json` is its own precondition gate.
 
-- [ ] **Three Stage 1 deliverables have builders in `src/` that nothing calls and no artifact on
+- [ ] `D-058` **Three Stage 1 deliverables have builders in `src/` that nothing calls and no artifact on
       disk.** The roadmap marks Stage 1 COMPLETE and its Produces block names the `source_registry`
       table, "harmonized versioned dimensions per §8.6", and "the §3.1 classification memo carrying
       all four fields". All three builders exist and are unit-tested; all three are called from
@@ -939,7 +947,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       wire it into `build_harmonized` and add it to `HarmonizedData`, or amend the roadmap's Stage
       1 Produces block to stop claiming it.
 
-- [ ] **`build-harmonized` writes no machine-readable manifest, and `BUILDER_VERSION` is stamped
+- [ ] `D-059` **`build-harmonized` writes no machine-readable manifest, and `BUILDER_VERSION` is stamped
       nowhere.** `build.py:17` defines `BUILDER_VERSION = "build_harmonized/1"` and nothing in
       `src/`, `tests/` or `scripts/` references it. The three parser versions beside it
       (`qcew.PARSER_VERSION`, `qcew_size.PARSER_VERSION`, `cbp.PARSER_VERSION`) are all stamped
@@ -948,7 +956,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       them. Distinct from the item above: that one is about two commands writing nothing at all,
       this one is about a version constant that exists for stamping and stamps nothing.
 
-- [ ] **The CBP `EMPSZES` values-crosswalk route is dead: `discover_empszes` has no caller and
+- [ ] `D-060` **The CBP `EMPSZES` values-crosswalk route is dead: `discover_empszes` has no caller and
       `EMPSZES_URL` is never fetched.** `ingest/cbp.py:92 discover_empszes` implements the two
       metadata routes SRC-CBP-001 requires — the official `variables/EMPSZES.json` values
       crosswalk, falling through to the response's `EMPSZES_LABEL` column — and its docstring
@@ -960,7 +968,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       `tests/fixtures/cbp/empszes_2017.json` — is never consulted. Same dead-but-declared shape as
       the recorded `read_bulk_zip` item at `:661`, and unrecorded until now.
 
-- [ ] **`bounds.py`'s soft-row filter cites a schedule that has expired: three of the five
+- [ ] `D-061` **`bounds.py`'s soft-row filter cites a schedule that has expired: three of the five
       `constraint_class` values have no producer.** `constraints/bounds.py:75-76` justifies
       `_hard_rows` with "Stage 3 adds CBP as `empirical_measurement`, which is when this filter
       starts doing visible work." Stage 3 shipped and added no such row — and `baselines/
@@ -975,7 +983,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       §7.8/§9.3 currently has no home. Needs a ruling on which stage owns it, or the bounds
       docstring corrected to stop naming a stage that has passed.
 
-- [x] **A `stage3-plan-audit` DEFECT was only half discharged: `intensity.py`'s "MEASURED" coverage
+- [x] `D-062` **A `stage3-plan-audit` DEFECT was only half discharged: `intensity.py`'s "MEASURED" coverage
       enumeration names two states where five take the fallback.** Task 13 `[DEFECT] plan:3235,
       plan:3366` makes two claims; the Disposition table discharges only (a), the magnitude
       figures. Claim (b) — "HI and RI are not the only states without a CBP row" — appears in no
@@ -1001,7 +1009,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       rule `historical.py` follows. A docstring that names no measurement cannot go stale against
       a CBP vintage.
 
-- [ ] **`state_universe_report` has no caller, and a live guard's docstring delegates an obligation
+- [ ] `D-063` **`state_universe_report` has no caller, and a live guard's docstring delegates an obligation
       to it.** `harmonize/universe.py:18 state_universe_report` is called from nowhere in `src/`
       (five references in `tests/`). That matters more than an ordinary unused helper: its sibling
       `assert_definitional_alignment`, which IS on the build path, documents at :61-63 that it
@@ -1012,7 +1020,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       `months_with_a_complete_state_sum` — the SRC-QCEW-006 per-month facts the module says "Stage
       2 needs in order to build constraints at all" — are computed only inside tests.
 
-- [ ] **Four config keys govern nothing, and none is recorded as inert.** The repo's convention is
+- [ ] `D-064` **Four config keys govern nothing, and none is recorded as inert.** The repo's convention is
       to write inertness into the code (`matrix.py:3` "NO REAL INPUT UNTIL STAGE 6"; `rows.py:479`
       "nothing in the D1 run calls this"; `errors.py:84` "Reserved for Stage 7 and deliberately
       unraised today"). These four carry no such note, and each lands in
@@ -1032,7 +1040,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       whose unsupported value at least has a written refusal, and `size_concept`, whose second
       value is at least read.
 
-- [ ] **The `network` pytest marker is registered with a promise it does not keep, and there is no
+- [ ] `D-065` **The `network` pytest marker is registered with a promise it does not keep, and there is no
       CI at all.** `pyproject.toml:73` registers "network: hits a live source endpoint; excluded
       from the default run". No test carries `@pytest.mark.network` anywhere — the marker is
       applied zero times — and `addopts` (`pyproject.toml:71`) contains no `-m 'not network'`, so
@@ -1043,7 +1051,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       populated. Needs a ruling on whether the marker is aspirational (delete it) or load-bearing
       (apply it and wire the deselection), and a separate one on whether this repo wants CI.
 
-- [ ] **The 24 pre-existing `ruff` violations in `scripts/audit/` are scoped out twice and tracked
+- [ ] `D-066` **The 24 pre-existing `ruff` violations in `scripts/audit/` are scoped out twice and tracked
       by no item.** The ticked `ruff I001` item at `:243` closes with "The remaining 24 (ISC004,
       TRY004, UP037, RUF100, RET501, UP047) are pre-existing and outside this item" — implying a
       home that does not exist, since no unticked item names any of those six rule codes. Plan 5
@@ -1054,7 +1062,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       `scripts/audit/`, but with no CI it runs only when a human or a plan step invokes it, and
       `interrogate` is explicitly scoped to `src/`.
 
-- [x] **Three QCEW code constants are declared and then bypassed by inline literals in the
+- [x] `D-067` **Three QCEW code constants are declared and then bypassed by inline literals in the
       parser.** `constants.py:22-24` declares `QCEW_NATIONAL_AGGLVL = "18"`, `QCEW_STATE_AGGLVL =
       "58"` and `QCEW_ALL_SIZES_CODE = "0"`, each with its BLS title in a trailing comment. None is
       imported anywhere. The values are typed as bare literals at the two sites that need them:
@@ -1072,7 +1080,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       unpinned. `test_a_state_row_at_the_all_sizes_code_is_not_a_cross_tabulation` was added first,
       confirmed to die under the mutation, and only then were all three literals replaced.
 
-- [x] **The two §5 concept guards are never called, and unlike the repo's other inert seams nothing
+- [x] `D-068` **The two §5 concept guards are never called, and unlike the repo's other inert seams nothing
       says so.** `harmonize/concepts.py` defines `reject_enterprise_size` (INV-010, SRC-OTH-001)
       and `reject_nonemployer_in_core_total` (SRC-OTH-004); neither is called anywhere in `src/`,
       both are exercised only by unit tests. The substance is defensible — Stage 7 owns
@@ -1090,7 +1098,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       `errors.NoHarvestFactorError`, and for the reason the item gives — an uncalled guard reads as
       a gap unless it says it is waiting.
 
-- [x] **Stage 3 completed without the completion stamp the roadmap mandates in the spec's
+- [x] `D-069` **Stage 3 completed without the completion stamp the roadmap mandates in the spec's
       Rollout.** The roadmap's "Stage-spec stamp" section requires that on completion the stamp
       becomes authoritative: "Stage N: COMPLETE (YYYY-MM-DD) — implemented by plan <id> (path)."
       The spec's Rollout "Stage stamps" section carries exactly three pairs — Stage 0 (plan 1),
@@ -1108,7 +1116,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       that lives in the roadmap's Stage 3 block, which plan 9 has already amended once, and a
       second copy is precisely how the two would drift.
 
-- [x] **Two retired plans' status headers misstate their own deferral disposition.** Neither is
+- [x] `D-070` **Two retired plans' status headers misstate their own deferral disposition.** Neither is
       missing work; both are record defects in the field this kind of audit reads first.
       (1) `specs/plans/completed/2-stage1-logging-employment-spec.md` is the only one of the nine
       with no `**Status: COMPLETE (...)**` line at all, so it is the one plan where a reader cannot
@@ -1134,7 +1142,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
 
 ## 11-stage4-logging-employment-spec — 2026-09-07
 
-- [ ] **Wire `rolling_origin` and `cbp_size_gaps` into the harness scoring loop.**
+- [ ] `D-071` **Wire `rolling_origin` and `cbp_size_gaps` into the harness scoring loop.**
       Both regimes are declared `feasible` in `contracts.REGIME_DISPOSITIONS` and both are
       implemented — `validate/regimes.py` ships `rolling_origin_frames` (frame truncation) and
       `cbp_size_gap_keys` / `apply_cbp_gap` (CBP state-year removal). Neither produces a
@@ -1169,7 +1177,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       selector applied to the TRUNCATED frame (the `assert_no_future_rows` guard already exists);
       `cbp_size_gaps` needs the CBP gap composed with a QCEW mask, since dropping CBP alone changes
       only `cbp_intensity`'s availability and produces no scored cell on its own.
-- [ ] **§13.7's CRPS is the harness's dominant cost, not `run_baselines`.**
+- [ ] `D-072` **§13.7's CRPS is the harness's dominant cost, not `run_baselines`.**
       The plan's cost model (evidence §4) attributes ~30 s of a ~30.4 s replicate to
       `run_baselines`. Measured 2026-09-07 during execution, that is wrong once §13.7 is wired:
       `crps` is evaluated once per scored cell over an ensemble of the other cells' residuals, so
@@ -1183,7 +1191,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       the zero clip, so an incremental form would remove another factor of n. Revisit if
       `replicates_per_regime` is raised from 3 seeds toward Appendix A's 20 replicates, where the
       plan's ~2.2 h estimate applies.
-- [x] **`validation_scores` / `validation_metrics` are written without `validate_frame`.**
+- [x] `D-073` **`validation_scores` / `validation_metrics` are written without `validate_frame`.**
       → done in plan 12 (2026-09-09). `cli.py::validate_command` now gates all THREE persisted
       validation tables — `validation_scoreboard` was ungated too, and undeclared — on both
       `validate_frame` and a new `assert_required_columns_present`.
@@ -1196,7 +1204,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       is separate because `validate_frame` compares columns and dtypes and
       `dict[str, pl.DataType]` has no nullability slot — which is how a NULL `mask_arm` on every
       `declines` row (270 of 270 on D1) passed the schema gate it was already subject to.
-- [x] **"Preferred transparent baseline" is undefined against §10.8's rung exclusion.**
+- [x] `D-074` **"Preferred transparent baseline" is undefined against §10.8's rung exclusion.**
       `validate/scoreboard.py::preferred_baseline` returns the lowest-WAPE estimator that scored
       anything. On the D1 acceptance run (`runs/f03023ac9f3a`, 2026-09-07) that named
       `equal_residual` for `long_consecutive_runs` — and §10.8 deliberately leaves equal allocation
@@ -1278,7 +1286,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       exact form would need `VALIDATION_METRIC_SCHEMA` to carry the truth mass. (4) §13.10 scopes
       its comparison to "primary-like masks" and `preferred_baseline` takes a REGIME; that gap is
       separate and is filed below rather than absorbed here.
-- [x] **§13.10's "on primary-like masks" scoping is unreachable from the scoreboard.**
+- [x] `D-075` **§13.10's "on primary-like masks" scoping is unreachable from the scoreboard.**
       §13.10 gates on WAPE improvement "over the preferred transparent baseline ON PRIMARY-LIKE
       MASKS", and neither `validate/scoreboard.py::preferred_baseline` nor `best_scoring_baseline`
       takes a mask label — both take a REGIME. The label exists upstream and is dropped: INV-009's
@@ -1369,7 +1377,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       item below, which now inherits a decided
       question rather than an open one — on the scoring arm the flag names something the harness
       must refuse, not something it should start doing.
-- [x] **Appendix A's `include_*` switches gate no regime selection.**
+- [x] `D-076` **Appendix A's `include_*` switches gate no regime selection.**
       → done in plan 12 (2026-09-09). The mapping was DECIDED, not guessed at: the seven flags are
       three different kinds of thing, declared in `contracts.VALIDATION_SWITCH_KINDS` and
       classified by `tests/unit/test_validation_switch_kinds.py`, which derives the switch set from
@@ -1401,7 +1409,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       model validator that refuses a random-mask-only design reads the same flags, so today it
       refuses a configuration that would in fact have run every regime. Decide the mapping, then
       either wire it or delete the flags that name nothing.
-- [x] **The `validate` CLI runs the full REGISTRY with no estimator-subset option.**
+- [x] `D-077` **The `validate` CLI runs the full REGISTRY with no estimator-subset option.**
       Task 4 added `estimators` to `run_baselines` and the plan calls it "a 5x lever"; §16.2's
       `run_pseudo_suppression` takes the sequence and `cli.py::validate_command` hardcodes
       `REGISTRY`. One CLI pass over one seed is ~3.7 minutes and the shipped three-seed run is
@@ -1454,7 +1462,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
 Residue of the `/deferred` pass that closed the NAICS-vintage citation item above. Not plan work
 that was skipped — work the close itself uncovered.
 
-- [ ] **The audit script's NAICS note still reads "uncited", now that the citation exists.**
+- [ ] `D-078` **The audit script's NAICS note still reads "uncited", now that the citation exists.**
       `scripts/audit/qcew_codes.py:543-544` states "Unquoted premise, and the load-bearing one:
       QCEW does not retabulate prior reference years onto a new NAICS vintage", and that string is
       serialized into `data/raw/audit/qcew_codes/summary.json` and from there into the TRACKED
@@ -1469,7 +1477,7 @@ that was skipped — work the close itself uncovered.
       Size: plan. Done when: the note carries the BLS citation (the quotation lives at
       `harmonize/naics.py`) and the three copies are byte-identical again — or the chain gains an
       offline path that leaves `retrieved_utc` untouched, and the note is updated through it.
-- [x] **`vintage_for_year` mislabels every reference year below 2017, against BLS's own table.**
+- [x] `D-079` **`vintage_for_year` mislabels every reference year below 2017, against BLS's own table.**
       `harmonize/naics.py:34-36` is `return "NAICS 2022" if year >= 2022 else "NAICS 2017"`, so
       `vintage_for_year(2016)` returns "NAICS 2017" where the BLS table cited at
       `_VINTAGE_BOUNDARY_YEAR` says NAICS 2012 (and 2007-2010 says NAICS 2007). Found 2026-09-08
@@ -1494,7 +1502,7 @@ that was skipped — work the close itself uncovered.
       BLS's table is recorded as `_BLS_VINTAGE_ERAS` and wired only to the refusal message. Emitted
       values for 2017-2024 are unchanged and the `:86-90` pins are byte-identical, so no `cell_id`
       and no persisted fingerprint moves.
-- [ ] **`vintage_for_year`'s refusal message pins its year but not its vintage payload.**
+- [ ] `D-080` **`vintage_for_year`'s refusal message pins its year but not its vintage payload.**
       `tests/unit/test_harmonize.py::test_a_reference_year_below_the_naics_2017_era_fails_closed`
       asserts with `pytest.raises(UnsupportedReferenceYearError, match=str(year))`, which matches
       only the interpolated year. Demonstrated by mutation 2026-09-08: replacing
@@ -1510,7 +1518,7 @@ that was skipped — work the close itself uncovered.
       Size: quick-fix. Done when: an assertion inside the `pytest.raises` block pins the vintage
       alongside the year (e.g. `match=r"2011.*NAICS 2012"`), and the `year - 6` mutation reddens
       the suite.
-- [ ] **Three of `vintage_for_year`'s six call sites raise after a side effect.**
+- [ ] `D-081` **Three of `vintage_for_year`'s six call sites raise after a side effect.**
       Found by the code review of `41e17cf`, which made the function raise. In `fetching.py` the
       order per year is fetch → status check → `store.put` → `snapshot_row(...,
       vintage_for_year(year), ...)` (`:130`, `:151`, `:181`). A pre-2017 `cfg.project.start_month`
@@ -1526,7 +1534,7 @@ that was skipped — work the close itself uncovered.
 
 ## 12-stage4-harness-completion — 2026-09-09
 
-- [ ] **`assert_declared_provenance` does not check `mask_arm` against `MASK_ARMS`.**
+- [ ] `D-082` **`assert_declared_provenance` does not check `mask_arm` against `MASK_ARMS`.**
       `contracts.MASK_ARMS` is the declared pair `('state_total', 'national_size')`, and
       `contracts.assert_declared_provenance` loops over five provenance columns without including
       `mask_arm` — so an invented arm string reaches `validation_scores` and `validation_metrics`
@@ -1540,7 +1548,7 @@ that was skipped — work the close itself uncovered.
       `src/logging_employment/contracts.py` and `tests/unit/test_contracts_validation.py`.
       Size: quick-fix. Done when: `assert_declared_provenance` refuses a `mask_arm` outside
       `MASK_ARMS`, with a test in the shape of the existing `suppression_type` refusal.
-- [ ] **`metric_name` is NULL on every `declines` metrics row.**
+- [ ] `D-083` **`metric_name` is NULL on every `declines` metrics row.**
       Measured 2026-09-08 and still true: 70 of 70 rows on the committed golden, 270 of 270 on D1.
       Structurally identical to the `mask_arm` defect plan 12 closed — a null persisted in
       `validation_metrics` that `validate_frame` cannot see — and it was consciously RECORDED
@@ -1555,7 +1563,7 @@ that was skipped — work the close itself uncovered.
       Size: quick-fix. Revisit if: a consumer needs to group `validation_metrics` on
       `metric_name` without special-casing the `declines` family — at which point delete that test
       and give the family names for its six counts.
-- [ ] **The CBP gap's effect is pooled, not confined to the holed state-year.**
+- [ ] `D-084` **The CBP gap's effect is pooled, not confined to the holed state-year.**
       `apply_cbp_gap` removes one state-year, but `national_march_intensity` is a pooled ratio over
       surviving rows, so every state's shrunk intensity in that year moves. Re-measured 2026-09-09
       at `seed=1024` on D1 with the determinism fix in place: all 1,080 non-declined
@@ -1567,3 +1575,43 @@ that was skipped — work the close itself uncovered.
       will be scoring a perturbation of every state, not of the holed one.
       Size: design. Revisit if: `cbp_size_gaps` is wired to score, or `resolve_intensity` gains a
       way to take a caller-supplied national intensity.
+
+## 2026-09-09 system review — 2026-09-10
+
+Filed while amending the roadmap to what shipped. Both items are gaps the review
+names but no existing item owns; the Stage 4 `Exit:` line cites them.
+
+- [ ] `D-085` **§13.2 step 6 and §13.5's out-of-bounds rule are witnessed by tests, never enforced by the harness.**
+      Stage 4's `Exit:` claimed the harness "rejects a mask whose target remains exactly
+      recoverable" and that a truth outside the deterministic bounds "fails the run as a
+      constraint-data bug (§13.5)". Neither happens. `is_exactly_recoverable`
+      (`validate/recover.py:67`) and `mask_and_solve_size` (`:80`) have no caller anywhere in
+      `src/`; `validate/harness.py` raises only `ConceptViolationError` (`:76`, `:296`), never on
+      recoverability or on a bound violation. What ships instead is measurement:
+      `validate/metrics.py:45,52` emit `truth_in_bound_rate` and `exact_recovery_rate` as metric
+      rows, both present in `runs/f03023ac9f3a/validation_metrics.parquet`. The only executable
+      witnesses are `tests/integration/test_validate_exact_recovery.py`, which calls
+      `mask_and_solve_size` directly and skips unless a March with zero suppressed classes exists.
+      This is not a wrong number on D1: every state cell is `unbounded` with a null
+      `selected_upper`, so the bounds rule cannot fire on the state-total arm at all.
+      Target: Stage 6 — the first stage with a size-class estimator and state x size cells, which
+      is where both rules can first bind. Size: implementation.
+      Done when: a mask whose target stays exactly recoverable is rejected (or separately
+      labelled) by the harness rather than by a test, and a pseudo-hidden truth outside
+      `deterministic_bounds` fails the run with a named error.
+
+- [ ] `D-086` **Two of the four non-scoring regimes are owned by nothing.**
+      Nine of the thirteen §13.3 regimes score in the D1 acceptance run (measured from
+      `runs/f03023ac9f3a/validation_scoreboard.parquet`: `clustered_states_within_month`,
+      `concentration_proxy`, `long_consecutive_runs`, `naics_transition`, `regional_blocks`,
+      `small_cell_biased`, `structural_break`, `whole_seasonal_blocks`,
+      `whole_state_year_blocks`). Four do not. `D-071` owns two of them — `rolling_origin` and
+      `cbp_size_gaps` — and its closure condition is "decide what each regime scores".
+      `retrospective_smoothing` and `preliminary_to_final_vintage` are the other two and are named
+      by no open item: `D-076` mentions their `include_*` switches but is closed and is about the
+      switches gating no selection, not about the regimes scoring nothing.
+      Size: design. Revisit if: `D-071` is closed (the same "what does it score" question applies
+      to these two and should be answered in the same pass), or REQ-022 is re-scoped — the review
+      records that REQ-022 cannot honestly be called closed by Stage 4 while four regimes score
+      nothing.
+
