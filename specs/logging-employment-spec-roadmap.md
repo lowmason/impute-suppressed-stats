@@ -112,6 +112,30 @@ stage that discharges it. A split note means the row has two or more halves.
 | CON-004 | missing | none found | Stage 2 |
 | CON-005 | missing | none found | Stage 2 |
 
+### Post-synthesis requirements (a second channel this table cannot represent)
+
+The table above is a **frozen derivation-time snapshot**: every row reads
+`missing / none found` because that was the tree on 2026-09-03, and the Note
+column carries its whole value. Requirements minted *after* that date cannot be
+added to it without making it self-contradictory, but they must still be
+auditable at retirement — so they are listed here instead.
+
+Three sub-project specs in `specs/completed/` each opened with the header
+"REQUIRED SKILL: writing-plans — this spec is the requirements input; it has no
+roadmap stage of its own and must not be folded into one", and each minted its
+own numbered requirements. All three shipped.
+
+| Family | Count | Origin spec | Implemented by | Status |
+|---|---|---|---|---|
+| R-COMP-1..11 | 11 | `specs/completed/estimator-composition.md` | plan 9 | shipped; R-COMP-10 landed as a Stage 4 requirement in spec §13.8 |
+| R-BREAK-1..5 | 5 | `specs/completed/break-adjusted-share-refusal.md` | plan 10 | shipped |
+| R-S4C-1..20 | 20 | `specs/completed/stage4-harness-completion.md` | plan 12 | shipped |
+
+That is **36 requirements outside the 76**. They are deliberately not stages:
+routing remediation through a sub-project spec keeps the stage sequence a
+dependency graph rather than a chronology. The consequence for retirement is
+recorded under `## Completion`.
+
 ### What the reviews changed
 
 The reviews **confirm** the spec's §19 Phase 0→5 dependency chain rather than
@@ -185,6 +209,32 @@ Content changes the reviews forced, relative to the spec read alone:
 
 ## Stages
 
+**Stage-block rules.** A stage carries only the fields in
+`derive-roadmap/references/roadmap-format.md` (`Objective`, `Spec`,
+`Gap closed`, `Consumes`, `Produces`, `Exit`, `ROUTING`), plus `SHIPPED` /
+`RE-VALIDATED` on a completed stage. Three rules, added 2026-09-10 after the
+completed-stage blocks reached 6.6-13.2 KB on single lines by in-place
+accretion:
+
+1. **A correction REPLACES the sentence it corrects; it never appends to it.**
+   A `CORRECTED` / `SUPERSEDED` / `UPDATED` marker that leaves the false
+   sentence in place creates two readings of one fact and no rule for which
+   wins. Put the superseded reading in the log file below, not in this file.
+2. **Measurements and dated corrections belong in
+   `specs/findings/stage-N-log.md`**, which is multi-line and therefore
+   mergeable. A stage block states the *current* contract only.
+3. **A completed stage's block freezes** to what a later stage inherits. It is
+   not a changelog.
+
+The motivating failure is on record: a "keep both" merge (`be70360`) duplicated
+the entire Stage 4 block on `main` for two hours because the block is one line,
+so git had no smaller unit to reconcile.
+
+These rules bind from 2026-09-10 forward. **The three oversized blocks (Stage 3
+`SHIPPED`, Stage 4 `RE-VALIDATED`, Stage 4 `SHIPPED`) predate them and are not
+yet migrated** — they still carry accreted markers and remain the merge hazard
+described above. Migrating them is unclaimed work, not a completed cleanup.
+
 - [x] Stage 0: Source access, dimensionality, and national-identity audit (investigation) — COMPLETE 2026-09-04, plan 1
       Objective: Establish from fetched files what each source actually publishes for 113310 over the D1 window, by which route, and which SRC-QCEW-006 branch the national identity takes — so no later stage rests on an assumed dimension or an unavailable margin.
       Spec: §1.2 (final bullet), §2.2 rows 1–4, §5.1–5.4, §8.1 SRC-QCEW-006/007, §8.2 SRC-QSIZE-002, §8.3 SRC-CBP-001/003, §8.5 SRC-OTH-002/003, §19 Phase 0 acceptance, §21 rows (geography universe, TPO/FIA coverage, optional state sources); Rollout D1, D3, D5.
@@ -247,7 +297,7 @@ Content changes the reviews forced, relative to the spec read alone:
       Objective: Allocate reconciled state totals to March-reference size classes through a logistic-normal composition with CBP and national-QCEW measurement models.
       Spec: §3.5, §11.6–11.10, §11.11 (CBP and QCEW-size rows), §12.5, §13.1 targets 2–3, §16.1 (`fit-size-model`), §16.2 (`fit_size_model`), §17.1 row 7 (model side), §17.5 (size rows), §19 Phase 4.
       Gap closed: REQ-003 (enforced), REQ-016, REQ-017 (model half); INV-011 (model half); SRC-QSIZE-003 (benchmark); SRC-CBP-004 (measurement model), SRC-CBP-005.
-      Consumes: Stage 5's reconciled state-total `PosteriorDraws`; Stage 1's `cbp_state_size` and `qcew_national_size`; Stage 3's matrix reconciliation; **Stage 0's QCEW-size dimensionality verdict — if an extract proves a state × 113310 × size table exists, re-route this stage to brainstorming before planning, because §2.2 row 3's premise would no longer hold.**
+      Consumes: Stage 5's reconciled state-total `PosteriorDraws`; Stage 1's `cbp_state_size` and `qcew_national_size`; Stage 3's matrix reconciliation; **Stage 0's QCEW-size dimensionality verdict — if an extract proves a state × 113310 × size table exists, re-route this stage to brainstorming before planning, because §2.2 row 3's premise would no longer hold.** ALSO INHERITED, unfinished, each verified 2026-09-10 — this is the stage where all five first bind, because it is the first with a size-class estimator and the first with state x size cells: (1) `reconcile_matrix` takes no bounds parameter and hardcodes `lower=0, upper=+inf`, so §12.5's "with bounds" is undelivered; (2) the baseline production path never joins `deterministic_bounds`, so INV-002's per-cell-bounds half is unenforced — harmless on D1 where every `selected_upper` is null, not harmless once a size cell has a finite upper; (3) §9.6 step 2's MILP trigger is a width heuristic, so an integer cell with a wide fractional LP interval can ship non-integer bounds; (4) the harness's size arm is defined but unwired (`mask_and_solve_size`, `apply_size_mask` have no `src/` caller) and `D-085` names this stage the owner of making §13.2 step 6 and §13.5 fail a run; (5) `cbp_size_gaps` still scores nothing (`D-071`). Finally, the §9.3 parent-industry, ownership and region margins were never fetched, declined or owned: every one of the 1,227 suppressed state cells is `[0, +inf)`, so if any margin is wanted it must be settled BEFORE this stage consumes `deterministic_bounds`.
       RE-VALIDATED 2026-09-07 against plans 5-10, which this block had never absorbed. (1) `constraints.rows.size_support_rows` refuses a `size_rows` frame carrying more than one `industry_code` as well as a non-March row (`constraints/rows.py:392-399`), so this stage MUST filter `qcew_national_size` to `project.industry_code_used` before calling it — the builder matches a size row to a cell on `(reference_month, size_class)` and never on industry. The block's Exit records only the INV-011 half. (2) Plan 5 changed `reconcile.integerize`'s bound handling and names this stage as where it goes live: bounds are read per cell in `values` rather than per key of `upper`, a `lower` above an `upper` now raises `ValueError`, and the round-robin remainder orders on the floor actually used (`reconcile/integerize.py:55-63`, `:79-87`). All three are unexercised today — the only `src/` caller, `baselines/runner.py:183`, passes no bounds — so a plan written against the pre-plan-5 function would get a different allocation on bounded input with no error. A plan for this stage must locate the first bounded call site rather than assume §11.9's `[L_k,U_k]` class bands are it.
       Produces: `models/size_composition.py` with `SizeModelData`, `SizeModelConfig`, and `fit_size_model` per §16.2; the §11.9 class-support transform applied at March only; state-month-size joint draws whose rows sum to reconciled state totals and whose compatible first-quarter columns reconcile to national class margins; a CBP holdout validation report; and a draft `state_month_size.parquet` with the §15.2 fields populated except the release and sensitivity columns. Later stages may assume the cell grain of the release table, and per-cell size-class estimates for Stage 7's sensitivity envelope and Stage 8's disclosure review.
       Exit: a test proves no March class bound is applied to a non-March month (INV-011, §11.9 final paragraph); every draw's class values sum to the reconciled state total before any national size reconciliation (§11.10); compatible first-quarter national class margins reconcile or the run fails with a diagnostic rather than forcing convergence (§12.5); the CBP holdout report exists and states the §13.1 target-3 limitation that monthly state-size employment has no direct public ground truth; **and the latent composition process is logistic-normal, with a test or interface constraint preventing a fixed Dirichlet or Dirichlet-multinomial from occupying the latent-process slot** (§2.2 composition-family row — the Gemini review's §8 item 2 is the concrete form to reject; multinomial and Dirichlet-multinomial remain permitted as observation models per §11.7).
@@ -258,8 +308,8 @@ Content changes the reviews forced, relative to the spec read alone:
       Spec: §5.2, §5.3, §7.6, §8.4, §8.5, §11.4, §11.11 (proxy rows), §11.13, §13.9, §19 Phase 5 (proxy and sensitivity deliverables); §21 rows TPO/FIA coverage and optional state sources.
       Gap closed: REQ-007 (SUSB ingest), REQ-015, REQ-025; SRC-FOR-001–004; SRC-OTH-001–004 (ingest halves). SRC-OTH-005 is explicitly out of scope per the gap table.
       Consumes: Stage 0's TPO, FIA, CES, BDS, and SUSB access verdicts and its per-state CES publication level; Stage 5 and Stage 6 models; Stage 4's harness for scoring each proxy's incremental value; Stage 3's harvest-proportional baseline slot.
-      Produces: `ingest/{tpo,fia,ces,susb,bds,nonemployer}.py` feeding the §7.6 `proxy_observation` table; `features/harvest_factor.py`; `models/measurement.py` implementing §11.4 with TPO and FIA as correlated measurements of one latent factor rather than independent regressors; `models/suppression_sensitivity.py` covering the §11.13 variants; `validate/ablation.py` covering every §13.9 row; the per-cell §13.9 sensitivity envelope; an include-or-exclude verdict per proxy citing the metric that justified it; and a live harvest-proportional baseline replacing Stage 3's declining stub. Later stages may assume `model_sensitivity_low` and `model_sensitivity_high` for every release cell, which §14.2 and §15.2 both require.
-      Exit: TPO harvest-origin and mill-receipt variables occupy distinct fields and the harvest-origin measure is the one used (§8.4 SRC-FOR-001, §2.2 forestry row); FIA rows carry sampling error or a recorded reason they cannot; a test proves no annual or survey-cycle proxy is interpolated and then treated as observed monthly activity (SRC-FOR-004); each CES series is labelled with the industry level actually published for its state, and only a 1133 series is treated as industry-aligned; the ablation report covers every §13.9 row; a sensitivity envelope exists for every release cell; and each proxy's include-or-exclude verdict cites the Stage 4 metric that decided it (§19 Phase 5 acceptance: proxies demonstrate incremental value or are excluded).
+      Produces: `ingest/{tpo,fia,ces,susb,bds,nonemployer}.py` feeding the §7.6 `proxy_observation` table; `features/harvest_factor.py`; `models/measurement.py` implementing §11.4 with TPO and FIA as correlated measurements of one latent factor rather than independent regressors; `models/suppression_sensitivity.py` covering the §11.13 variants; `validate/ablation.py` covering every §13.9 row; the per-cell §13.9 sensitivity envelope; an include-or-exclude verdict per proxy citing the metric that justified it; and a live harvest-proportional baseline replacing Stage 3's declining stub; and THE RE-RUN OF §13.10's promotion gate, because this stage is where its two missing inputs arrive — §10.5's harvest baseline and §11.4's harvest factor, which §11.1 calls required. Stage 5's promotion decision is provisional until this re-run records a final one. Later stages may assume `model_sensitivity_low` and `model_sensitivity_high` for every release cell, which §14.2 and §15.2 both require.
+      Exit: TPO harvest-origin and mill-receipt variables occupy distinct fields and the harvest-origin measure is the one used (§8.4 SRC-FOR-001, §2.2 forestry row); FIA rows carry sampling error or a recorded reason they cannot; a test proves no annual or survey-cycle proxy is interpolated and then treated as observed monthly activity (SRC-FOR-004); each CES series is labelled with the industry level actually published for its state, and only a 1133 series is treated as industry-aligned; the ablation report covers every §13.9 row; a sensitivity envelope exists for every release cell; and each proxy's include-or-exclude verdict cites the Stage 4 metric that decided it (§19 Phase 5 acceptance: proxies demonstrate incremental value or are excluded). The §13.10 gate is re-run against the now-live §10.5 baseline and the harvest factor, and the promotion record states whether the Stage 5 decision stands or is reversed.
       ROUTING: brainstorming
 
 - [ ] Stage 8: Disclosure governance, release package, and clean-room rebuild (Phase 5b)
@@ -268,7 +318,7 @@ Content changes the reviews forced, relative to the spec read alone:
       Gap closed: REQ-026 (release actions), REQ-027, REQ-028 (full §18.1), REQ-029 (governance), REQ-030; INV-002 (release check), INV-015, INV-016.
       Consumes: everything shipped through Stage 7; Stage 2's exactness and narrowness flags; Stage 7's sensitivity envelope; Stage 5 and Stage 6 posterior summaries.
       Produces: `disclosure/{policy,review}.py`; the §7.12 `disclosure_decision` table with its `release_action` enum; the §14.3 concentration metric recorded as a review indicator and not an accuracy score; the three separate statuses of §14.1; `publish/` emitting all nine §15.1 artifacts with the §15.2 fields and §15.3 model-dependence levels; the §14.5 label on every modeled record; `run_manifest.json` per §18.1; the §18.2 monitoring metrics; CLI `disclosure-review`, `publish`, and `run-all`.
-      Exit: an exactly-reconstructed `N`-flagged cell cannot reach `release_observed` or `release_model_estimate` without a recorded reviewer decision (REQ-027, §14.4); every §14.2 trigger routes to review, each with a test; `run-all` on a fresh clone holding only `data/raw/` and the manifests reproduces the recorded output hashes (Appendix B, REQ-030, INV-016); all nine release files validate against their schemas and every modeled record carries the §14.5 label; the §18.3 fail-closed conditions each halt the pipeline, with a test per condition; **and a test proves no code path can widen a posterior by injecting variance and then mark the cell releasable — high-risk cells exit only through the §14.4 remedies** (§2.2 privacy-mitigation row; the Gemini review's §12 is the concrete form to reject).
+      Exit: an exactly-reconstructed `N`-flagged cell cannot reach `release_observed` or `release_model_estimate` without a recorded reviewer decision (REQ-027, §14.4); every §14.2 trigger routes to review, each with a test; `run-all` on a fresh clone holding only `data/raw/` and the manifests reproduces the recorded output hashes (Appendix B, REQ-030, INV-016); all nine release files validate against their schemas and every modeled record carries the §14.5 label; the §18.3 fail-closed conditions each halt the pipeline, with a test per condition; **and a test proves no code path can widen a posterior by injecting variance and then mark the cell releasable — high-risk cells exit only through the §14.4 remedies** (§2.2 privacy-mitigation row; the Gemini review's §12 is the concrete form to reject). PRECONDITION, not part of this stage's acceptance: Appendix B cannot be run as written and must be amended first. Its step 6 requires building "a national state-sum constraint", which SRC-QCEW-006 declined and which `constraints/system.py:100` refuses unconditionally via `assert_no_national_employment_margin`; its step 7 assumes LP bounds for suppressed states that the engine does not produce (all 1,227 are `[0, +inf)`). Amend Appendix B to what the system does before this Exit is read as a gate.
       ROUTING: writing-plans
 
 - [ ] Stage 9 (optional): Phase 6 extensions
@@ -299,8 +349,18 @@ On completion the stamp becomes authoritative:
 
 Retire this roadmap only after re-running the gap rubric over the accumulated
 system with evidence per row — the implementing stage and plan, any
-`> Deviation:` notes, and any `specs/deferred_items.md` entries — and
-confirming the Appendix B scenario runs end-to-end from a clean environment.
+`> Deviation:` notes, and any `specs/deferred_items.md` entries (cite by
+`D-nnn`) — and confirming Stage 8's clean-room criterion, its `Exit` line.
+
+**The rubric re-run's scope is EXTENDED** beyond the source spec's 76 numbered
+ids to the 36 post-synthesis ids above (R-COMP, R-BREAK, R-S4C). This is a
+deliberate widening of `derive-roadmap/references/gap-rubric.md`, which scopes
+the table to the source spec alone: those 36 shipped through the sub-project
+channel and would otherwise be audited by nothing.
+
+**Appendix B cannot currently gate anything** and amending it is a Stage 8
+precondition (see that stage's `Exit`). Until it is amended, no criterion
+defines "done" for this roadmap as a whole.
 This is a conformance audit of the accumulated system, not a whole-roadmap code
 diff: stages merged separately and code quality was reviewed per stage.
 
