@@ -29,14 +29,25 @@ any kind and gates nothing.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 import polars as pl
 
 from ..config import Config
 from ..constraints.cells import KIND_STATE_TOTAL, TOTAL_SIZE_CLASS, cell_id
-from ..contracts import BASELINE_RESULT_SCHEMA, HarmonizedData, assert_declared_provenance
-from ..errors import ConceptViolationError, InfeasibleResidualError, WeightDomainError
+from ..contracts import (
+    BASELINE_RESULT_SCHEMA,
+    DETERMINISTIC_BOUNDS_SCHEMA,
+    HarmonizedData,
+    assert_declared_provenance,
+    validate_frame,
+)
+from ..errors import (
+    BoundViolationError,
+    ConceptViolationError,
+    InfeasibleResidualError,
+    WeightDomainError,
+)
 from ..reconcile.allocate import allocate
 from ..reconcile.anchor import (
     assert_universe_closes,
@@ -45,6 +56,7 @@ from ..reconcile.anchor import (
     observed_partition,
 )
 from ..reconcile.integerize import integerize
+from ..reconcile.scaling import Bounds
 from .harvest import HarvestProportional
 from .historical import (
     BreakAdjustedShare,
@@ -183,12 +195,118 @@ def _cell_ids(partition, anchor) -> dict[str, str]:
     return ids
 
 
+def state_total_bounds(bounds: pl.DataFrame) -> Bounds:
+    """§7.10's `deterministic_bounds` table as the per-cell `Bounds` the runner checks against.
+
+    KEYED BY THE SEVEN-FIELD `cell_id`, NOT BY `state_fips`. `scale_into_bounds` keys its `Bounds`
+    by whatever `anchor.missing_cells` carries, which on this path is a bare state -- but that
+    object is one month's feasible set, while `run_baselines` walks the whole window in a single
+    call. State '04' has its own interval in January and another in February, so a state-keyed
+    mapping would apply one month's bound to all 96 and no lookup would fail.
+
+    ONLY `state_total` CELLS ARE KEPT. The same table carries §9's national size cells, and
+    `test_d1_acceptance` measures cells that carry no row at all, so loading it whole would mix
+    two cell kinds into one mapping and put keys in it the runner never looks up.
+
+    DUPLICATES ARE REFUSED RATHER THAN COLLAPSED. `component_id`, `rank` and `nullity` sit beside
+    `cell_id` in `DETERMINISTIC_BOUNDS_SCHEMA`, so the schema admits more than one row per cell by
+    construction; D1 having exactly one is a measurement, not a guarantee. `dict(zip(...))` would
+    silently keep whichever row sorted last and check the estimate against an arbitrary component.
+
+    A NULL `selected_lower` IS REFUSED, while a null `selected_upper` is read as unbounded above.
+    The asymmetry is §9.3's: nonnegativity is the one public fact touching every cell, so a cell
+    with no lower bound at all means the solver did not answer for it -- whereas a null upper is
+    the documented D1 state on 1,227 of 1,241 cells and `Bounds.upper_of` already reads it as
+    positive infinity.
+    """
+    validate_frame(bounds, DETERMINISTIC_BOUNDS_SCHEMA, "deterministic_bounds")
+    rows = bounds.filter(pl.col("cell_id").str.starts_with(f"{KIND_STATE_TOTAL}|"))
+    duplicated = sorted(
+        rows.group_by("cell_id").len().filter(pl.col("len") > 1)["cell_id"].to_list()
+    )
+    if duplicated:
+        raise ConceptViolationError(
+            f"deterministic_bounds carries more than one row for {duplicated[:5]} "
+            f"({len(duplicated)} cell(s) in total); a per-cell bound must be unique before it can "
+            "gate an estimate"
+        )
+    null_lower = sorted(rows.filter(pl.col("selected_lower").is_null())["cell_id"].to_list())
+    if null_lower:
+        raise ConceptViolationError(
+            f"deterministic_bounds has a null selected_lower for {null_lower[:5]} "
+            f"({len(null_lower)} cell(s) in total); §9.3's nonnegativity holds for every cell, so "
+            "a missing lower bound is an unsolved cell rather than an unbounded one"
+        )
+    lower = {
+        str(row["cell_id"]): float(row["selected_lower"]) for row in rows.iter_rows(named=True)
+    }
+    upper: dict[str, float | None] = {
+        str(row["cell_id"]): (
+            None if row["selected_upper"] is None else float(row["selected_upper"])
+        )
+        for row in rows.iter_rows(named=True)
+    }
+    return Bounds(lower=lower, upper=upper)
+
+
+def assert_within_bounds(
+    values: Mapping[str, float],
+    bounds: Bounds,
+    *,
+    cell_ids: Mapping[str, str],
+    estimator_id: str,
+    reference_month: str,
+    tolerance: float,
+    quantity: str,
+) -> None:
+    """INV-002's per-cell half: refuse a released value outside its own solved `[L, U]`.
+
+    COVERAGE IS CHECKED BEFORE THE COMPARISON, and that check is the load-bearing half. `upper_of`
+    reads an absent key as `None` and therefore as `+inf`, so a `Bounds` keyed the wrong way --
+    by `state_fips`, which is exactly the convention `scale_into_bounds` uses for this same type
+    -- would pass every cell and make this whole gate a silent no-op. Indexing `bounds.lower`
+    (which has no `_of` accessor, matching `scale_into_bounds`'s own direct index) turns that into
+    a named refusal. An uncovered cell is a `ConceptViolationError`, not a `BoundViolationError`:
+    nothing was violated, the bound is simply missing, and §18.3's fail-closed rule covers both.
+
+    `tolerance` is the caller's, and production passes `reconciliation.tolerance` rather than
+    `constraints.feasibility_tolerance`. `ReconciliationConfig`'s docstring gives the reason: "a
+    bound solved to 1e-7 and a residual reconciled to 1e-9 are different obligations", and reusing
+    the solver's number here would let a solver tuning change move what counts as a violation.
+
+    `quantity` names which released number is being checked, because both are: §12.6's integers
+    are released alongside the floats, and largest-remainder rounding can push a value that sat
+    exactly on an upper bound past it. Without the label the message cannot say which one moved.
+    """
+    uncovered = sorted(cell for cell in values if cell_ids[cell] not in bounds.lower)
+    if uncovered:
+        raise ConceptViolationError(
+            f"{reference_month}: {estimator_id} has no deterministic bound for "
+            f"{[cell_ids[cell] for cell in uncovered]}; INV-002 cannot be checked against a "
+            "bound that is absent, and an absent bound is not an unbounded one"
+        )
+    violations = []
+    for cell in sorted(values):
+        identifier = cell_ids[cell]
+        value = float(values[cell])
+        low = bounds.lower[identifier]
+        high = bounds.upper_of(identifier)
+        if value < low - tolerance or value > high + tolerance:
+            violations.append(f"{identifier} {quantity}={value} outside [{low}, {high}]")
+    if violations:
+        raise BoundViolationError(
+            f"{reference_month}: {estimator_id} violates INV-002's per-cell bounds at "
+            f"{len(violations)} cell(s): {violations}"
+        )
+
+
 def run_baselines(
     data: HarmonizedData,
     config: Config,
     *,
     constraint_set_hash: str | None = None,
     estimators: Sequence[Estimator] = REGISTRY,
+    bounds: Bounds | None = None,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Every estimator, every month. Returns `(baseline_results, anchor_audit)`.
 
@@ -200,6 +318,16 @@ def run_baselines(
     `estimators` defaults to the full `REGISTRY` and exists so §13's harness can restrict a regime
     to the rungs it needs: measured, ten estimators cost ~30 s per call against ~0.4 s for one, and
     the harness pays that per mask replicate.
+
+    `bounds` turns on INV-002's per-cell half, and defaults to `None` -- no bound known, no check
+    -- for two different reasons that must not be conflated. For a unit test it is convenience:
+    a toy `HarmonizedData` has no Stage 2 run behind it, exactly as with `constraint_set_hash`.
+    For `validate/harness.py`'s caller it is CORRECTNESS: `deterministic_bounds.parquet` still
+    carries the published value for a cell the pseudo-suppression mask hides, so its intervals
+    were solved from a system containing the truth the harness is scoring against. Handing them to
+    a masked run would leak that truth into the estimates through the clip, which is §13.4's
+    `LeakageError` territory. The production caller is `cli.py`; the harness must keep passing
+    nothing until Stage 6 re-solves bounds under the mask.
     """
     partitions = observed_partition(data.qcew_monthly)
     audit = closure_audit(data.qcew_monthly, partitions)
@@ -268,6 +396,16 @@ def run_baselines(
                     )
                 )
                 continue
+            if bounds is not None:
+                assert_within_bounds(
+                    allocated,
+                    bounds,
+                    cell_ids=ids,
+                    estimator_id=estimator.estimator_id,
+                    reference_month=month,
+                    tolerance=config.reconciliation.tolerance,
+                    quantity="estimate",
+                )
             # The margin the integers must honour is the anchor's residual -- the published
             # quantity being allocated -- so it is taken from the anchor rather than re-derived
             # from the allocation. `allocate` already guarantees the values sum to R_t, so the two
@@ -287,6 +425,20 @@ def run_baselines(
                 raise InfeasibleResidualError(
                     f"{month}: integerized estimates for {estimator.estimator_id} sum to "
                     f"{sum(integers.values())}, not the required {integer_total}"
+                )
+            if bounds is not None and config.reconciliation.integerize_release:
+                # §12.6's integers are released too, and largest-remainder rounding moves a value
+                # by up to one whole employee -- so a float that sat exactly on an upper bound can
+                # cross it. Checking only the float would leave the number actually published
+                # unchecked, which is the half INV-002 names.
+                assert_within_bounds(
+                    {cell: float(value) for cell, value in integers.items() if value is not None},
+                    bounds,
+                    cell_ids=ids,
+                    estimator_id=estimator.estimator_id,
+                    reference_month=month,
+                    tolerance=config.reconciliation.tolerance,
+                    quantity="estimate_integer",
                 )
             for cell in anchor.missing_cells:
                 rows.append(

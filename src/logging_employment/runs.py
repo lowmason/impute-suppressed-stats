@@ -52,3 +52,88 @@ def run_id(
 def run_dir(config: Config, identifier: str) -> Path:
     """The directory this run's outputs belong in."""
     return Path(config.storage.output_uri) / identifier
+
+
+UNKNOWN_PROVENANCE = "unknown"
+
+
+def _code_root(start: Path) -> Path | None:
+    """The nearest ancestor of `start` holding `uv.lock`, or `None` when no ancestor does.
+
+    `uv.lock` is the anchor because it is the one file that must exist in a checkout of THIS
+    project and must not exist in a wheel built from it -- `[tool.hatch.build.targets.wheel]`
+    ships `src/logging_employment` and nothing else. Anchoring on `.git` instead would find the
+    enclosing repository of a site-packages copy that some unrelated checkout happens to sit
+    inside, and stamp a commit that never produced the running code. One anchor for both stamps is
+    the point: when this returns `None`, "which code ran" is honestly unanswerable and both keys
+    say so together rather than one of them guessing.
+    """
+    for candidate in (start, *start.parents):
+        if (candidate / "uv.lock").is_file():
+            return candidate
+    return None
+
+
+def _git_output(root: Path, *args: str) -> str | None:
+    """`git -C root <args>` stripped stdout, or `None` when git could not answer.
+
+    `None` for every way the question goes unanswered -- git absent from PATH (`OSError`), the
+    command hanging (`SubprocessError`, hence the timeout), or a non-zero exit, which is what
+    `root` not being a repository looks like. `check=False` is the classification, not an
+    oversight: a probe that reads the return code cannot also let it raise.
+    """
+    import subprocess
+
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(root), *args],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+    except OSError, subprocess.SubprocessError:
+        return None
+    if completed.returncode != 0:
+        return None
+    return completed.stdout.strip()
+
+
+def code_provenance(start: Path | None = None) -> dict[str, str]:
+    """Which source and which locked dependencies produced a run, for stamping into its manifest.
+
+    RECORDS, NEVER RAISES -- the one deliberate exception to §18.3's fail-closed default. That
+    default guards values that would corrupt an estimate; a commit id corrupts nothing, it only
+    tells a reader whether `runs/<id>/` still corresponds to the code in front of them. Halting a
+    pipeline because `git` is missing would turn a diagnostic into an outage and make the package
+    unusable from an sdist or a vendored copy, so an unanswerable probe records `"unknown"` --
+    which is itself the finding, since a manifest that cannot name its commit is one a reviewer
+    must not treat as reproducible.
+
+    Nothing here reaches `run_id`, and that is the whole design. Hashing the commit into the id
+    would rename every directory under `runs/` on every commit, so §16.1's "idempotent for the
+    same inputs" would become unobservable and Stage 4's acceptance artifact would orphan itself
+    on the next commit. Staleness -- CLAUDE.md's "a run directory can be stale w.r.t. your code"
+    -- is made DETECTABLE here, not impossible.
+
+    A DIRTY TREE IS NOT ITS COMMIT. `git rev-parse HEAD` answers on a dirty worktree, and a bare
+    sha from one is a false "this run matches that commit": exactly the silent failure the stamp
+    exists to prevent. The `-dirty` suffix (`git describe --dirty`'s convention) puts that in the
+    value a reader compares, rather than in a sibling boolean they can forget to read. Untracked
+    files count as dirty because Python imports whatever is on disk, so an uncommitted module is
+    part of the code that ran. An unanswerable `git status` after an answerable `rev-parse` also
+    marks dirty -- "could not verify clean" must not read as "clean".
+
+    `start` is where the upward walk begins; the default is this module's own directory, so the
+    stamp describes the code that is executing rather than the caller's cwd. Tests pass a path
+    outside any checkout to reach the unknown branch without mocking `subprocess` or `PATH`.
+    """
+    root = _code_root(Path(__file__).resolve().parent if start is None else start)
+    if root is None:
+        return {"code_commit": UNKNOWN_PROVENANCE, "uv_lock_sha256": UNKNOWN_PROVENANCE}
+    lock = hashlib.sha256((root / "uv.lock").read_bytes()).hexdigest()
+    commit = _git_output(root, "rev-parse", "HEAD")
+    if commit is None:
+        return {"code_commit": UNKNOWN_PROVENANCE, "uv_lock_sha256": lock}
+    status = _git_output(root, "status", "--porcelain")
+    return {"code_commit": commit if status == "" else f"{commit}-dirty", "uv_lock_sha256": lock}

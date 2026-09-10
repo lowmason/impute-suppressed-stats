@@ -37,6 +37,23 @@ class UnsupportedReferenceYearError(LoggingEmploymentError):
     """
 
 
+class SourceFetchError(LoggingEmploymentError):
+    """A source request answered a status or a body `fetch` cannot record, undeclared.
+
+    Raised rather than skipped (R-S5P-4, §18.3). `ingest/base.HttpFetcher` deliberately RETURNS a
+    non-200 so the caller classifies on content instead of status; this class is that
+    classification's refusing branch, and it lives in the caller so the fetcher's contract is
+    unchanged. Skipping is the behaviour it replaces, and skipping is unrecoverable downstream: a
+    dropped quarter narrows the window, `runs.run_id` hashes the inputs so the shortened run takes
+    a NEW id rather than colliding with the full one, and no manifest carries the fact that a
+    quarter is missing -- so every later stage proceeds on the shorter window and nothing says so.
+
+    The exceptions are declared in `fetching.DECLARED_ABSENCES`, keyed by (source, reference
+    year), so a genuine hole in the published record is a line of code carrying its measurement
+    rather than an incidental pass through the same branch a transient 500 takes.
+    """
+
+
 class SchemaMismatchError(LoggingEmploymentError):
     """A fetched file's columns do not match the schema the parser declares."""
 
@@ -113,4 +130,24 @@ class LeakageError(LoggingEmploymentError):
     the same call raised under `python` and returned silently under `python -O`. The package states
     this convention in `run_pseudo_suppression`'s own docstring and these two functions were the
     only places in it that violated the convention.
+    """
+
+
+class BoundViolationError(LoggingEmploymentError):
+    """A released point estimate falls outside its own `deterministic_bounds` interval (INV-002).
+
+    INV-002 has two halves. The adding-up half -- every estimate sums to the anchor's residual --
+    has been enforced on the baseline path since Stage 3 by `allocate` and
+    `InfeasibleResidualError`. The per-cell half was not: §9's LP/MILP interval is a hard public
+    accounting fact, and nothing in `baselines/` read it, so an estimate above a solved upper
+    bound shipped as `anchored_and_reconciled` with no signal at all.
+
+    A RAISE, NOT A `Decline` ROW, and that is a deliberate break with the runner's other
+    post-allocation failure. `WeightDomainError` out of `allocate` becomes a
+    `reconciliation_failure` row because it is a DATA gap -- one cell with no usable input must
+    not abort ten estimators across 96 months. This is not a data gap: the bound and the estimate
+    are both this pipeline's own output, and INV-002 admits no per-month refusal. Filing it as a
+    decline would let the run ship, with a violated accounting fact recorded as an estimator's
+    considered opinion. §18.3's "fail rather than guess" governs, and R-S5P-3 says so in words:
+    "a violation MUST raise a named error from the `LoggingEmploymentError` hierarchy".
     """

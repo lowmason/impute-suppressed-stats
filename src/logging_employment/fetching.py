@@ -19,12 +19,58 @@ from .contracts import (
     SOURCE_SNAPSHOT_SCHEMA,
     schema_fingerprint,
 )
+from .errors import SourceFetchError
 from .harmonize.naics import vintage_for_year
 from .ingest import cbp, qcew, qcew_size
 from .ingest.base import FetchedBytes, HttpFetcher
 from .store import RawStore, snapshot_row
 
 KNOWN_SOURCES = ("qcew", "qcew_size", "cbp")
+
+# (source_id, reference year) pairs whose publisher genuinely serves nothing, each carrying the
+# measurement that established it. A pair listed here is allowed to answer non-200 or empty; every
+# other key that does halts the run (R-S5P-4).
+#
+# A module constant and NOT a `Config` field: `config.resolved_dict` is `model_dump(mode="json")`
+# and feeds `runs.run_id`, so a new pydantic field -- default or not -- re-ids every existing
+# `runs/<id>/` directory, including the Stage 4 comparand `specs/completed/stage5-preconditions.md` §4
+# protects. It is also not a per-run operator choice: it is the same class of audited fact as
+# `harmonize/disclosure.CBP_REGIME_BY_YEAR`, which is a module constant keyed by reference year
+# for the same reason. Deliberately NOT derived from that table, even though 2024 is missing from
+# both: "Census publishes no dataset" and "no fetched documentation states a disclosure regime"
+# are two findings that happen to coincide on one year, and a year published with an undocumented
+# regime must 200 here and halt in `harmonize`, not be excused from being fetched at all.
+DECLARED_ABSENCES: dict[tuple[str, int], str] = {
+    ("cbp", 2024): (
+        "Census serves no 2024 CBP dataset: Stage 0's dataset probe returned a real HTTP 404 "
+        "and 2024 is absent from cbp_metadata.years_available (SRC-CBP-003, SRC-CBP-004)"
+    ),
+}
+
+
+def _usable(fetched: FetchedBytes, *, source_id: str, year: int, reference: str) -> bool:
+    """Whether `fetched` carries bytes worth storing; halt when a failure is undeclared.
+
+    Returns False only for a DECLARED absence, so the one `continue` this leaves in the fetch loop
+    is a documented hole in the published record rather than whatever the network did. The
+    predicate is two-part for the reason `qcew.probe_slice_boundary` gives -- a source can answer
+    200 with an empty body -- and it is applied to all four request sites, including the two that
+    checked status alone before R-S5P-4.
+
+    Classifying here rather than in `HttpFetcher` keeps that layer's contract: it returns a
+    non-200 so the caller decides, because Stage 0 measured Census and USDA answering 200 with an
+    error body and 404 with a meaningful one.
+    """
+    if fetched.http_status == 200 and fetched.content.strip():
+        return True
+    if (source_id, year) in DECLARED_ABSENCES:
+        return False
+    raise SourceFetchError(
+        f"{source_id} {reference} returned HTTP {fetched.http_status} with "
+        f"{len(fetched.content)} byte(s) from {fetched.url}; refusing to narrow the window "
+        f"silently. Declare it in fetching.DECLARED_ABSENCES if the source publishes nothing "
+        f"for {year} (R-S5P-4, §18.3)"
+    )
 
 
 def merge_source_manifest(rows: Sequence[dict[str, object]], path: Path, source_id: str) -> str:
@@ -116,7 +162,9 @@ def fetch_source(
                     else:
                         fetched = fetcher.get(qcew.bulk_url(year))
                         name = f"{year}_qtrly_by_industry.zip"
-                    if fetched.http_status != 200 or not fetched.content.strip():
+                    if not _usable(
+                        fetched, source_id="qcew", year=year, reference=f"{year}q{quarter}"
+                    ):
                         continue
                     stored = store.put("qcew", fetched, name)
                     rows.append(
@@ -137,7 +185,9 @@ def fetch_source(
         elif source == "qcew_size":
             for year in window_years:
                 fetched = fetcher.get(qcew_size.BY_SIZE_URL.format(year=year))
-                if fetched.http_status != 200:
+                if not _usable(
+                    fetched, source_id="qcew_size", year=year, reference=f"{year}q1 by-size"
+                ):
                     continue
                 stored = store.put("qcew_size", fetched, f"{year}_q1_by_size.zip")
                 rows.append(
@@ -159,7 +209,9 @@ def fetch_source(
             key = creds.get(cfg.sources.cbp.api_key_env, "")
             for year in window_years:
                 variables = fetcher.get(cbp.VARIABLES_URL.format(year=year))
-                if variables.http_status != 200:
+                if not _usable(
+                    variables, source_id="cbp", year=year, reference=f"{year} variables metadata"
+                ):
                     continue
                 # Stored beside the data response, under the name `build` looks for, so the
                 # offline rebuild discovers the predicate exactly as this fetch did.
@@ -167,7 +219,7 @@ def fetch_source(
                 predicate = cbp.discover_naics_predicate(json.loads(variables.content))
                 query = cbp.build_query(year, predicate, cfg.project.industry_code_used)
                 fetched = fetcher.get(cbp.CBP_URL.format(year=year), params={**query, "key": key})
-                if fetched.http_status != 200:
+                if not _usable(fetched, source_id="cbp", year=year, reference=f"{year} data"):
                     continue
                 stored = store.put("cbp", fetched, f"{year}.json")
                 rows.append(

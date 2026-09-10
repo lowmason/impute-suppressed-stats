@@ -5,6 +5,7 @@ from pathlib import Path
 
 import polars as pl
 import pytest
+from tests.conftest import STAGED, requires_staged
 
 from logging_employment.config import load_config
 from logging_employment.contracts import HOLDOUT_REGIMES, HarmonizedData
@@ -12,7 +13,7 @@ from logging_employment.validate.regimes import REGIME_SPECS, select_targets
 
 
 def _monthly() -> pl.DataFrame:
-    return HarmonizedData.load(Path("data/staged")).qcew_monthly
+    return HarmonizedData.load(STAGED).qcew_monthly
 
 
 def test_every_spec_declares_a_grain_and_a_disposition():
@@ -22,6 +23,7 @@ def test_every_spec_declares_a_grain_and_a_disposition():
         assert spec.disposition in {"feasible", "vacuous_on_registry", "cannot_run_on_d1"}
 
 
+@requires_staged
 @pytest.mark.parametrize(
     "regime",
     [
@@ -47,6 +49,7 @@ def test_a_feasible_regime_selects_only_eligible_targets(regime):
     assert chosen.filter(pl.col("qtrly_establishments") <= 0).height == 0
 
 
+@requires_staged
 def test_a_never_observed_state_is_never_selected():
     monthly, cfg = _monthly(), load_config(Path("config.yaml"))
     never = {"02", "10", "15", "32", "38", "50"}
@@ -57,6 +60,7 @@ def test_a_never_observed_state_is_never_selected():
             assert t.state_fips not in never
 
 
+@requires_staged
 def test_a_single_month_regime_leaves_lookback_history_unmasked():
     """The blackout distinction: a small-cell mask must not erase its own share history."""
     monthly, cfg = _monthly(), load_config(Path("config.yaml"))
@@ -77,6 +81,7 @@ def test_the_census_divisions_partition_the_state_universe():
     assert set(flat) == set(STATES_DC_FIPS)
 
 
+@requires_staged
 def test_every_selector_is_reproducible_within_a_process():
     """§16.1's idempotence MUST, at the selection layer.
 
@@ -94,6 +99,7 @@ def test_every_selector_is_reproducible_within_a_process():
         assert first == second, f"{regime} is not reproducible for a fixed seed"
 
 
+@requires_staged
 def test_every_selector_is_reproducible_ACROSS_processes():
     """The property a within-process repeat cannot check.
 
@@ -105,12 +111,13 @@ def test_every_selector_is_reproducible_ACROSS_processes():
     """
     script = textwrap.dedent("""
         import hashlib
+        import sys
         from pathlib import Path
         from logging_employment.config import load_config
         from logging_employment.contracts import HarmonizedData
         from logging_employment.validate.regimes import REGIME_SPECS, select_targets
 
-        monthly = HarmonizedData.load(Path("data/staged")).qcew_monthly
+        monthly = HarmonizedData.load(Path(sys.argv[1])).qcew_monthly
         cfg = load_config(Path("config.yaml"))
         parts = []
         for regime, spec in sorted(REGIME_SPECS.items()):
@@ -122,7 +129,10 @@ def test_every_selector_is_reproducible_ACROSS_processes():
         """)
     digests = {
         subprocess.run(
-            [sys.executable, "-c", script], capture_output=True, text=True, check=True
+            [sys.executable, "-c", script, str(STAGED)],
+            capture_output=True,
+            text=True,
+            check=True,
         ).stdout.strip()
         for _ in range(2)
     }

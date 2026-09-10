@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 
+import polars as pl
 from typer.testing import CliRunner
 
 from logging_employment.cli import app
+from logging_employment.errors import BoundViolationError
 
 runner = CliRunner()
 
@@ -117,3 +119,50 @@ def test_declines_are_broken_down_by_kind_not_pooled(staged_repo) -> None:
     declines = manifest["declines"]
     assert set(declines["harvest_proportional"]) == {"by_design"}
     assert declines["harvest_proportional"]["by_design"] > 0
+
+
+def test_run_baselines_refuses_a_run_with_no_solved_bounds(staged_repo) -> None:
+    """R-S5P-3 makes `solve-bounds` a precondition, rather than skipping INV-002 when it is absent.
+
+    A check that turns itself off when its input is missing is the failure this requirement
+    exists to remove: the run would ship `anchored_and_reconciled` rows with nothing having
+    looked at §9's intervals, and no artifact would record that.
+    """
+    (staged_repo.run_dir / "deterministic_bounds.parquet").unlink()
+    result = runner.invoke(app, ["run-baselines", "--config", str(staged_repo.config_path)])
+    assert result.exit_code != 0
+    # Short tokens only: Typer boxes the message and hard-wraps the long tmp_path inside it, so
+    # asserting on the full artifact path passes locally and fails under a deeper tmp directory.
+    assert "solve-bounds" in result.output
+    assert "INV-002" in result.output
+
+
+def test_a_finite_upper_below_the_estimate_halts_the_production_path(staged_repo) -> None:
+    """The wiring is not vacuous: the bounds the CLI loads really do gate the estimates.
+
+    Every `selected_upper` this fixture solves is null, exactly as on D1 -- so the passing run
+    above cannot distinguish a working check from one whose mapping is keyed wrong and matches
+    nothing. Tightening ONE cell's upper below the estimate that cell already received is the
+    difference. The estimate is read out of the first run rather than assumed.
+    """
+    assert (
+        runner.invoke(app, ["run-baselines", "--config", str(staged_repo.config_path)]).exit_code
+        == 0
+    )
+    results = pl.read_parquet(
+        staged_repo.run_dir / "baseline_results" / "baseline_results.parquet"
+    ).filter(pl.col("reconciliation_status") == "anchored_and_reconciled")
+    row = results.sort(["cell_id", "estimator_id"]).to_dicts()[0]
+    bounds_path = staged_repo.run_dir / "deterministic_bounds.parquet"
+    bounds = pl.read_parquet(bounds_path)
+    assert bounds.filter(pl.col("cell_id") == row["cell_id"]).height == 1
+    bounds.with_columns(
+        pl.when(pl.col("cell_id") == row["cell_id"])
+        .then(pl.lit(row["estimate"] / 2.0))
+        .otherwise(pl.col("selected_upper"))
+        .alias("selected_upper")
+    ).write_parquet(bounds_path)
+    result = runner.invoke(app, ["run-baselines", "--config", str(staged_repo.config_path)])
+    assert result.exit_code != 0
+    assert isinstance(result.exception, BoundViolationError)
+    assert row["cell_id"] in str(result.exception)

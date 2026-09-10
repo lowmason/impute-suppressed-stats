@@ -1,4 +1,13 @@
-"""§10.7's empirical predictive intervals, from rolling pseudo-suppression residuals.
+"""§10.7's empirical predictive intervals, from pseudo-suppression residuals.
+
+§10.7 asks for them "from ROLLING pseudo-suppression residuals" and this package does not
+compute that: `metrics.probabilistic_metrics` pools every OTHER scored residual in the same
+(regime, seed, arm, estimator) group and drops the target's own by INDEX, which is
+cross-sectional leave-one-out within a replicate — no time ordering, no window. That gap is
+R-S5P-7, and `contracts.INTERVAL_SOURCES` now NAMES it rather than repeating the spec's word;
+the spec's word is quoted here so the divergence stays visible to a reader of this module and
+is not mistaken for a docstring that drifted. Building the time-ordered version is Stage 5's
+(`specs/completed/stage5-preconditions.md` §4), not this module's.
 
 ONE object: the residual-shifted ensemble. Both the quantiles and the CRPS are derived from it, so
 an interval and a score can never disagree about the same predictive distribution.

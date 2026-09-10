@@ -13,10 +13,16 @@ until `1be5bbf`):
 > and `build-harmonized`, each writing a machine-readable manifest and idempotent
 > for identical inputs.
 
-**Why it changed.** Two of the four write no manifest. `fetch` writes
-`runs/source_manifest.parquet` and `build-harmonized` writes
-`runs/<id>/schema_manifest.json` (`cli.py:150`); `validate-config` and
-`registry verify` write nothing. §16.1's "every command MUST write a
+**Why it changed.** THREE of the four write no manifest. Only `fetch` writes one
+(`runs/source_manifest.parquet`, via `merge_source_manifest` at `fetching.py:190`).
+`validate-config`, `registry verify` and `build-harmonized` write nothing.
+
+> CORRECTED 2026-09-10, same day. The first version of this entry said `build-harmonized`
+> writes `runs/<id>/schema_manifest.json` at `cli.py:150`. That line is inside
+> `build_constraints_command`, not `build_harmonized_command`. `build_harmonized_command`
+> (`cli.py:78-92`) computes output hashes and only echoes them; its `manifest_path` argument
+> is an INPUT, read at `build.py:120` to disambiguate stored snapshots. `D-059` had already
+> recorded this correctly and the correction contradicted it while citing its sibling `D-057`. §16.1's "every command MUST write a
 machine-readable manifest" is therefore unmet, and is open as `D-057`.
 
 **Why it mattered.** This is a *ticked* stage's `Produces` line, and the sentence

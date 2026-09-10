@@ -8,9 +8,13 @@ from pathlib import Path
 import httpx
 import polars as pl
 import pytest
+import yaml
+from typer.testing import CliRunner
 
+from logging_employment.cli import app
 from logging_employment.config import load_config
 from logging_employment.contracts import SOURCE_SNAPSHOT_SCHEMA, validate_frame
+from logging_employment.errors import SourceFetchError
 from logging_employment.fetching import (
     fetch_source,
     merge_source_manifest,
@@ -256,3 +260,167 @@ def test_merging_leaves_other_sources_untouched(tmp_path: Path) -> None:
     manifest = pl.read_parquet(path).sort("source_id")
     assert manifest["source_id"].to_list() == ["cbp", "qcew"]
     assert manifest.filter(pl.col("source_id") == "cbp")["byte_count"].to_list() == [10]
+
+
+# --- R-S5P-4: a dropped quarter is a halt, not a narrower window --------------------------------
+
+SLICE = (REPO / "tests" / "fixtures" / "qcew" / "slice_2017q1.csv").read_bytes()
+
+
+def _mock_transport(monkeypatch: pytest.MonkeyPatch, handler) -> None:
+    """Route every `httpx.Client` this process opens through `handler`.
+
+    `fetch_source` builds its own `HttpFetcher`, so the `fetcher._client = httpx.Client(
+    transport=...)` idiom of `tests/unit/test_qcew_routes.py::_fetcher` has no instance to reach
+    in; this is the same `MockTransport`, injected one constructor higher. Patched on `httpx`
+    rather than on `HttpFetcher` so `__post_init__`'s contact-address guard and the D3 User-Agent
+    still run exactly as in production -- and unlike the `_serve` helper above, which replaces
+    `httpx.Client.get` wholesale, the request actually travels through httpx's own request
+    building, so a handler can key on the URL the code really asked for.
+    """
+    real = httpx.Client
+    monkeypatch.setattr(
+        httpx, "Client", lambda **kw: real(**kw, transport=httpx.MockTransport(handler))
+    )
+    monkeypatch.setenv("BLS_CONTACT_EMAIL", "who@example.invalid")
+
+
+def _qcew_handler(failing: tuple[int, int], status: int = 500, body: bytes = b"upstream failure"):
+    """Serve the slice fixture for every year-quarter except one, which answers `status`."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        year, quarter = (int(p) for p in str(request.url).split("/api/")[1].split("/")[:2])
+        if (year, quarter) == failing:
+            return httpx.Response(status, content=body)
+        return httpx.Response(200, content=SLICE)
+
+    return handler
+
+
+def test_a_failed_quarter_halts_the_fetch_instead_of_narrowing_the_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R-S5P-4. The failing quarter is 2019q3, not the first request, so this distinguishes a halt
+    from a fetch that never started: 2018q1..2019q2 are served and stored first, and only the
+    manifest -- the artifact every later stage reads -- is withheld."""
+    _mock_transport(monkeypatch, _qcew_handler((2019, 3)))
+    with pytest.raises(SourceFetchError, match="2019q3"):
+        fetch_source(
+            "qcew",
+            _cfg(),
+            env_path=None,
+            raw_root=tmp_path,
+            output_root=tmp_path,
+            years=[2018, 2019],
+        )
+    assert list(tmp_path.rglob("*.csv")), "the earlier quarters should have been fetched"
+    assert not (tmp_path / "source_manifest.parquet").exists()
+
+
+def test_the_fetch_command_exits_non_zero_and_writes_no_manifest_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The §5 verification line for R-S5P-4, through the CLI rather than the library.
+
+    `fetch` takes no year or quarter option, so this is the production window; the config is
+    copied with its two storage roots redirected, per `test_cli_paths.py`'s idiom, because the
+    command reads `cfg.storage.*` and would otherwise write into the working tree.
+    """
+    _mock_transport(monkeypatch, _qcew_handler((2019, 3)))
+    raw = yaml.safe_load((REPO / "config.yaml").read_text())
+    raw["storage"]["raw_uri"] = str(tmp_path / "raw")
+    raw["storage"]["output_uri"] = str(tmp_path / "runs")
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(yaml.safe_dump(raw))
+
+    result = CliRunner().invoke(app, ["fetch", "--source", "qcew", "--config", str(config_path)])
+
+    # Asserting the exception type, not a word in `result.output`: CliRunner leaves output empty
+    # on an uncaught exception (see test_cli_paths.py), so a message assertion would pass against
+    # nothing at all.
+    assert result.exit_code == 1, result.output
+    assert isinstance(result.exception, SourceFetchError)
+    assert not (tmp_path / "runs" / "source_manifest.parquet").exists()
+
+
+def test_an_empty_body_halts_the_by_size_fetch_even_though_the_status_is_200(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The `qcew_size` site checked status alone before R-S5P-4, and government APIs answer 200
+    with an error body -- so a whitespace response used to be stored as a zip and recorded as a
+    snapshot row."""
+    _mock_transport(monkeypatch, lambda request: httpx.Response(200, content=b"   "))
+    with pytest.raises(SourceFetchError, match="2017q1 by-size"):
+        fetch_source(
+            "qcew_size",
+            _cfg(),
+            env_path=None,
+            raw_root=tmp_path,
+            output_root=tmp_path,
+            years=[2017],
+        )
+    assert not (tmp_path / "source_manifest.parquet").exists()
+
+
+def _cbp_handler(absent_years: set[int], *, data_status: int = 200):
+    """Serve CBP metadata and data, 404-ing whole years and optionally failing the data leg."""
+    variables = (REPO / "tests" / "fixtures" / "cbp" / "variables_2023.json").read_bytes()
+    data = (REPO / "tests" / "fixtures" / "cbp" / "data_113310_2023.json").read_bytes()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        year = int(str(request.url).split("/data/")[1].split("/")[0])
+        if year in absent_years:
+            return httpx.Response(404, content=b"")
+        if str(request.url.path).endswith("variables.json"):
+            return httpx.Response(200, content=variables)
+        return httpx.Response(data_status, content=data if data_status == 200 else b"")
+
+    return handler
+
+
+def test_the_declared_cbp_2024_absence_still_completes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The one case that must keep working: Census serves no 2024 CBP dataset, so its 404 is a
+    property of the published record and `DECLARED_ABSENCES` says so with its measurement."""
+    _mock_transport(monkeypatch, _cbp_handler({2024}))
+    monkeypatch.setenv("CENSUS_API_KEY", "SECRET-CENSUS-KEY")
+    rows = fetch_source(
+        "cbp", _cfg(), env_path=None, raw_root=tmp_path, output_root=tmp_path, years=[2023, 2024]
+    )
+    assert [r["reference_start"] for r in rows] == ["2023-03"]
+    assert (tmp_path / "source_manifest.parquet").exists()
+
+
+def test_an_undeclared_cbp_year_halts_on_the_same_404_that_2024_survives(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Identical response, identical branch, opposite outcome -- so what saves 2024 is the
+    declaration and not the code path. Without this, the test above would pass against the four
+    bare `continue` statements R-S5P-4 exists to remove."""
+    _mock_transport(monkeypatch, _cbp_handler({2022}))
+    monkeypatch.setenv("CENSUS_API_KEY", "SECRET-CENSUS-KEY")
+    with pytest.raises(SourceFetchError, match="2022 variables metadata"):
+        fetch_source(
+            "cbp",
+            _cfg(),
+            env_path=None,
+            raw_root=tmp_path,
+            output_root=tmp_path,
+            years=[2022, 2023],
+        )
+    assert not (tmp_path / "source_manifest.parquet").exists()
+
+
+def test_a_cbp_data_leg_that_fails_after_its_metadata_succeeded_halts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The fourth request site, and the only one that fails with bytes already in the store: the
+    year's variables metadata is written before the data request is made."""
+    _mock_transport(monkeypatch, _cbp_handler(set(), data_status=503))
+    monkeypatch.setenv("CENSUS_API_KEY", "SECRET-CENSUS-KEY")
+    with pytest.raises(SourceFetchError, match="2023 data"):
+        fetch_source(
+            "cbp", _cfg(), env_path=None, raw_root=tmp_path, output_root=tmp_path, years=[2023]
+        )
+    assert not (tmp_path / "source_manifest.parquet").exists()

@@ -442,7 +442,19 @@ REGIME_SWITCHES: dict[str, str] = {
 
 MASK_ARMS: tuple[str, ...] = ("state_total", "national_size")
 
-INTERVAL_SOURCES: tuple[str, ...] = ("rolling_residual_ensemble", "none")
+# What produced a probabilistic row's interval, named for what the code computes. Until R-S5P-7
+# this value was named for a ROLLING window that `validate/metrics.py` has never computed: it
+# builds each ensemble from `np.delete(residual_pool, position)` — every OTHER scored residual in
+# the same (regime, seed, arm, estimator) group, leave-one-out by INDEX, no time ordering, no
+# window. (The superseded string is spelled out in the test named below, so a reader who greps for
+# it lands on the reason; it is deliberately not repeated in `src/`.)
+# §13.10's coverage gate reads these intervals and cannot tell a time-ordered interval from this
+# one, so the name is the only thing carrying the distinction. Unlike WEIGHT_BASES and its four
+# siblings above, this tuple is enforced by nothing at runtime — `assert_declared_provenance` does
+# not cover `interval_source` — so `tests/integration/test_validation_golden.py` is its only check.
+# Renaming the value here does not build the rolling version; that is Stage 5's, per
+# `specs/completed/stage5-preconditions.md` §4.
+INTERVAL_SOURCES: tuple[str, ...] = ("leave_one_out_residual_ensemble", "none")
 
 # One row per (regime, seed, replicate, estimator, cell): the raw scored observations, including
 # the ones that were declined. Distinct in grain from VALIDATION_METRIC_SCHEMA below, and
