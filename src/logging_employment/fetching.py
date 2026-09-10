@@ -54,8 +54,11 @@ def _usable(fetched: FetchedBytes, *, source_id: str, year: int, reference: str)
     Returns False only for a DECLARED absence, so the one `continue` this leaves in the fetch loop
     is a documented hole in the published record rather than whatever the network did. The
     predicate is two-part for the reason `qcew.probe_slice_boundary` gives -- a source can answer
-    200 with an empty body -- and it is applied to all four request sites, including the two that
-    checked status alone before R-S5P-4.
+    200 with an empty body -- and it is applied to all four request sites, including the THREE
+    that checked status alone before R-S5P-4. Measured at the pre-change parent `0106056`: only
+    the qcew site was two-part; `qcew_size`, the CBP variables request and the CBP data request
+    each tested `http_status != 200` and nothing else, which is why a 200 with a whitespace body
+    could be stored as a zip.
 
     Classifying here rather than in `HttpFetcher` keeps that layer's contract: it returns a
     non-200 so the caller decides, because Stage 0 measured Census and USDA answering 200 with an
