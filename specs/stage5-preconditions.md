@@ -49,7 +49,7 @@ Every verdict below was re-derived at `f4393d3` on 2026-09-10, not copied from t
 | Review item | State at `f4393d3` | Becomes |
 |---|---|---|
 | R-01 `python-dotenv` dev-only | OPEN — absent from `[project].dependencies` | R-S5P-1 |
-| R-02 unguarded data tests | OPEN — 6 modules load `data/staged` with no `skipif` | R-S5P-2 |
+| R-02 unguarded data tests | OPEN — **9 modules / 42 tests** fail without `data/`, measured by moving it aside: 7 `tests/unit/test_validate_*` (34) + `tests/integration/test_validate_{leakage,exact_recovery}` (8) | R-S5P-2 |
 | R-03 Stage 4 record | **DONE** — heading suffix, `Exit` and `D-085` shipped in PR #19 | — |
 | R-04 name the anchor | **PARTLY DONE in code** — `Anchor.anchor_basis` exists (`reconcile/anchor.py:76`), is in `ANCHOR_BASES` (`contracts.py:241`) and reaches two frames. The remainder is spec text | see §6 |
 | R-05 bounds on the baseline path | OPEN — nothing in `baselines/` loads bounds. The single `deterministic_bounds` hit in `runner.py` is inside a docstring about `cell_id` construction | R-S5P-3 |
@@ -68,9 +68,22 @@ that cannot start. Verify with `uv sync --no-dev && uv run logging-estimates val
 --config config.yaml`, which MUST print its normal output rather than raise `ModuleNotFoundError`.
 
 **R-S5P-2.** The suite MUST be green on a checkout with no `data/`. One guard belongs in
-`tests/conftest.py` and MUST be applied in all six modules that load the staged layer. The guard
-MUST key on a file's existence, not on an environment variable, so it cannot be switched off by
-accident. Each `HarmonizedData.load(Path("data/staged"))` MUST also become an absolute path
+`tests/conftest.py` and MUST be applied in all **nine** modules that load the staged layer. The
+guard MUST key on a file's existence, not on an environment variable, so it cannot be switched off
+by accident.
+
+> CORRECTED 2026-09-10, same day. This said "six modules", from
+> `grep -rl data/staged tests/ | xargs grep -L skipif` — a bad proxy on both sides: it EXCLUDED
+> unit modules containing `skipif` for unrelated reasons and INCLUDED integration modules that
+> merely mention the path. Ground truth, from moving `data/` aside and running the suite:
+> **42 failed, 1286 passed, 28 skipped** across nine modules, matching `CLAUDE.md`'s own recorded
+> measurement.
+
+**Three of the nine are MIXED** and a blanket `pytestmark` would silently damage them:
+`test_validate_regimes.py`, `test_validate_declared_regimes.py` and
+`test_validate_temporal_regimes.py` each hold tests that PASS today with no `data/` (five in
+total). Those MUST stay unguarded. The acceptance check is therefore arithmetic, not "0 failed":
+skipped MUST rise by exactly 42 and passed MUST NOT fall. Each `HarmonizedData.load(Path("data/staged"))` MUST also become an absolute path
 derived from `__file__`: those calls are cwd-relative today, so the suite's result depends on
 where pytest was invoked from. This makes the current de facto state explicit rather than changing
 it — the tests are already not running for anyone without the gitignored directory, and a suite
@@ -114,7 +127,15 @@ exactly 11 errors, in three groups, and they do not have one cause:
   so they CANNOT be fixed in code without giving the fields defaults the spec never states. They
   are a spec amendment and are out of scope (§6).
 
-So this requirement makes 8 of 11 go away, and MUST NOT claim to have fixed the other three. The
+So this requirement makes **7** of 11 go away, leaving **4** — the 3 `Field required` plus the
+still-refused `model` extra, which this requirement forbids fixing. The
+
+> CORRECTED 2026-09-10, same day. This said "8 of 11 ... the other three", which is internally
+> inconsistent with this requirement's own second bullet: `model` is one of the 11 and is
+> explicitly out of scope, so it cannot be among the 8 removed. The verified post-change count
+> against the untouched Appendix A fence is 4.
+
+The
 test `test_config.py::test_appendix_a_config_parses` MUST be changed to read the Appendix A fence
 out of the spec file rather than parse a literal shaped by the code, and MUST be marked
 `xfail` — or assert the exact remaining three errors — until the spec amendment lands.
@@ -164,8 +185,8 @@ reads this scoreboard.
   write no manifest row; the CBP 2024 case passes only when declared.
 - Every `*_manifest.json` in a fresh run carries `code_commit` and `uv_lock_sha256`;
   `bounds_manifest.json` exists and carries three output hashes.
-- The Appendix A fence, read from the spec file, produces exactly 3 validation errors, all
-  `Field required`.
+- The Appendix A fence, read from the spec file, produces exactly 4 validation errors: the 3
+  `Field required` (`baselines`, the two disclosure widths) plus `model` `extra_forbidden`.
 - `grep -rn "rolling_residual_ensemble" src/` returns nothing.
 - Every open item in `specs/deferred_items.md` matches both a target/trigger and a `Size:` line.
 - `D-071` and `D-086` are ticked or carry a recorded ruling.
