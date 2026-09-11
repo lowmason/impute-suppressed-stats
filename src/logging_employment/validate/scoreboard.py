@@ -47,7 +47,14 @@ def build_scoreboard(metrics: pl.DataFrame) -> pl.DataFrame:
         # failure where the truth is "this run scored nothing", which are different findings.
         return pl.DataFrame(schema=VALIDATION_SCOREBOARD_SCHEMA)
     headline = metrics.filter(
-        (pl.col("metric_family") == "point") & (pl.col("metric_name") == "wape")
+        (pl.col("metric_family") == "point")
+        & (pl.col("metric_name") == "wape")
+        # OVERALL ONLY (R-S5G-1). Without this clause the per-division WAPE rows match too, the
+        # left join to `basis` fans out, and the board silently gains a row per division per
+        # group -- `validate_frame` compares names and dtypes and would not see it. §13.10's
+        # comparand is `runs/f03023ac9f3a/validation_scoreboard.parquet` at (270, 13); the gate
+        # reads the stratified rows from `validation_metrics`, never from the board.
+        & (pl.col("stratum_kind") == "overall")
     ).select(
         "regime",
         "seed",

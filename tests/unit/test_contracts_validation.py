@@ -78,6 +78,10 @@ def test_a_null_in_a_required_column_is_refused():
             "denominator": [1.0, 1.0],
             "denominator_basis": ["masked_cell_rows", "masked_cell_rows"],
             "n_scored": [1, 1],
+            # Present so the ABSENT-column branch cannot fire first and mask the null branch this
+            # test is about (R-S5G-1 added both to `VALIDATION_REQUIRED_NON_NULL`).
+            "stratum_kind": ["overall", "overall"],
+            "stratum_value": ["all", "all"],
         }
     )
     with pytest.raises(ConceptViolationError, match="regime"):

@@ -494,3 +494,27 @@ def test_regimes_sitting_on_different_arms_do_not_contaminate_each_other():
     assert preferred_baseline(board, regime="small_cell_biased") == "cbp_intensity"
     assert preferred_baseline(board, regime="long_consecutive_runs") == "cbp_intensity"
     assert preferred_baseline(board, regime="rolling_origin") is None
+
+
+def test_the_board_keeps_one_row_per_group_when_the_metrics_carry_strata():
+    """R-S5G-1's fan-out guard: the board's grain must not follow the partition.
+
+    `build_scoreboard` selects `metric_family == 'point' & metric_name == 'wape'`. Per-division
+    WAPE rows match both clauses, so without the `stratum_kind == 'overall'` filter the left join
+    to `basis` returns a row per division per group and the board silently multiplies --
+    `validate_frame` compares names and dtypes and cannot see a row count. §13.10's comparand is a
+    (270, 13) board; a fan-out there corrupts the number Stage 5 is promoted against.
+    """
+    metrics = _metrics()
+    stratified = metrics.filter(pl.col("stratum_kind") == "census_division")
+    assert stratified.height > 0, "fixture must actually carry stratified rows"
+    board = build_scoreboard(metrics)
+    assert (
+        board.height
+        == metrics.filter(
+            (pl.col("metric_family") == "point")
+            & (pl.col("metric_name") == "wape")
+            & (pl.col("stratum_kind") == "overall")
+        ).height
+    )
+    assert board.select("regime", "seed", "estimator_id").n_unique() == board.height

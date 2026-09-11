@@ -58,7 +58,20 @@ def test_the_metrics_match_the_golden(fixture_run):
     golden = pl.read_parquet(GOLDEN)
     produced = fixture_run.metrics
     assert produced.columns == golden.columns
-    key = ["regime", "seed", "mask_arm", "estimator_id", "metric_family", "metric_name"]
+    # R-S5G-1 made the six-field key NON-TOTAL: `wape` and `coverage_0.90` now appear once as
+    # `overall` and once per census division under otherwise identical values, so a sort on the old
+    # key leaves those rows tied and `equals` compares whatever order each side happened to
+    # produce. The stratum pair is what restores the total order.
+    key = [
+        "regime",
+        "seed",
+        "mask_arm",
+        "estimator_id",
+        "metric_family",
+        "metric_name",
+        "stratum_kind",
+        "stratum_value",
+    ]
     assert produced.sort(key).equals(golden.sort(key))
 
 
@@ -146,6 +159,10 @@ def test_a_hand_derived_row_reproduces_the_golden_interval(fixture_run):
         (pl.col("regime") == regime)
         & (pl.col("estimator_id") == estimator)
         & (pl.col("metric_family") == "probabilistic")
+        # The oracle re-derives coverage over the WHOLE group's leave-one-out pool, which is the
+        # overall row. A per-division row shares this row's `metric_name` and would make `_value`
+        # ambiguous (R-S5G-1).
+        & (pl.col("stratum_kind") == "overall")
     )
 
     def _value(name: str) -> float:

@@ -11,7 +11,33 @@ from __future__ import annotations
 import numpy as np
 import polars as pl
 
+from ..errors import ConceptViolationError
 from .intervals import clip_at_zero, crps, empirical_interval, residual_ensemble
+from .regimes import DIVISION_OF
+
+# The sentinel pair an unstratified row carries. A VALUE, never a null -- see `STRATUM_KINDS`.
+_OVERALL: dict[str, object] = {"stratum_kind": "overall", "stratum_value": "all"}
+
+
+def with_census_division(scores: pl.DataFrame) -> pl.DataFrame:
+    """Attach §13.10's stratum to each scored row, refusing a FIPS the partition does not cover.
+
+    Fail-closed rather than an `unassigned` bucket: `DIVISION_OF` covers states+DC exactly
+    (measured, 51 of 51 against `constants.STATES_DC_FIPS`), so an uncovered value means a
+    territory or a malformed code reached the scoring frame -- the REQ-002 universe violation
+    `harmonize/universe.py` exists to prevent, not a stratum that needs a home. Bucketing it would
+    put a row §13.10 must not gate on into a stratum §13.10 gates on.
+    """
+    out = scores.with_columns(
+        pl.col("state_fips").replace_strict(DIVISION_OF, default=None).alias("census_division")
+    )
+    unknown = sorted(set(out.filter(pl.col("census_division").is_null())["state_fips"].to_list()))
+    if unknown:
+        raise ConceptViolationError(
+            f"state_fips {unknown} falls in no Census division; the partition is "
+            f"validate/regimes.py::CENSUS_DIVISIONS and covers states+DC only"
+        )
+    return out
 
 
 def bound_metrics(scores: pl.DataFrame, *, regime: str, seed: int, arm: str) -> pl.DataFrame:
@@ -29,6 +55,7 @@ def bound_metrics(scores: pl.DataFrame, *, regime: str, seed: int, arm: str) -> 
         width = (finite["selected_upper"] - finite["selected_lower"]).mean() if n_finite else None
 
         base = {
+            **_OVERALL,
             "regime": regime,
             "seed": seed,
             "mask_arm": arm,
@@ -127,51 +154,96 @@ def point_metrics(
     error". `national_monthly_totals` builds the frame.
     """
     rows: list[dict[str, object]] = []
-    joined = scores.join(national_totals, on="reference_month", how="left")
+    joined = with_census_division(scores.join(national_totals, on="reference_month", how="left"))
     for (estimator,), group in joined.group_by("estimator_id", maintain_order=True):
-        scored = group.filter(pl.col("estimate").is_not_null())
-        counts = {
-            kind: group.filter(pl.col("decline_kind") == kind).height
-            for kind in ("by_design", "data_gap", "reconciliation_failure")
-        }
-        base = {
-            "regime": regime,
-            "seed": seed,
-            "mask_arm": arm,
-            "estimator_id": str(estimator),
-            "metric_family": "point",
-            "denominator": float(group.height),
-            "denominator_basis": "masked_cell_rows",
-            "n_scored": scored.height,
-            "n_declined_by_design": counts["by_design"],
-            "n_declined_data_gap": counts["data_gap"],
-            "n_declined_reconciliation_failure": counts["reconciliation_failure"],
-        }
-        if scored.height == 0:
-            # Null, never 0.0. A zero error over zero rows reads as perfect accuracy.
-            rows.extend({**base, "metric_name": n, "value": None} for n in _POINT_NAMES)
-            continue
-
-        err = scored["estimate"] - scored["truth"]
-        abs_err = err.abs()
-        values = {
-            "mae": abs_err.mean(),
-            "rmse": float((err**2).mean() ** 0.5),
-            "bias": err.mean(),
-            "wape": (
-                float(abs_err.sum() / scored["truth"].abs().sum())
-                if scored["truth"].abs().sum()
-                else None
-            ),
-            "median_ape": (
-                float((abs_err / scored["truth"].abs()).median())
-                if scored.filter(pl.col("truth").abs() > 0).height == scored.height
-                else None
-            ),
-            "state_share_absolute_error": _state_share_absolute_error(scored),
-        }
-        rows.extend({**base, "metric_name": n, "value": values[n]} for n in _POINT_NAMES)
+        rows.extend(
+            _point_rows(
+                group, base=_base(regime, seed, arm, str(estimator)), names=_POINT_NAMES, **_OVERALL
+            )
+        )
+        # §13.10's per-stratum gate needs WAPE and nothing else, so only WAPE is stratified
+        # (R-S5G-1). Emitting all six per division would multiply the table by the partition for
+        # five metrics no gate reads. The divisions PRESENT are enumerated, never the nine: a
+        # division this replicate did not mask has no rows, and a zero-row WAPE of null would be
+        # indistinguishable from a division that scored and failed.
+        for division in sorted(set(group["census_division"].to_list())):
+            rows.extend(
+                _point_rows(
+                    group.filter(pl.col("census_division") == division),
+                    base=_base(regime, seed, arm, str(estimator)),
+                    names=("wape",),
+                    stratum_kind="census_division",
+                    stratum_value=division,
+                )
+            )
     return pl.DataFrame(rows)
+
+
+def _base(regime: str, seed: int, arm: str, estimator: str) -> dict[str, object]:
+    """The identifying half of a point row, shared by the overall and the stratified emissions."""
+    return {
+        "regime": regime,
+        "seed": seed,
+        "mask_arm": arm,
+        "estimator_id": estimator,
+        "metric_family": "point",
+    }
+
+
+def _point_rows(
+    group: pl.DataFrame,
+    *,
+    base: dict[str, object],
+    names: tuple[str, ...],
+    stratum_kind: str,
+    stratum_value: str,
+) -> list[dict[str, object]]:
+    """`names` computed over `group`, which is a whole estimator's rows or one stratum's.
+
+    EVERY row carries the denominator of the set it was computed over, stratified or not (R-COMP-10
+    and §13.10's "no major stratum degrades by more than 2% WAPE"). A stratified WAPE reported
+    against the pooled denominator would make a two-cell division and a two-hundred-cell division
+    read as equally solid evidence for failing a promotion.
+    """
+    scored = group.filter(pl.col("estimate").is_not_null())
+    counts = {
+        kind: group.filter(pl.col("decline_kind") == kind).height
+        for kind in ("by_design", "data_gap", "reconciliation_failure")
+    }
+    row = {
+        **base,
+        "stratum_kind": stratum_kind,
+        "stratum_value": stratum_value,
+        "denominator": float(group.height),
+        "denominator_basis": "masked_cell_rows",
+        "n_scored": scored.height,
+        "n_declined_by_design": counts["by_design"],
+        "n_declined_data_gap": counts["data_gap"],
+        "n_declined_reconciliation_failure": counts["reconciliation_failure"],
+    }
+    if scored.height == 0:
+        # Null, never 0.0. A zero error over zero rows reads as perfect accuracy.
+        return [{**row, "metric_name": n, "value": None} for n in names]
+
+    err = scored["estimate"] - scored["truth"]
+    abs_err = err.abs()
+    values = {
+        "mae": abs_err.mean(),
+        "rmse": float((err**2).mean() ** 0.5),
+        "bias": err.mean(),
+        "wape": (
+            float(abs_err.sum() / scored["truth"].abs().sum())
+            if scored["truth"].abs().sum()
+            else None
+        ),
+        "median_ape": (
+            float((abs_err / scored["truth"].abs()).median())
+            if scored.filter(pl.col("truth").abs() > 0).height == scored.height
+            else None
+        ),
+        "state_share_absolute_error": _state_share_absolute_error(scored),
+    }
+    return [{**row, "metric_name": n, "value": values[n]} for n in names]
 
 
 _LEVELS = (0.50, 0.80, 0.90, 0.95)
@@ -185,11 +257,15 @@ def probabilistic_metrics(
 ) -> pl.DataFrame:
     """§13.7's coverage, width and CRPS from §10.7's residual-shifted ensembles."""
     rows: list[dict[str, object]] = []
-    for (estimator,), group in scores.group_by("estimator_id", maintain_order=True):
+    for (estimator,), group in with_census_division(scores).group_by(
+        "estimator_id", maintain_order=True
+    ):
         name = str(estimator)
         eligible = any(name.startswith(f) or name == f for f in _INTERVAL_FAMILIES)
         scored = group.filter(pl.col("estimate").is_not_null())
+        by_division: dict[str, list[int]] = {}
         base = {
+            **_OVERALL,
             "regime": regime,
             "seed": seed,
             "mask_arm": arm,
@@ -228,10 +304,21 @@ def probabilistic_metrics(
             clipped_total += n_clipped
             for level in _LEVELS:
                 lo, hi = empirical_interval(ensemble, level)
-                if lo <= row["truth"] <= hi:
+                hit = lo <= row["truth"] <= hi
+                if hit:
                     covered[level] += 1
                 if level == 0.90:
                     widths.append(hi - lo)
+                    # BUCKETED HERE, not recomputed in a second pass (R-S5G-1). The ensemble is
+                    # the harness's dominant cost and is superlinear in scored cells, so a
+                    # per-division pass would multiply the expensive half by the partition to
+                    # learn something this loop already knows. The CALIBRATION POOL stays global:
+                    # leave-one-out over every scored residual, never over the division's alone.
+                    # Stratifying the pool would shrink each sample to a handful of cells and
+                    # report the resulting noise as miscalibration.
+                    tally = by_division.setdefault(row["census_division"], [0, 0])
+                    tally[0] += 1
+                    tally[1] += int(hit)
             crps_values.append(crps(ensemble, row["truth"]))
 
         n = len(crps_values)
@@ -260,6 +347,20 @@ def probabilistic_metrics(
         )
         # The clip is REPORTED, not absorbed: it shifts nominal coverage.
         rows.append({**common, "metric_name": "n_clipped_at_zero", "value": float(clipped_total)})
+        for division, (seen, hits) in sorted(by_division.items()):
+            rows.append(
+                {
+                    **common,
+                    "stratum_kind": "census_division",
+                    "stratum_value": division,
+                    "metric_name": "coverage_0.90",
+                    "value": hits / seen if seen else None,
+                    "denominator": float(
+                        group.filter(pl.col("census_division") == division).height
+                    ),
+                    "calibration_sample_size": seen,
+                }
+            )
     return pl.DataFrame(rows)
 
 
@@ -290,6 +391,7 @@ def decline_and_basis_report(
     for (estimator,), group in scores.group_by("estimator_id", maintain_order=True):
         rows.append(
             {
+                **_OVERALL,
                 "regime": regime,
                 "seed": seed,
                 "mask_arm": arm,
@@ -334,6 +436,7 @@ def constraint_metrics(
         ).height
         anchor = anchor_residuals.filter(pl.col("estimator_id") == estimator)
         base = {
+            **_OVERALL,
             "regime": regime,
             "seed": seed,
             "mask_arm": arm,

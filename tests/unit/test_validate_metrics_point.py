@@ -30,7 +30,7 @@ def test_a_declined_row_is_excluded_from_the_numerator_but_not_the_denominator()
     out = point_metrics(
         _scores(), regime="r", seed=1, arm="state_total", national_totals=_national()
     )
-    a = out.filter(pl.col("estimator_id") == "a")
+    a = out.filter((pl.col("estimator_id") == "a") & (pl.col("stratum_kind") == "overall"))
     assert a["n_scored"].unique().to_list() == [2]
     assert a["denominator"].unique().to_list() == [3.0]
     assert a["n_declined_data_gap"].unique().to_list() == [1]
@@ -41,7 +41,11 @@ def test_an_all_declining_estimator_reports_null_not_zero():
     out = point_metrics(
         _scores(), regime="r", seed=1, arm="state_total", national_totals=_national()
     )
-    b = out.filter((pl.col("estimator_id") == "b") & (pl.col("metric_name") == "wape"))
+    b = out.filter(
+        (pl.col("estimator_id") == "b")
+        & (pl.col("metric_name") == "wape")
+        & (pl.col("stratum_kind") == "overall")
+    )
     assert b["value"].item() is None
     assert b["n_scored"].item() == 0
     assert b["n_declined_by_design"].item() == 3
@@ -51,9 +55,11 @@ def test_wape_is_computed_over_the_scored_rows_only():
     out = point_metrics(
         _scores(), regime="r", seed=1, arm="state_total", national_totals=_national()
     )
-    wape = out.filter((pl.col("estimator_id") == "a") & (pl.col("metric_name") == "wape"))[
-        "value"
-    ].item()
+    wape = out.filter(
+        (pl.col("estimator_id") == "a")
+        & (pl.col("metric_name") == "wape")
+        & (pl.col("stratum_kind") == "overall")
+    )["value"].item()
     # (|110-100| + |180-200|) / (100 + 200) = 30 / 300
     assert abs(wape - 0.1) < 1e-12
 
@@ -98,3 +104,59 @@ def test_a_month_with_no_national_row_is_excluded_rather_than_counted_as_zero_er
         (pl.col("estimator_id") == "a") & (pl.col("metric_name") == "state_share_absolute_error")
     )["value"].item()
     assert value is None
+
+
+def test_wape_is_emitted_per_census_division_with_that_division_s_own_denominator():
+    """R-S5G-1: §13.10's per-stratum gate needs a WAPE it can read, with its own base.
+
+    `06` and `41` are both `pacific` and both scored: (|110-100| + |180-200|) / (100 + 200) = 0.1,
+    over a denominator of 2 masked cell-rows rather than the estimator's 3.
+    """
+    out = point_metrics(
+        _scores(), regime="r", seed=1, arm="state_total", national_totals=_national()
+    )
+    pacific = out.filter(
+        (pl.col("estimator_id") == "a")
+        & (pl.col("stratum_kind") == "census_division")
+        & (pl.col("stratum_value") == "pacific")
+    )
+    assert pacific["metric_name"].to_list() == ["wape"]
+    assert abs(pacific["value"].item() - 0.1) < 1e-12
+    assert pacific["denominator"].item() == 2.0
+    assert pacific["n_scored"].item() == 2
+
+
+def test_only_the_divisions_present_in_the_replicate_are_emitted():
+    """A division this mask never touched has no row, rather than a null one a gate would read."""
+    out = point_metrics(
+        _scores(), regime="r", seed=1, arm="state_total", national_totals=_national()
+    )
+    divisions = set(out.filter(pl.col("stratum_kind") == "census_division")["stratum_value"])
+    assert divisions == {"pacific", "new_england"}
+
+
+def test_an_unstratified_row_carries_the_overall_sentinel_and_never_a_null():
+    """The `mask_arm` defect, refused by construction: `validate_frame` cannot see a null."""
+    out = point_metrics(
+        _scores(), regime="r", seed=1, arm="state_total", national_totals=_national()
+    )
+    assert out["stratum_kind"].null_count() == 0
+    assert out["stratum_value"].null_count() == 0
+    overall = out.filter(pl.col("stratum_kind") == "overall")
+    assert overall["stratum_value"].unique().to_list() == ["all"]
+
+
+def test_a_state_outside_the_census_partition_is_refused_rather_than_bucketed():
+    """`72` is Puerto Rico: a REQ-002 universe violation, not a stratum needing a home."""
+    import pytest
+
+    from logging_employment.errors import ConceptViolationError
+
+    rogue = _scores().with_columns(
+        pl.when(pl.col("cell_id") == "c1")
+        .then(pl.lit("72"))
+        .otherwise(pl.col("state_fips"))
+        .alias("state_fips")
+    )
+    with pytest.raises(ConceptViolationError, match="72"):
+        point_metrics(rogue, regime="r", seed=1, arm="state_total", national_totals=_national())
