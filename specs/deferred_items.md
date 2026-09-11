@@ -1754,3 +1754,261 @@ work the plan's changes either created, confirmed, or deliberately scoped out.
       Size: quick-fix. Revisit if: an item lands that the test rejects and the reference exempts —
       then either the reference gains a carve-out or this repo's test narrows to post-schema
       sections.
+
+## 2026-09-11 Stage 1-4 re-measurement — 2026-09-11
+
+`docs/reviews/2026-09-11-stage14-revisit.md` re-measured both 2026-09-09/10 reviews against
+`d6591b6` and audited the Stage 1-4 deliverables blind against the spec. Everything below is live
+at that commit, sits in a ticked stage's own deliverable, and was owned by nothing when filed.
+`D-091` and `D-092` are the two the re-measurement ranked as Stage 5 preconditions; they are
+carried by `specs/stage5-gate-inputs.md` and are listed here so that spec has something to close.
+
+The rest are backlog by measurement, not by triage convenience: for nearly every one the fact is
+confirmed and the consequence is unreachable on D1. Where that is so, the `Revisit if:` line names
+the event that makes it reachable rather than a date.
+
+- [ ] `D-091` **§13.10's two "major stratum" gates have no data source, and all three
+      `PromotionConfig` keys are read by nothing.** `validate/metrics.py` emits 18 metric names and
+      none is stratified; `grep -rn 'stratum\|strat' src/logging_employment/validate/
+      src/logging_employment/config.py` returns three hits, two of them comments and the third the
+      config declaration. `minimum_wape_improvement`,
+      `maximum_major_stratum_wape_degradation` and `nominal_coverage_tolerance` have zero `src/`
+      consumers, so `config.resolved.yaml` records a promotion policy no code can apply while
+      `PromotionConfig`'s docstring calls them "§13.10's gates". Stage 4's `Produces` claimed the
+      §13.5-13.8 families; `specs/completed/stage5-preconditions.md` §2 and §6 declined to inherit
+      it, which is how it came to be owned by a retired document.
+      Size: plan. Done when: `specs/stage5-gate-inputs.md` R-S5G-1..3 ship — a per-stratum WAPE and
+      90% coverage are computable, or §13.10 is amended and the three keys are read or recorded
+      inert beside `D-064`'s four.
+
+- [ ] `D-092` **§9.3's parent-industry, ownership and region margins were never fetched, declined
+      or measured, and the engine bounds no state cell.** Measured: `deterministic_bounds.parquet`
+      is 1,227 `unbounded` with `selected_upper` null on all 1,227, 3,534 `observed`, 14
+      `partially_identified` (national size classes only). Independently re-derived from raw bytes:
+      `agglvl 58`, `own 5`, excluding `area_fips 72000` gives 1,572 quarter-rows of which 409 carry
+      `disclosure_code 'N'`; 1,572x3 = 4,716 and 409x3 = 1,227. The raw store holds industry
+      `113310` only and ownership codes 3 and 5 only (`own_code 0` count: 0). With `1133 -> 11331
+      -> 113310` single-child in both vintages, a disclosed parent is an EXACT RECONSTRUCTION, i.e.
+      a live `REQ-027` §14.4 case rather than a modelling improvement. The roadmap's settle-before
+      trigger exists but sits in the **Stage 6** block while **Stage 5** already consumes
+      `deterministic_bounds`.
+      Size: plan. Done when: `specs/stage5-gate-inputs.md` R-S5G-5..8 ship — the four state slices
+      are fetched and counted, the ruling is recorded where a stage will read it, and the trigger is
+      re-pointed at Stage 5.
+
+- [ ] `D-093` **MILP bounds are accepted at HiGHS's default `mip_rel_gap = 1e-4`, so a recorded
+      `selected_lower`/`selected_upper` need not be §9.1's exact optimum.** `constraints/bounds.py
+      ::_model` sets `output_flag` and the three feasibility tolerances and nothing else, leaving
+      `mip_rel_gap` at 1e-4 and `mip_abs_gap` at 1e-6. §9.1 defines L_j/U_j as exact min/max over
+      the feasible set, and `_optimize` accepts `kOptimal`, which HiGHS returns on early
+      gap-termination. Reproduced against the real option set: on models of the 3-to-5 variable
+      size this engine builds, 124 of 298 returned a minimum above the true optimum; with +/-1
+      coefficients only, 11 of 400. At employment magnitudes near 41,667 the gap is ~4 employees.
+      `grep -rni 'mip_rel_gap|mip_abs_gap'` over `src/ tests/ specs/ docs/` returns zero hits, so
+      this is an unexamined default rather than a recorded decision.
+      Size: quick-fix. Revisit if: any state cell gets a finite bound -- MILP ran on 0 of 4,775 rows
+      on D1 (`milp_lower`/`milp_upper` null everywhere) because `_needs_milp` skips a cell whose
+      `upper` is None, so this cannot fire until `D-092` changes that.
+
+- [ ] `D-094` **Harmonized `snapshot_id` is the raw file's filename stem, so the §7.2 join key
+      resolves to nothing.** `build.py` passes `snapshot_id=path.stem` at all three parser calls
+      (`2017q1`, `2017_q1_by_size`, `2017`) while `store.py` sets `source_snapshot.snapshot_id` to
+      the content sha256. Measured: an inner join returns 0 rows for `qcew_monthly` (32 distinct
+      stems), `qcew_national_size` (8) and `cbp_state_size` (7), and the stem propagates into Stage
+      2 via `constraints/cells.py`'s `pl.col("snapshot_id").alias("source_snapshot_id")`, so
+      `target_cell` joins the manifest at 0 rows too. `release_vintage` carries the same defect.
+      **Scope, honestly:** no `src/` path attempts this join, and the fact IS recoverable today --
+      `Path(raw_path).stem` maps all 47 manifest rows to exactly one sha256 each, bijectively -- so
+      this is a naming defect, not a lost fact. The §9.7 diagnostic already prints stems under the
+      label "source snapshots".
+      Size: plan. Revisit if: Stage 8 builds the §18.1 provenance package, which is the first
+      consumer that needs the declared key -- or sooner, if `source_publication_date` (`D-100`) is
+      populated, since both fixes touch the same three call sites.
+
+- [ ] `D-095` **`ExponentiallyWeightedShare` discounts per OBSERVATION while its docstring claims a
+      one-year half-life.** `baselines/historical.py` computes `weights = [self.decay **
+      (len(shares) - 1 - i) for i in range(len(shares))]` -- the exponent is the list index -- and
+      `observed_share_history` builds `shares` from `partition.disclosed` only, so a suppressed
+      month is absent from the list rather than present at a low weight. Measured over
+      `data/staged` at `historical_lookback_months: 24`: of 338 histories with >=2 points, 120 are
+      gappy; median 6 observations over a 9-month span, worst 4 over 22, pushing the realized
+      half-life to 66 months. Recomputing with a month-based decay moves 49 of 327 shipped cells by
+      >1%, 2 by >5%, max 7.18%.
+      **Not a spec violation** -- §10.3 names no decay form -- so state that first or this reads as
+      taste. What is wrong is that the docstring, which this project treats as its design record,
+      asserts a half-life the code does not deliver whenever the history has a gap, and gaps are
+      the normal case at 26% suppression.
+      Size: quick-fix. Revisit if: `share_exponentially_weighted` ever becomes
+      `preferred_baseline` -- measured at `d6591b6` it wins in none of the nine scoring regimes
+      (`preferred_baseline` returns `share_last_observed` in 3 and `cbp_intensity` in 6), so it
+      cannot move Stage 5's comparand today. Fixing the docstring is correct either way.
+
+- [ ] `D-096` **`scale_into_bounds` clamps a contradictory `(lower > upper)` pair to the cap and
+      returns below the declared lower, where its package sibling `integerize` refuses the same
+      shape by name.** `reconcile/scaling.py` returns `min(max(lam * w, bounds.lower[cell]),
+      bounds.upper_of(cell))`; with `lower={'01':10.0}`, `upper={'01':4.0}` it returns 4.0 and
+      raises nothing, while `integerize` raises "cell '01' has lower bound 10 above its upper bound
+      4 ... clamping to the cap would silently return a value below the lower bound the caller
+      declared". `Bounds` has no `__post_init__` and validates nothing, and no `src/` site compares
+      `selected_lower` to `selected_upper` for ordering. §12.3's MUST-fail predicate is on SUMS, so
+      a per-cell inversion escapes whenever the sums stay feasible -- demonstrated with
+      `lower={'01':90,...}`, `upper={'01':1,...}`, R=100: both guards pass and '01' returns 1.0.
+      **Caveat:** §17.3 scopes its bound-respecting property to "random feasible inputs", so
+      `L > U` does not literally bind. This is a fail-closed asymmetry inside one package.
+      Size: quick-fix. Done when: `Bounds` refuses an inverted pair at construction, or
+      `scale_into_bounds` raises the named error `integerize` already raises.
+
+- [ ] `D-097` **CBP `variables.json` retrievals get no `source_snapshot` row, and
+      `predicate_from_stored_metadata` picks among copies by sha256 sort order where
+      `snapshot_paths` refuses that same ambiguity.** `fetching.py`'s CBP arm calls
+      `store.put("cbp", variables, cbp.metadata_filename(year))` with no `snapshot_row` after it,
+      while the data response at the next site gets one and both the qcew and qcew_size arms pair
+      every `put` with a row. Measured: `runs/source_manifest.parquet` has 7 cbp rows against 14
+      directories under `data/raw/cbp/`; the 7 unrecorded ones are exactly the `*_variables.json`
+      objects. `build.py` then does `sorted(cbp_raw_dir.rglob(...))[0]` -- lowest sha256 wins
+      silently -- while `snapshot_paths` raises `AmbiguousSnapshotError` for a data key with two
+      copies and explicitly carves metadata out of that protection. The predicate this picks feeds
+      `cbp.build_query`, so it does determine which rows Census returns.
+      Size: quick-fix. Done when: the metadata `put` records a snapshot row and the candidate pick
+      either goes through `snapshot_paths` or raises on more than one copy. (The missing row is
+      live today; the sort-order pick is latent -- one metadata object per year on disk now.)
+
+- [ ] `D-098` **`ingest/cbp.py` asserts CBP 2022/2023 data carry the NAICS 2022 vintage, and the
+      stored metadata contradicts it.** The `discover_naics_predicate` docstring reads "Stage 0
+      measured `NAICS2017` for every year 2017-2023, INCLUDING THE YEARS WHOSE DATA CARRY THE NAICS
+      2022 VINTAGE" -- a premise with no citation. Measured: all seven stored `{year}_variables.json`
+      serve exactly one NAICS-prefixed variable, `NAICS2017`, and its label is "2017 NAICS code" for
+      2022 and 2023 as well as 2017. `build.py` nevertheless stamps `naics_vintage=vintage_for_year
+      (year)` -- whose own docstring says "The NAICS vintage a *QCEW* reference year's rows carry",
+      a BLS rule applied to a Census product -- so 367 of 1,298 staged CBP rows (2022: 179, 2023:
+      188) carry "NAICS 2022". `registry/sources.yaml` is correct and measured; the code is not.
+      **No number moves:** the CBP `naics_vintage` column has no reader (`reconcile/` contains zero
+      occurrences of "cbp"; all five CBP read sites key on `reference_year`), it reaches no
+      `cell_id`, and `113310` is `1:1` across both vintages so no industry is mis-coded. This is a
+      false premise recorded as a measurement, which is the harder half to fix because it reads as
+      justified.
+      Size: quick-fix. Done when: the docstring states what the metadata shows, and the stamp is
+      either derived from the measured predicate or documented as deliberately QCEW-derived with a
+      reason.
+
+- [ ] `D-099` **§9.7's infeasibility diagnostic accepts `config: BoundConfig` and reads it zero
+      times.** `constraints/diagnostics.py::diagnose` declares the parameter; an AST walk over the
+      function body counts zero `Name(id='config')` loads and no `config.<attr>` access, and the
+      function builds its own `highspy.Highs()` setting no tolerance, so it runs at HiGHS defaults
+      while `bounds.py` solves at `config.feasibility_tolerance`. Tightening or loosening that key
+      therefore moves every bound but not the diagnosis that explains an infeasible component; the
+      two accounts can disagree about whether a component is infeasible at all.
+      Size: quick-fix. Done when: `diagnose` sets the configured tolerances on its own solver, or
+      its signature drops the parameter and the docstring says the diagnostic is deliberately
+      evaluated at solver defaults.
+
+- [ ] `D-100` **`source_publication_date` is the empty string on every snapshot row ever written.**
+      Declared in `store.py` and `contracts.py` per §7.2 and written as the literal `""` at all
+      three producer sites in `fetching.py` (qcew, qcew_size, cbp). Measured:
+      `runs/source_manifest.parquet` has one distinct value, `""`, on all 47 rows. A reader cannot
+      distinguish "the source published no date" from "nobody filled it in". The 2026-09-10 routing
+      doc sent the fix (`Last-Modified` from the response headers) to the deferred lane and it was
+      never filed.
+      Size: quick-fix. Done when: the field is populated from the response headers, or the schema
+      records it as reserved-and-unpopulated with the reason. Touches the same three call sites as
+      `D-094`.
+
+- [ ] `D-101` **`SRC-QCEW-005`'s MUST to distinguish preliminary from final observations is met by
+      a config literal, not by parsing.** §8.1 `SRC-QCEW-005`: "It MUST distinguish preliminary and
+      final observations. A final national control cannot be combined with preliminary state values
+      in a hard equation unless revisions are explicitly modeled." Measured: `release_status` is
+      stamped from `cfg.sources.qcew.release_status` in `fetching.py` and `build.py`, and from the
+      literal `"final"` for the other two sources; `config.yaml` sets `release_status: 'final'`. No
+      parser reads a preliminary/final marker off any response. Stage 1's `Gap closed:` line credits
+      `SRC-QCEW-001-005`.
+      **Bounded on D1** -- every window quarter is in fact final -- so this is a latent MUST
+      violation, not a wrong number.
+      Size: design. Revisit if: a preliminary quarter is ever fetched, or the D1 window is extended
+      toward the present -- the row would be stamped `final` from config and could enter a hard
+      equation with a final national control, which is exactly what SRC-QCEW-005 forbids, and
+      nothing would notice.
+
+- [ ] `D-102` **§3.1's "The ETL MUST verify the 113310 mapping mechanically" is unmet: the guard
+      has no production caller.** `harmonize/naics.py::assert_113310_survives_the_window` is
+      invoked only from `tests/unit/test_harmonize.py`; `grep -rn` over `src/` finds its own
+      definition and one comment. No `build_harmonized`, `fetch` or CLI path calls it. So the
+      verification is a unit test over a vendored CSV, not a build-time gate: re-vendoring
+      `naics_113310.csv` with a changed `link_type_to_next` or a non-empty `change_indicator` would
+      redden the suite but would not stop `build-harmonized` producing a staged layer.
+      **The roadmap is accurate here** -- Stage 1's `Produces` says "crosswalk test for 113310
+      across the window's vintages", which is what shipped -- so the fix is the code or the spec,
+      not the roadmap line.
+      Size: quick-fix. Done when: `build_harmonized` calls the guard, or §3.1 is amended to require
+      a versioned crosswalk test rather than an ETL-time check.
+
+- [ ] `D-103` **§6.2's storage layout and its no-re-download MUST both diverge, and nothing records
+      either.** §6.2 specifies `data/staged/<source>/...` plus a `harmonized/` directory; measured,
+      `data/staged/` holds four flat files and no subdirectory. §6.2 also states "A rerun against
+      the same manifest MUST NOT re-download mutable 'latest' files unless explicitly requested";
+      `fetching.py` has exactly one `.exists()` (inside `merge_source_manifest`) and every request
+      site calls `fetcher.get(...)` unconditionally. Combined with the documented CBP
+      non-reproducibility, every `fetch` grows the content-addressed store.
+      **Do not fold in the third divergence:** `runs/<run_id>/run_manifest.json` is also absent, but
+      that one is legitimately owned by unticked Stage 8's `Produces` ("`run_manifest.json` per
+      §18.1"). Only the layout and the re-download MUST are unowned.
+      Size: plan. Done when: the layout matches §6.2 or §6.2 is amended to what shipped, and the
+      no-re-download rule is implemented or recorded as deliberately unimplemented.
+
+- [ ] `D-104` **§9.7's quarantine is reachable from no command.** `constraints/bounds.py
+      ::solve_bounds` takes `quarantined: Collection[str] = ()`, and its only caller,
+      `cli.py::solve_bounds_command`, passes two positional arguments and never the keyword;
+      `grep -n 'quarantin' src/logging_employment/cli.py` returns nothing. §9.7 makes quarantine
+      the only alternative to a hard failure, so an operator facing a genuinely infeasible
+      component has the choice halt-or-nothing without editing source. `constraints/CLAUDE.md`
+      documents the quarantine SEMANTICS; what is recorded nowhere is that no path reaches them.
+      Size: quick-fix. Revisit if: any component is ever genuinely infeasible -- nothing on D1 is,
+      so `quarantined=()` changes no behaviour today.
+
+- [ ] `D-105` **`runs.code_provenance` anchors on the nearest `uv.lock`, which in a uv-managed
+      consuming project is the CONSUMER's.** `runs.py::_code_root` walks parents for `uv.lock`, and
+      its docstring justifies that over `.git` because "Anchoring on `.git` instead would find the
+      enclosing repository of a site-packages copy ... and stamp a commit that never produced the
+      running code". `uv.lock` has the identical failure mode: demonstrated by creating a git repo
+      with its own `uv.lock` and a `site-packages/logging_employment` beneath it, `code_provenance`
+      returned that repo's HEAD rather than `"unknown"`. So every `runs/<id>/*_manifest.json`
+      written from an installed copy would record a foreign commit -- the confident wrong answer
+      the `-dirty` suffix exists to prevent. `tests/unit/test_runs.py` covers "no `uv.lock`
+      anywhere" and "`uv.lock` present but not a git repo", not this case.
+      Size: quick-fix. Revisit if: the package is ever consumed as an installed dependency rather
+      than editable from its own checkout -- not reachable from this repo today, so no artifact on
+      disk is affected.
+
+- [ ] `D-106` **One regime supplies 69% of all scored rows, and nothing records it.**
+      `whole_seasonal_blocks` contributes 8,690 of 12,530 scored rows; the next largest is 600.
+      Per-regime scoreboards are unaffected and nothing in `src/` currently pools across regimes, so
+      the consequence is latent -- but any future pooled comparison would be dominated by one mask
+      design, and `scoreboard.py` already refuses to pool across mask ARMS for the same reason.
+      Size: quick-fix. Done when: the concentration is recorded where a pooling author would see it
+      -- a note beside `scoreboard.py`'s existing anti-pooling refusal is the natural home.
+
+- [ ] `D-107` **`median_ape` is nulled for the entire estimator when any single scored truth is
+      zero.** `validate/metrics.py` guards with an all-or-nothing row-count equality rather than
+      filtering, while §13.6 asks for "median absolute percentage error **where denominators are
+      safe**" -- i.e. over the safe subset with its own denominator. One pseudo-hidden cell whose
+      truth is a published zero would discard the MAPE for every cell in that (regime, seed,
+      estimator) group.
+      **Cannot fire on D1:** 0 of 3,462 eligible targets have zero employment (minimum 3), the 27
+      `true_zero` cells are excluded twice over by independent predicates, and all 46 null
+      `median_ape` rows come from the separate `n_scored == 0` path. The two null causes are
+      distinguishable, because `VALIDATION_REQUIRED_NON_NULL` requires `n_scored` on every row.
+      Size: quick-fix. Revisit if: a published zero ever enters the eligible target set -- e.g. the
+      window is extended, or the eligibility predicate changes.
+
+- [ ] `D-108` **`reconcile_matrix`'s achieved-margin post-check gates on a hardcoded `rtol=1e-6`,
+      not on the configured `reconciliation.tolerance`.** The scale-relative form was the reviewed
+      remedy in `specs/findings/stage3-plan-audit.md` Task 7 and `D-047` (closed) already records
+      the constant, so the mechanism is on record; what is unrecorded is that the configured
+      tolerance does not govern it. Measured over 360 consistent-margin trials at a 4x3 shape, a
+      result was accepted as reconciled with a worst row miss of 0.0163 employees against a
+      configured `tolerance` of 1e-9 -- approaching the arithmetic ceiling `rtol * target` = 0.02 at
+      a 20,000 row total. Column margins come back exact (worst 3.6e-12); the drift is entirely on
+      rows.
+      Size: quick-fix. Revisit if: `reconcile_matrix` gets a `src/` caller -- it has none today
+      (the §12.5 arm is reached only from tests), so no shipped number is affected. Note `D-041`
+      owns the neighbouring dead `general_method` guard and Stage 6's `Consumes` owns the missing
+      bounds parameter; this is the third, separate defect in the same function.
