@@ -58,18 +58,77 @@ def bound_metrics(scores: pl.DataFrame, *, regime: str, seed: int, arm: str) -> 
     return pl.DataFrame(rows)
 
 
-_POINT_NAMES = ("mae", "rmse", "bias", "wape", "median_ape")
+_POINT_NAMES = ("mae", "rmse", "bias", "wape", "median_ape", "state_share_absolute_error")
 
 
-def point_metrics(scores: pl.DataFrame, *, regime: str, seed: int, arm: str) -> pl.DataFrame:
+def national_monthly_totals(monthly: pl.DataFrame) -> pl.DataFrame:
+    """The published national employment level per month, as `state_share_absolute_error`'s base.
+
+    Derived from the MASKED frame by its only caller, not from the unmasked one. The two agree --
+    every mask this harness applies hides a state cell and leaves the national row alone -- so the
+    choice buys no different number; it buys a §13.4 leakage argument that is structural instead of
+    verbal. A denominator read out of the unmasked frame would have to be argued safe; one read out
+    of a frame `assert_no_retained_truth` has already cleared cannot carry withheld truth at all.
+
+    This is NOT `SRC-QCEW-006`'s declined national/state identity. That decline forbids a hard
+    CONSTRAINT ROW equating the national level to the state sum, and
+    `constraints/rows.py::assert_no_national_employment_margin` still enforces it. A metric
+    denominator asserts no identity and enters no constraint system: it rescales an error that was
+    already computed, so §9.3's prohibition is untouched.
+    """
+    return (
+        monthly.filter(pl.col("area_type") == "national")
+        .select("reference_month", pl.col("employment_value").cast(pl.Float64))
+        .rename({"employment_value": "national_employment"})
+    )
+
+
+def _state_share_absolute_error(scored: pl.DataFrame) -> float | None:
+    """§13.6's state-share absolute error: mean |estimate - truth| / national employment.
+
+    PER MONTH, not pooled. The share is of the month the cell belongs to, so a 2017 error and a
+    2024 error are made comparable before they are averaged; dividing the pooled absolute error by
+    a pooled national total instead would weight each month by its own size, which is what `mae`
+    and `wape` already do. Stated because the metric is otherwise easy to read as a rescaled MAE:
+    it is a rescaled MAE only on a window whose national level is constant, and D1's is not.
+
+    A cell whose month carries no national row is EXCLUDED, and an all-excluded set yields None --
+    the module's "Null, never 0.0" rule. Measured 2026-09-11 on `data/staged/qcew_monthly.parquet`,
+    all 96 national rows are `observed` with a non-null `employment_value`, so no cell is dropped
+    on D1; the branch guards a revision, not today's data.
+    """
+    usable = scored.filter(
+        pl.col("national_employment").is_not_null() & (pl.col("national_employment") > 0)
+    )
+    if usable.is_empty():
+        return None
+    errors = (usable["estimate"] - usable["truth"]).abs() / usable["national_employment"]
+    return float(errors.mean())
+
+
+def point_metrics(
+    scores: pl.DataFrame,
+    *,
+    regime: str,
+    seed: int,
+    arm: str,
+    national_totals: pl.DataFrame,
+) -> pl.DataFrame:
     """§13.6's point metrics over the SCORED rows, with the declined rows counted beside them.
 
     The denominator is masked cell-rows; the numerator is rows carrying an estimate. Reporting only
     the numerator is the failure §13.8's closing paragraph names: a method that declines its hard
     months looks better than one that attempts them.
+
+    `national_totals` is REQUIRED rather than defaulted to None (R-S5G-4). §13.6 lists state-share
+    absolute error "at minimum", so an overload that silently emits it as null whenever a caller
+    forgets the argument would reinstate the absence this requirement exists to close -- and it
+    would do so on the artifact, where nothing downstream can tell "no denominator" from "no
+    error". `national_monthly_totals` builds the frame.
     """
     rows: list[dict[str, object]] = []
-    for (estimator,), group in scores.group_by("estimator_id", maintain_order=True):
+    joined = scores.join(national_totals, on="reference_month", how="left")
+    for (estimator,), group in joined.group_by("estimator_id", maintain_order=True):
         scored = group.filter(pl.col("estimate").is_not_null())
         counts = {
             kind: group.filter(pl.col("decline_kind") == kind).height
@@ -109,6 +168,7 @@ def point_metrics(scores: pl.DataFrame, *, regime: str, seed: int, arm: str) -> 
                 if scored.filter(pl.col("truth").abs() > 0).height == scored.height
                 else None
             ),
+            "state_share_absolute_error": _state_share_absolute_error(scored),
         }
         rows.extend({**base, "metric_name": n, "value": values[n]} for n in _POINT_NAMES)
     return pl.DataFrame(rows)

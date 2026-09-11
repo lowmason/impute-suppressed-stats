@@ -43,6 +43,7 @@ from .metrics import (
     bound_metrics,
     constraint_metrics,
     decline_and_basis_report,
+    national_monthly_totals,
     point_metrics,
     probabilistic_metrics,
 )
@@ -167,7 +168,18 @@ def run_pseudo_suppression(
             # scope by, so this is the only place the guarantee can be made. See the function.
             assert_scored_cells_are_primary_like(scored)
             all_scores.append(scored)
-            all_metrics.append(point_metrics(scored, regime=name, seed=seed, arm=arm))
+            all_metrics.append(
+                point_metrics(
+                    scored,
+                    regime=name,
+                    seed=seed,
+                    arm=arm,
+                    # From the MASKED frame: a denominator taken from `data` would have to be
+                    # argued leak-free, and this one has already passed
+                    # `assert_no_retained_truth` three lines above.
+                    national_totals=national_monthly_totals(masked.qcew_monthly),
+                )
+            )
             all_metrics.append(bound_metrics(scored, regime=name, seed=seed, arm=arm))
             all_metrics.append(decline_and_basis_report(scored, regime=name, seed=seed, arm=arm))
             all_metrics.append(probabilistic_metrics(scored, regime=name, seed=seed, arm=arm))

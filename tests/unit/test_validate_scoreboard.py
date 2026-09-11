@@ -29,6 +29,8 @@ def _scores():
         {
             "estimator_id": ["cbp_intensity"] * 2 + ["harvest_proportional"] * 2,
             "cell_id": ["c1", "c2"] * 2,
+            "state_fips": ["06", "41"] * 2,
+            "reference_month": ["2019-03", "2019-03"] * 2,
             "truth": truth * 2,
             "estimate": [110.0, 180.0, None, None],
             "decline_kind": [None, None, "by_design", "by_design"],
@@ -37,11 +39,22 @@ def _scores():
     )
 
 
+def _national():
+    """R-S5G-4's denominator. One month, so every scored cell shares it."""
+    return pl.DataFrame({"reference_month": ["2019-03"], "national_employment": [1000.0]})
+
+
 def _metrics():
     scores = _scores()
     return pl.concat(
         [
-            point_metrics(scores, regime="small_cell_biased", seed=1024, arm="state_total"),
+            point_metrics(
+                scores,
+                regime="small_cell_biased",
+                seed=1024,
+                arm="state_total",
+                national_totals=_national(),
+            ),
             decline_and_basis_report(
                 scores, regime="small_cell_biased", seed=1024, arm="state_total"
             ),
@@ -101,6 +114,8 @@ def _seed_metrics(
     rows: dict[str, list[object]] = {
         "estimator_id": [],
         "cell_id": [],
+        "state_fips": [],
+        "reference_month": [],
         "truth": [],
         "estimate": [],
         "decline_kind": [],
@@ -110,6 +125,8 @@ def _seed_metrics(
         for index in range(n_cells):
             rows["estimator_id"].append(estimator_id)
             rows["cell_id"].append(f"c{index}")
+            rows["state_fips"].append("06")
+            rows["reference_month"].append("2019-03")
             rows["truth"].append(100.0)
             rows["estimate"].append(estimate)
             rows["decline_kind"].append(None if estimate is not None else "by_design")
@@ -117,7 +134,9 @@ def _seed_metrics(
     scores = pl.DataFrame(rows, schema_overrides={"estimate": pl.Float64})
     return pl.concat(
         [
-            point_metrics(scores, regime=regime, seed=seed, arm="state_total"),
+            point_metrics(
+                scores, regime=regime, seed=seed, arm="state_total", national_totals=_national()
+            ),
             decline_and_basis_report(scores, regime=regime, seed=seed, arm="state_total"),
         ],
         how="diagonal",
