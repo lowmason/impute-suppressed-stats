@@ -4,7 +4,24 @@
 
 # Stage 5 gate inputs: §13.10's strata and §9.3's margins
 
-**Status:** NOT STARTED — requirements input for `writing-plans`.
+**Status:** COMPLETE (2026-09-11) — implemented by plan 14
+(`specs/plans/completed/14-stage5-gate-inputs.md`). **R-S5G-2 ruled Option A: §13.10 stands as
+written and is not amended.** Both stratum gates now read
+`validation_metrics.parquet`'s `stratum_kind = 'census_division'` rows — a per-division WAPE and a
+per-division 90% coverage over the nine Census divisions — and §13.6's state-share absolute error
+is emitted. The three `PromotionConfig` keys are recorded inert per key rather than read (R-S5G-3,
+`D-109`); no evaluator is built before the stage that produces the candidate. §13.10's gate remains
+applied over NINE of the thirteen regimes (`D-071`).
+
+**R-S5G-5's measurement refuted §1.2 below, and R-S5G-8 is therefore NOT closed here.** §1.2
+predicted that a disclosed `1133` / `11331` / total-ownership parent would be an EXACT
+reconstruction. Measured across all 32 D1 quarters: those parents are disclosed on **0** of the
+409 suppressed private state-quarters (a 1:1 chain is suppressed together) and `own_code 0` does
+not exist at state x 6-digit — so `REQ-027`/§14.4 has no live instance (`D-110`). What does exist
+is a **bound**: `113` is disclosed on **252 of 409** (756 of the 1,227 months), giving
+`113310 <= 113`. That is routed to `specs/stage5-parent-margin.md` (`D-111`), not absorbed, and
+**Stage 5 MUST NOT consume `deterministic_bounds` as identification-complete until it lands.**
+See `specs/findings/qcew-parent-margins.md`.
 
 **Source:** `docs/reviews/2026-09-11-stage14-revisit.md`, items 1 and 2 of its ranked verdict.
 That document re-measured both 2026-09-09/10 reviews against `d6591b6` and found these the only

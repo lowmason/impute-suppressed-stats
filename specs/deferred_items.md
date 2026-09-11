@@ -1767,8 +1767,15 @@ The rest are backlog by measurement, not by triage convenience: for nearly every
 confirmed and the consequence is unreachable on D1. Where that is so, the `Revisit if:` line names
 the event that makes it reachable rather than a date.
 
-- [ ] `D-091` **§13.10's two "major stratum" gates have no data source, and all three
-      `PromotionConfig` keys are read by nothing.** `validate/metrics.py` emits 18 metric names and
+- [x] `D-091` **§13.10's two "major stratum" gates have no data source, and all three
+      `PromotionConfig` keys are read by nothing.** -> done in plan 14 (R-S5G-1..3).
+      `validate/metrics.py` now emits a per-census-division WAPE and a per-division 90% coverage
+      into `validation_metrics.parquet` (`stratum_kind`/`stratum_value`, closed set
+      `contracts.STRATUM_KINDS`, enforced by `assert_declared_provenance` from
+      `validate/harness.py`), so both gates read a shipped artifact; R-S5G-2 ruled **Option A** and
+      §13.10 stands unamended. The three keys are recorded inert per key with a tripwire test
+      (`D-109`) rather than read, because §13.10's candidate is Stage 5's own output.
+      Original text follows unedited. `validate/metrics.py` emits 18 metric names and
       none is stratified; `grep -rn 'stratum\|strat' src/logging_employment/validate/
       src/logging_employment/config.py` returns three hits, two of them comments and the third the
       config declaration. `minimum_wape_improvement`,
