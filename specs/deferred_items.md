@@ -1823,7 +1823,10 @@ the event that makes it reachable rather than a date.
       this is an unexamined default rather than a recorded decision.
       Size: quick-fix. Revisit if: any state cell gets a finite bound -- MILP ran on 0 of 4,775 rows
       on D1 (`milp_lower`/`milp_upper` null everywhere) because `_needs_milp` skips a cell whose
-      `upper` is None, so this cannot fire until `D-092` changes that.
+      `upper` is None. **`D-092` measured one 2026-09-11**: a disclosed `113` parent bounds 756 of
+      the 1,227 suppressed cells above, so this fires the moment `D-111`
+      (`specs/stage5-parent-margin.md` R-PM-6) builds that bound into the constraint system. It is
+      cited there as scope rather than left to be rediscovered.
 
 - [ ] `D-094` **Harmonized `snapshot_id` is the raw file's filename stem, so the §7.2 join key
       resolves to nothing.** `build.py` passes `snapshot_id=path.stem` at all three parser calls
@@ -2037,3 +2040,29 @@ the event that makes it reachable rather than a date.
       Size: quick-fix. Done when: Stage 5's promotion record reads all three —
       `tests/unit/test_config_validation_block.py::test_the_promotion_keys_are_still_unread_and_the_docstring_still_says_so`
       reddens on that day and names the keys that moved.
+
+- [ ] `D-110` **`exact_reconstruction_flag` has no live instance, and the §9.3 measurement did not
+      create one.** R-S5G-5 measured the parent-industry and ownership margins across all 32 D1
+      quarters for `113`, `1133`, `11331` and total ownership at `113310`. No suppressed private
+      state-quarter is exactly reconstructed: `1133` and `11331` are disclosed on **0 of 409**
+      (a 1:1 chain is suppressed together, which is what makes it publishable), `own_code 0` does
+      not exist at state x 6-digit, and **0** of the 3 `'-'` true-zero `113` rows falls on a
+      suppressed quarter. The pattern is in `specs/findings/qcew-parent-margins.md`. `REQ-027`'s
+      §14.4 route therefore stays exercisable only by constructed tests, as Stage 2's stamp already
+      recorded. NOTE this closes the EXACT half only; the bound is `D-111`.
+      Size: quick-fix. Revisit if: a QCEW revision publishes a parent where the child is `N`, or
+      `specs/stage5-parent-margin.md` R-PM-5 finds `113`/`1131`/`1132` jointly disclosed --
+      re-run `scripts/audit/qcew_parent_margins.py`, which re-derives its own 1,572 / 409 baseline
+      and records whether the 2026-09-11 witness still holds.
+
+- [ ] `D-111` **A disclosed `113` parent bounds 252 of the 409 suppressed state-quarters above, and
+      nothing consumes it.** Measured 2026-09-11 (R-S5G-5): 756 of the 1,227 suppressed monthly
+      cells have a finite upper bound available from a published accounting fact, and the shipped
+      `deterministic_bounds.parquet` carries `+inf` on all of them. The bound is tight -- on the
+      3,069 month-observations where both are disclosed, `113310 / 113` has median 0.916 -- so this
+      is an identification result, not a curiosity. Routed to `specs/stage5-parent-margin.md`
+      (R-PM-1..8): registry rows, new cell kinds and a `size_margin_rows`-shaped builder, §13.2
+      step-4 parent masking in `validate/recover.py` (without which the harness scores a cell it
+      never hid), the unmeasured `1131`/`1132` sibling path, and whether Stage 4's comparand is
+      re-run. **Stage 5's roadmap `Consumes` blocks on this.**
+      Size: plan. Done when: `specs/stage5-parent-margin.md` §4's five conditions hold.

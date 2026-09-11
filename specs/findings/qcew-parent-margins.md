@@ -84,6 +84,28 @@ stored extracts: **3** of the 1278 disclosed
 `113310` private is `N`. With 0 intersection the ladder cannot be understating, so
 `exact = 0` is the measured answer.
 
+## How tight is the bound?
+
+A finite upper bound that sits far above the truth is worth little; one that sits just above it is
+most of an estimate. Unanswerable on a suppressed cell by definition, so measured on the
+state-quarters where `113310` and `113` are **both** disclosed, over all three monthly columns
+(3,069 month-observations):
+
+| `113310 / 113` | |
+|---|---|
+| median | **0.916** |
+| 5th percentile | 0.659 |
+| 95th percentile | 1.000 |
+| share at or above 0.5 | 97.8% |
+
+**The bound is tight.** The median suppressed cell's upper bound would sit about
+9% above its true value, against the `+inf` it carries today. This is
+the number that makes the routing in `specs/stage5-parent-margin.md` worth a stage rather than a
+footnote: `[0, 113]` with `113310` typically at 92% of `113` is a different
+estimation problem from `[0, +inf)`. It is measured on DISCLOSED pairs and is therefore a
+description of the published joint distribution, not a promise about the suppressed cells --
+suppression is not random, and small cells are exactly the ones suppressed.
+
 **Re-check this on any re-run.** If a revision ever puts a `'-'` `113` row on a suppressed
 quarter, `identification` needs a true-zero rung above `UPPER_BOUND` before its tally can be
 trusted.
