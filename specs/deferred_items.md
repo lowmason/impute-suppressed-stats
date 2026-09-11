@@ -1781,8 +1781,16 @@ the event that makes it reachable rather than a date.
       90% coverage are computable, or §13.10 is amended and the three keys are read or recorded
       inert beside `D-064`'s four.
 
-- [ ] `D-092` **§9.3's parent-industry, ownership and region margins were never fetched, declined
-      or measured, and the engine bounds no state cell.** Measured: `deterministic_bounds.parquet`
+- [x] `D-092` **§9.3's parent-industry, ownership and region margins were never fetched, declined
+      or measured, and the engine bounds no state cell.** -> MEASURED in plan 14 (R-S5G-5..8).
+      **The exact-reconstruction premise below is FALSIFIED and the conclusion is a BOUND, not an
+      exact case:** `1133` and `11331` are disclosed on 0 of the 409 suppressed state-quarters (a
+      1:1 chain is suppressed together), `own_code 0` does not exist at state x 6-digit, and no
+      disclosed `113` parent on a suppressed quarter is a `'-'` true zero -- so `exact` is 0 by
+      measurement. `113` is disclosed on **252 of 409** (756 months), bounding `113310` above.
+      Recorded in the Stage 5 roadmap `Consumes`, `specs/findings/qcew-parent-margins.md` and
+      `specs/findings/stage-5-log.md`; the bound is routed to `specs/stage5-parent-margin.md`
+      (`D-111`) rather than absorbed. Original text follows unedited. Measured: `deterministic_bounds.parquet`
       is 1,227 `unbounded` with `selected_upper` null on all 1,227, 3,534 `observed`, 14
       `partially_identified` (national size classes only). Independently re-derived from raw bytes:
       `agglvl 58`, `own 5`, excluding `area_fips 72000` gives 1,572 quarter-rows of which 409 carry
