@@ -41,8 +41,8 @@ per-cell half) instead of the check being skipped when its input is absent. `val
 command list — five of §16.1's fifteen do not exist yet (`fit-state-model`, `fit-size-model`,
 `disclosure-review`, `publish`, `run-all`).
 
-Markers are declared but never applied by `addopts`: `slow` is on one unit test and four
-integration modules and nothing excludes it (pass `-m "not slow"` yourself), and `network` is
+Markers are declared but never applied by `addopts`: `slow` is on one unit test and FIVE
+integration modules (measured 2026-09-10: six `mark.slow` sites) and nothing excludes it (pass `-m "not slow"` yourself), and `network` is
 declared — its help text even says "excluded from the default run" — but no test carries it.
 
 ## Architecture
@@ -78,9 +78,10 @@ synthetic masks. Outputs land in `runs/<run_id>/` beside one JSON manifest per c
 - **Run ids are derived, not stamped.** `runs.run_id` = sha256 of `{config: resolved_dict(cfg),
   inputs: {stem: sha256}}`, truncated to 12, over `data/staged/*.parquet` (`runs.py::run_id`,
   `cli.py::_input_digests`); optional keys are *omitted*, never null, so they do not re-id existing runs. The
-  id therefore covers config + input data but **not source code** — which is why every manifest
-  also carries `code_commit` and `uv_lock_sha256` from `runs.code_provenance` (plan 13, R-S5P-5),
-  written through the single `cli.py::_write_manifest`. Those sit BESIDE the id, never inside it:
+  id therefore covers config + input data but **not source code** — which is why every JSON RUN
+  manifest also carries `code_commit` and `uv_lock_sha256` from `runs.code_provenance` (plan 13, R-S5P-5),
+  written through the single `cli.py::_write_manifest`. (`runs/source_manifest.parquet`
+  carries neither — `fetching.write_source_manifest` does not go through that writer.) Those sit BESIDE the id, never inside it:
   hashing the commit in would rename every run directory on every commit. `code_provenance`
   records, never raises — `"unknown"` when unanswerable — and marks a dirty tree `<sha>-dirty`,
   because a bare sha from a dirty worktree is a false "this run matches that commit".
@@ -145,8 +146,10 @@ synthetic masks. Outputs land in `runs/<run_id>/` beside one JSON manifest per c
   UP047) that all live in `scripts/`. `interrogate src` is `fail-under = 100` and now **passes at
   100%** — the four long-standing misses got docstrings in that same commit, so a failure there is
   yours.
-- **Adding a pydantic field to `Config` re-ids every run directory**: `resolved_dict` is
-  `model_dump(mode="json")` and feeds `run_id`. For a CLI-only choice use `run_id`'s `overrides`,
+- **Adding a pydantic field to `Config` re-ids every run directory UNLESS it is excluded from the
+  dump**: `resolved_dict` is `model_dump(mode="json")` and feeds `run_id`. Plan 13 added seven
+  fields to `SourcesConfig` and moved no id, because each is `Field(default=None, exclude=True)`
+  and so reaches no dump — that is the second remedy, for a key nothing outside `config.py` reads. For a CLI-only choice use `run_id`'s `overrides`,
   omitting the key when unset (`runs.py` docstring), so existing runs keep their id.
 - **A run directory can be stale w.r.t. your code.** `run_id` ignores source, so editing an
   estimator and re-running overwrites the same `runs/<id>/`. The one cross-stage check that does

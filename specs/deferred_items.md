@@ -62,7 +62,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       is cited, and both `src/` sites now say so. (2) The item's "Touches
       `scripts/audit/qcew_codes.py`" understated the blast radius by an order of magnitude: four
       live prose sites, two generated artifacts, six `vintage_for_year` call sites and
-      `config.py:151`. Two follow-ons are recorded under the /deferred triage section at the end
+      `config.py::BaselinesConfig.historical_may_cross_naics_vintage`. Two follow-ons are recorded under the /deferred triage section at the end
       of this file.
       SEARCH SCOPE, so a re-check knows what was covered: bls.gov only, read through the live
       browser DOM. `curl` is WAF-blocked on www.bls.gov (HTTP 403) and a WebSearch snippet drifted
@@ -331,7 +331,7 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       narrowed accordingly.
       *Its premise is false:* there is no production bulk path to be under-exercised.
       `read_bulk_zip` has zero callers in `src/`, and `fetch_source`'s bulk arm
-      (`fetching.py:117-118`) is structurally dead for **every** input, not merely at today's
+      (the `qcew.bulk_url` branch of `fetching.py::fetch_source`) is structurally dead for **every** input, not merely at today's
       boundary — `probe_slice_boundary` draws from `range(min(window_years) - 5,
       min(window_years) + 1)` and returns its earliest served element, so
       `boundary <= min(window_years) <= y` always and `route_for_year` returns `"slice"` for every
@@ -598,7 +598,7 @@ now; each is unreachable at Stage 2's scale or coefficients, and each names what
       stronger than the option this item asked for. Plan 11's harness never builds an
       `EstimatorContext` or a `Partition` at all: `validate/mask.py::apply_mask` masks the FRAME
       and returns a new `HarmonizedData`, and `run_baselines` derives both the partition and the
-      anchor from that single object (`baselines/runner.py:110-119`). There is no second object to
+      anchor from that single object (`baselines/runner.py::run_baselines`). There is no second object to
       disagree with, so the mismatch is unconstructible rather than merely checked. Plan 11's
       evidence §3 measured why the alternative fails: a Partition-only mask leaves the constraint
       system fixing the answer (`bound_status='observed'`, an `eq` row at the held-out value) AND
@@ -745,11 +745,11 @@ Raised during plan 7's recon and its adversarial verification pass. None is test
 which is why none was folded into the batch. See specs/plans/completed/7-p3-test-coverage.md.
 
 - [ ] `D-049` **The QCEW bulk route has no build-side consumer, and its fetch arm is unreachable.**
-      `fetch_source` can acquire and store a bulk zip (`src/logging_employment/fetching.py:117-121`),
+      `fetch_source` can acquire and store a bulk zip (`fetching.py::fetch_source`'s bulk arm),
       but `build_harmonized` reads only `*.csv` through `read_slice_csv` (`build.py:174-183`) and
       `read_bulk_zip` has no caller in `src/` at all. The arm is unreachable for **any** probe
       outcome, not merely at today's measured boundary: `probe_slice_boundary` draws candidates from
-      `range(min(window_years) - 5, min(window_years) + 1)` (`fetching.py:106`) and returns the
+      `range(min(window_years) - 5, min(window_years) + 1)` (`ingest/qcew.py::probe_slice_boundary`) and returns the
       earliest served one, so `boundary <= min(window_years) <= y` for every window year and
       `route_for_year` returns `"slice"` unconditionally. Were it reachable, three defects would be
       live, all measured: without a run manifest a bulk-routed year is silently dropped from
@@ -916,7 +916,14 @@ which is why none was folded into the batch. See specs/plans/completed/7-p3-test
       plan 9's addition of the required `kind=` argument at that file's `Decline(` sites. The
       substance is unchanged — all five still carry the raw, undated count, and none acquired
       either resolution — so the item stays open with five decisions outstanding.
-      Size: design. Done when: each of the five sites carries either a run-time-derived share or an explicitly dated measured-on-D1 marker -- five decisions, not one rule.
+      **Inventory grew 2026-09-10 (plan 13): it is no longer five.** That branch added raw,
+      undated `1,227` claims at `baselines/runner.py::state_total_bounds` and in
+      `tests/unit/test_baselines_bounds.py`'s module docstring, of exactly the shape this item
+      governs. (One further site, that module's `test_the_d1_shape_...` docstring, now carries an
+      explicit `runs/f03023ac9f3a` measurement and already meets the condition.) Counting the
+      sites is part of the work, not a precondition for it.
+      Size: design. Done when: every live site carries either a run-time-derived share or an
+      explicitly dated measured-on-D1 marker -- one decision per site, not one rule.
 
 
 ## unregistered-work audit — 2026-09-07
@@ -942,13 +949,13 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       §16.1 says "Every command MUST write a machine-readable manifest and MUST be idempotent for
       the same inputs", and the roadmap's Stage 1 Produces line names all four Stage 1 commands as
       "each writing a machine-readable manifest". Two of the four write nothing: `validate_config`
-      (`cli.py:28-38`) is `load_config` plus one `typer.echo`; `registry_verify` (`cli.py:45-59`)
+      (`cli.py::validate_config`) is `load_config` plus one `typer.echo`; `registry_verify` (`cli.py::registry_verify`)
       is `load_registry`/`verify` plus echoes and an exit code. Neither touches the filesystem.
       `fetch` and `build-harmonized` both fold rows into `source_manifest.parquet`. This is not a
       future stage: Stage 1 is ticked COMPLETE (2026-09-05, plan 2), plan 2 records no deviation or
       exemption for these two commands, and the repo's own reading of the MUST already convicted
       the same shape elsewhere — `specs/findings/stage3-plan-audit.md` lists "`reconcile` wrote no
-      manifest, against §16.1's MUST" as a confirmed-and-fixed defect, and `cli.py:361` now quotes
+      manifest, against §16.1's MUST" as a confirmed-and-fixed defect, and `cli.py::reconcile_command` now quotes
       the sentence verbatim as the justification. Needs either two small writers or an explicitly
       recorded exemption for read-only check commands — but the roadmap's "each" forecloses
       assuming the latter. Related and deliberately excluded: `solve-bounds` also wrote no
@@ -979,8 +986,8 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       nowhere.** `build.py:17` defines `BUILDER_VERSION = "build_harmonized/1"` and nothing in
       `src/`, `tests/` or `scripts/` references it. The three parser versions beside it
       (`qcew.PARSER_VERSION`, `qcew_size.PARSER_VERSION`, `cbp.PARSER_VERSION`) are all stamped
-      into `source_snapshot` rows via `fetching.py:132,153,183`, so the omission is specific to the
-      builder. `build_harmonized_command` (`cli.py:77-92`) computes output hashes and only echoes
+      into `source_snapshot` rows via `fetching.py::fetch_source`'s three `snapshot_row(...)` calls, so the omission is specific to the
+      builder. `build_harmonized_command` (`cli.py::build_harmonized_command`) computes output hashes and only echoes
       them. Distinct from the item above: that one is about two commands writing nothing at all,
       this one is about a version constant that exists for stamping and stamps nothing.
       Size: plan. Done when: `build-harmonized` writes a machine-readable manifest that stamps `BUILDER_VERSION` alongside its output hashes.
@@ -991,7 +998,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       crosswalk, falling through to the response's `EMPSZES_LABEL` column — and its docstring
       insists "The second is a different metadata route, not a fallback to hard-coded values."
       Nothing in `src/` calls it, and `EMPSZES_URL` (`cbp.py:21`) is referenced nowhere at all;
-      `fetching.py:161-172` fetches `VARIABLES_URL` and `CBP_URL` only. `parse_cbp_state_size`
+      `fetching.py::fetch_source`'s CBP arm fetches `VARIABLES_URL` and `CBP_URL` only. `parse_cbp_state_size`
       reads `frame["EMPSZES_LABEL"]` directly (`cbp.py:243`), so a run only ever exercises the
       second route, and the official 44-code 2017 crosswalk Stage 0 measured — shipped as
       `tests/fixtures/cbp/empszes_2017.json` — is never consulted. Same dead-but-declared shape as
@@ -1054,17 +1061,17 @@ access. Live roadmap stages remain out of scope per this file's header rule.
 
 - [ ] `D-064` **Four config keys govern nothing, and none is recorded as inert.** The repo's convention is
       to write inertness into the code (`matrix.py:3` "NO REAL INPUT UNTIL STAGE 6"; `rows.py:479`
-      "nothing in the D1 run calls this"; `errors.py:84` "Reserved for Stage 7 and deliberately
+      "nothing in the D1 run calls this"; `errors.py::NoHarvestFactorError` "Reserved for Stage 7 and deliberately
       unraised today"). These four carry no such note, and each lands in
       `runs/*/config.resolved.yaml` and folds into the run id, so each is a claim in a run's record
-      that no code backs. (1) `baselines.composite_fallback` (`config.yaml:61`, `config.py:148`) —
+      that no code backs. (1) `baselines.composite_fallback` (`config.yaml:61`, `config.py::BaselinesConfig`) —
       `fallback.py:158 declared_fallback` always builds via `establishment_fallback`, so the key
       selects nothing; its sibling `allow_declared_composite` IS read, which makes the asymmetry a
       slip rather than a convention. This is plan-9-era code that merged after the 2026-09-06
       triage and has never been triaged. (2) `storage.immutable_raw` (`config.py:63`) —
       `store.py`'s `RawStore` gets immutability from content-addressing alone and never consults
       the flag; setting it false changes nothing. (3) `reconciliation.max_projection_iterations`
-      (`config.py:130`) — unwired because its only consumers would be `kl_project` and
+      (`config.py::ReconciliationConfig`) — unwired because its only consumers would be `kl_project` and
       `reconcile_matrix`, neither called from `src/`; both siblings ARE wired via `draws.py:91,94`.
       (4) `project.analysis_mode`'s `realtime_asof` (`config.py:37`) — validates, changes the run
       id, and every stage behaves as if `retrospective_final` were set. Stage 9 owns the *mode* as
@@ -1079,7 +1086,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       applied zero times — and `addopts` (`pyproject.toml:71`) contains no `-m 'not network'`, so
       nothing would deselect it if one did. There is no `.github/` and no workflow file in the
       repo, so "the default run" is a bare `pytest` that excludes nothing. The `slow` marker beside
-      it is applied at three sites and likewise not deselected, so `tests/integration/
+      it is applied at six sites (re-measured 2026-09-10; the item said three) and likewise not deselected, so `tests/integration/
       test_d1_acceptance.py` and `test_d1_baselines.py` run by default whenever `data/staged/` is
       populated. Needs a ruling on whether the marker is aspirational (delete it) or load-bearing
       (apply it and wire the deselection), and a separate one on whether this repo wants CI.
@@ -1124,7 +1131,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       "Concept guards that halt a run before a statistical unit is silently relabeled", describing
       behaviour no run can currently exhibit, and the roadmap's Stage 1 lists INV-010 and
       "SRC-OTH-001/004 (guards)" under "Gap closed", which reads as wired. Compare
-      `errors.py:81-89`'s `NoHarvestFactorError` — same Stage-7 shape, carries the note, and is
+      `errors.py::NoHarvestFactorError` — same Stage-7 shape, carries the note, and is
       recorded at `:600`. One-line docstring fix, filed so it is not re-found as a live defect.
       **→ done 2026-09-07 (/deferred quick fix).** `harmonize/concepts.py`'s module docstring now
       states that neither guard is called today and that this is correct rather than a gap: both
@@ -1529,7 +1536,7 @@ that was skipped — work the close itself uncovered.
       the rule's tail. LATENT, not live — but **CORRECTED 2026-09-08: the reason first recorded
       here was wrong.** This used to read "`constants.py:5` pins `WINDOW_START = "2017-01"`, so no
       current input reaches the wrong branch". `WINDOW_START` is never consulted on the fetch or
-      build path — it appears in `src/` only at its own definition, and `fetching.py:98` builds
+      build path — it appears in `src/` only at its own definition, and `fetching.py::write_source_manifest` builds
       its years from `cfg.project.start_month`, which `ProjectConfig` validates for `YYYY-MM` shape
       only. The gate is a `config.yaml` value, not a code constant, so the defect was one YAML edit
       from live rather than one code change away. Note the emitted strings for 2017-2024 must not
@@ -1681,10 +1688,26 @@ work the plan's changes either created, confirmed, or deliberately scoped out.
       were solved from a system containing the truth the harness scores against, and clipping to
       them would leak that truth into the estimates — §13.4 `LeakageError` territory. The
       consequence is that a harness estimate CAN sit outside its cell's deterministic interval
-      with nothing noticing, which is exactly the condition INV-002 exists to refuse. Closing it
-      needs bounds re-solved under the mask, which is a Stage 6 job, not a parameter change.
-      Size: design. Done when: the harness scores against bounds re-solved from the MASKED system,
-      and `run_baselines` is called with them.
+      with nothing noticing, which is exactly the condition INV-002 exists to refuse.
+      **CORRECTED 2026-09-10, before any work started: this item's original premise was false.**
+      It said closing this "needs bounds re-solved under the mask, which is a Stage 6 job, not a
+      parameter change". The re-solve already exists: `validate/harness.py:160` calls
+      `recover.mask_and_solve`, which rebuilds the constraint system from the MASKED frame and
+      solves it, returning `MaskedSystem.bounds` — one line before the `run_baselines` call on
+      :161. So masked, non-leaking bounds are already in hand at the call site, and wiring them in
+      is a small change, not a stage.
+      What is actually unresolved is what an out-of-interval estimate should MEAN here.
+      `assert_within_bounds` RAISES (it does not clip — it never modifies a value), and raising
+      aborts an entire validation run because one estimator missed one interval on one replicate,
+      which is the opposite of what a scoreboard is for. The real options are: score the violation
+      as an outcome (a column or a metric), refuse only the offending estimator-month, or keep
+      today's silence and say so. Also still true: the RUN DIRECTORY's
+      `deterministic_bounds.parquet` must NOT be used here, because its intervals were solved with
+      the truth this harness hid still in the system, so the check's verdict would depend on that
+      truth.
+      Size: design. Done when: a ruling records what an out-of-interval harness estimate does, and
+      `run_baselines` is called with `MaskedSystem.bounds` (never the run directory's) if the
+      ruling says to check at all.
 
 - [ ] `D-088` **Five test modules still spell out their own `STAGED` + skipif inline.** Plan 13
       Task 2 (R-S5P-2) put `STAGED` and `requires_staged` in `tests/conftest.py` and applied them
@@ -1693,8 +1716,13 @@ work the plan's changes either created, confirmed, or deliberately scoped out.
       `test_d1_baselines.py`, `test_d1_validation.py`, `test_validate_cli.py` and
       `test_stage4_acceptance.py`. So the suite now has two spellings of one predicate, and the
       conftest's own comment says so. Not a defect — those five skip correctly today — but the
-      inline copies use `Path("data/staged")`, which is cwd-relative and silently requires pytest
-      to be invoked from the repo root, where the shared constant is absolute.
+      inline copies each re-derive their own absolute `STAGED` from `__file__` via a module-level
+      `REPO`. **CORRECTED 2026-09-10: an earlier draft of this item said they use a cwd-relative
+      `Path("data/staged")`. They do not** — measured, four of the five spell
+      `STAGED = REPO / "data" / "staged"` and the fifth (`test_validate_cli.py`) defines no
+      `STAGED` at all. The cwd-relative spelling belonged to the NINE modules plan 13 already
+      converted, and attributing it here inflated the defect. What is actually left is duplication:
+      two spellings of one predicate, which is a tidying, not a correctness fix.
       Size: quick-fix. Done when: the five import `STAGED` / `requires_staged` from
       `tests.conftest` and the conftest comment listing them is deleted.
 

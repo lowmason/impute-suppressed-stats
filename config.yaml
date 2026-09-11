@@ -1,15 +1,18 @@
 # Stage 1 configuration. The project and sources blocks are copied byte-for-byte from
-# Appendix A of specs/logging-employment-spec.md (its lines 2022-2032 and 2040-2049),
-# extracted with sed rather than retyped; `storage:` is Appendix A's four keys (its lines
-# 2034-2038) plus the originated `constraints_uri` (see StorageConfig).
+# `## Appendix A` of specs/logging-employment-spec.md, extracted with sed rather than retyped;
+# `storage:` is Appendix A's four keys plus the originated `constraints_uri` (see StorageConfig).
+# Cited by heading, not by line: the pins here read 2022-2049 until 2026-09-10, by which point the
+# spec had grown and Appendix A had moved to :2173 — so they pointed into §20's rollout table.
 # Appendix A's other source entries (tpo, fia, ces, susb, bds, nonemployer, bea) are
 # omitted here, but as of R-S5P-6 they are no longer REJECTED: `SourcesConfig` declares all
 # seven as optional `InactiveSourceConfig` fields, so Appendix A's own `sources:` block now
 # loads. They stay out of this file because declaring `enabled: false` on a source with no
 # ingest module adds nothing a reader can act on -- and because every one of the seven is
 # `exclude=True`, writing them in here would not move `run_id` either way. Appendix A's
-# model/validation/promotion blocks ARE still omitted: `Config` has no `model:` field (adding
-# one would re-id every run directory) and defaults the other two. The constraints/reconciliation/
+# `model:` block IS still omitted, because `Config` has no field for it and adding one would
+# re-id every run directory. Its `validation:` and `promotion:` blocks are NOT omitted — both are
+# present below and pin every key (a 2026-09-10 correction; this comment claimed all three were
+# absent, which was already untrue when Stage 4 added them). The constraints/reconciliation/
 # disclosure blocks are present; `reconciliation:` additionally carries five numerical
 # keys Appendix A does not specify (see ReconciliationConfig).
 project:

@@ -2,8 +2,8 @@
 
 The adding-up half has been enforced since Stage 3. The bounds half was not: nothing in
 `baselines/` read `deterministic_bounds`, so an estimate above a solved upper bound shipped as
-`anchored_and_reconciled`. On D1 that is harmless -- `selected_upper` is null on 1,227 of 1,241
-suppressed state cells, so no bound can bind -- and the two halves of this module are exactly
+`anchored_and_reconciled`. On D1 that is harmless -- ALL 1,227 suppressed state cells are
+`unbounded` with a null `selected_upper`, so no bound can bind -- and the two halves are exactly
 that pair: the first cell that CAN violate must halt the run, and the D1 shape must be
 bit-for-bit unchanged.
 
@@ -95,7 +95,15 @@ def test_an_estimate_above_its_solved_upper_bound_halts_the_run(
 def test_the_d1_shape_of_every_upper_null_changes_nothing(
     harmonized_toy, appendix_a_config
 ) -> None:
-    """1,227 of 1,241 suppressed state cells are `unbounded`, so the gate must be a no-op there."""
+    """All 1,227 suppressed state cells are `unbounded` on D1, so the gate must be a no-op there.
+
+    The denominator matters and an earlier draft got it wrong. 1,241 is D1's count of UNKNOWN
+    cells across BOTH kinds -- 1,227 `state_total` plus 14 `national_size` -- so "1,227 of 1,241
+    suppressed state cells" implied 14 suppressed state cells with a finite upper, which would
+    mean a bound COULD bind and contradicts the very point being made. Measured from
+    `runs/f03023ac9f3a/deterministic_bounds.parquet`: 4,716 `state_total|` rows, of which exactly
+    1,227 are `unbounded` and 1,227 have a null `selected_upper`.
+    """
     unchecked, unchecked_audit = run_baselines(harmonized_toy, appendix_a_config)
     bounds = Bounds(
         lower=dict.fromkeys(_cell_ids(unchecked), 0.0),

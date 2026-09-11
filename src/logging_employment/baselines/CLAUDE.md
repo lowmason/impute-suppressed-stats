@@ -40,11 +40,12 @@ estimator's considered refusal — never an exception.
    depth, since `national_residual` takes a `Partition` so a caller *can* mask partition-only (the
    unit tests do). R-COMP-8's residual cross-check is what actually fails a mismatch:
    `fallback.py::_assert_the_partition_is_the_anchors`::_assert_the_partition_is_the_anchors`.
-5. **Cite the spec by § number, never by line.** Two shipped `spec:NNN` citations have drifted:
-   `interfaces.py` cites `spec:942` for §10.1's "same ... reconciliation layer" sentence, which
-   now sits at spec line 977 (942 is a bare code fence); `historical.py` cites `spec:968-972` for
-   §10.3's five variants, which now sit at 1003-1007 (968 is a `bound_status` bullet). Do not trust
-   either number, and do not add more.
+5. **Cite the spec by § number, never by line.** This package now carries ZERO `spec:NNN`
+   citations — `grep -rn 'spec:' src/logging_employment/baselines/` matches only this file. The two
+   that prompted the rule (`interfaces.py` at `spec:942`, `historical.py` at `spec:968-972`) had
+   both drifted onto unrelated text and were removed in `c7200a5`; the rule is kept because the
+   hazard is re-importing a line pin from plan prose, not finding one in place. A line number is an
+   unchecked offset into a mutable file, and no test catches it when it rots.
 6. **A decline is a row, not an absence** (§7.13). `run_baselines` writes one null-estimate row per
    missing cell with `decline_reason` and a `decline_kind` from the closed set
    `contracts.DECLINE_KINDS` (`by_design` / `data_gap` / `reconciliation_failure`). Three call
@@ -72,9 +73,11 @@ optional keyword-only `bounds: Bounds | None`; `runner.state_total_bounds` turns
 `Decline` row, because unlike `WeightDomainError` this is not a data gap. Keyed by the seven-field
 `cell_id`, NOT `state_fips`: `scale_into_bounds` keys the same type by bare state, but that object
 is one month's feasible set while `run_baselines` walks the whole window in one call. Both the
-float and §12.6's integer release are checked. `cli.py` passes bounds; `validate/harness.py`
-deliberately does NOT (it would leak masked truth through the clip — see `validate/CLAUDE.md` and
-`D-087`).
+float and §12.6's integer release are checked, and a violation HALTS — nothing clips, so no
+estimate is ever silently moved into range. `cli.py` passes bounds; `validate/harness.py`
+deliberately does NOT, because halting is the wrong response on a scoring path and because the
+run directory's intervals were solved with the truth the harness hid still in the system (masked
+bounds do exist there — see `validate/CLAUDE.md` and `D-087`).
 
 Consumers outside this package: `validate/harness.py` imports `Estimator` and
 `runner.{REGISTRY, run_baselines}`; `validate/scoreboard.py` imports
@@ -98,9 +101,9 @@ equals `REGISTRY`'s and pins the whole frame against a committed golden parquet.
 ## Commands (repo root)
 
 ```bash
-# 85 passed
+# 92 passed
 uv run pytest tests/unit/test_baseline_interfaces.py tests/unit/test_baselines_*.py
-# 13 passed, 5 skipped — the skips are all test_d1_baselines, which needs data/staged
+# 20 passed with data/staged; 15 passed + 5 skipped without (the 5 are test_d1_baselines)
 uv run pytest tests/integration/test_baseline_golden.py \
     tests/integration/test_baseline_cli.py tests/integration/test_d1_baselines.py
 ```
@@ -114,8 +117,10 @@ so no harvest-origin volume exists and §10.5 refuses a substitute proxy. That i
 expected shape, not a data gap — do not "fix" it.
 
 `logging-estimates run-baselines --config <path>` takes **only** `--config` (the `--estimators`
-subset option lives on `validate`), gates on an existing `runs/<id>/schema_manifest.json` from
-`build-constraints`, and writes `baseline_results/{baseline_results,anchor_audit}.parquet` plus a
+subset option lives on `validate`), gates on TWO existing artifacts —
+`runs/<id>/schema_manifest.json` from `build-constraints` and, since R-S5P-3,
+`runs/<id>/deterministic_bounds.parquet` from `solve-bounds` (INV-002's per-cell half is checked
+rather than skipped when its input is absent) — and writes `baseline_results/{baseline_results,anchor_audit}.parquet` plus a
 sibling `baseline_manifest.json` carrying `preferred_estimator`, `preferred_estimator_by_month`,
 `weight_basis_counts`, `declines` by kind, and each estimator's `fallback_intensity`. Do not run it
 to check a change — it writes into `runs/` under the real config.

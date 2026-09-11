@@ -199,7 +199,7 @@ def render_document(
         f"summaries under `data/raw/audit/`. **Newest `generated_utc` among them:** {newest}.",
         "**Spec:** `specs/logging-employment-spec.md` · "
         "**Roadmap:** `specs/logging-employment-spec-roadmap.md`, Stage 0 · "
-        "**Plan:** `specs/plans/1-stage0-logging-employment-spec.md`",
+        "**Plan:** `specs/plans/completed/1-stage0-logging-employment-spec.md`",
         f"**Window (D1):** {c.WINDOW_START} → {c.WINDOW_END} · "
         f"**Industry:** {c.INDUSTRY_CODE} ({classification['industry_title']}) · "
         "**Ownership:** private · **Geography:** states + D.C.",

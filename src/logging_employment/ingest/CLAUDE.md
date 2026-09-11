@@ -16,7 +16,7 @@ The first-contact trap: both QCEW parsers return every row the file gave them.
   for `assert_no_state_industry_size`. Its output is *all industries*. Measured on
   `tests/fixtures/qcew_size/2017_q1_by_size.zip`: 32,011 rows in → **17,745 out across 2,155
   industries**, of which 113310 is **6** (classes 1–6 only, `own_code` 5, `agglvl` 28). The shipped
-  table is 140,343 rows for the same reason (spec line 2283). Every consumer filters for itself:
+  table is 140,343 rows for the same reason (§17's D1 acceptance witness). Every consumer filters for itself:
   `constraints/system.py::build_constraint_system`, `constraints/compat.py::run_compatibility_gates`, `constraints/cells.py::build_target_cells`,
   `validate/recover.py::mask_and_solve_size`. Add a consumer and you must add the `industry_code` filter.
 - `qcew.parse_qcew_monthly` returns counties, Puerto Rico and every ownership.
@@ -82,8 +82,10 @@ The two QCEW tables do not share a column vocabulary (`size_class` vs `size_code
 | by-size zip does not hold exactly one CSV; boundary probe served no year | `ValueError` | `qcew_size.py::read_by_size_zip`, `qcew.py::probe_slice_boundary` |
 
 `base.HttpFetcher` returns a non-200 rather than raising (project `CLAUDE.md` has the reason);
-`fetching.py` classifies and `continue`s past it, which is why **CBP 2024 is simply absent from
-the store rather than an error**. CBP publishes 2017-2023 — Stage 0's recorded 404, spec line 2270,
+`fetching.py` classifies it. Since R-S5P-4 a non-200 or empty body RAISES `SourceFetchError`
+unless the exact `(source_id, year)` pair is enumerated in `fetching.DECLARED_ABSENCES`, which is
+why **CBP 2024 is absent from the store rather than an error** — it is the one declared entry, and
+an undeclared year answering the same 404 halts the run. CBP publishes 2017-2023 — Stage 0's recorded 404, spec line 2270,
 not a fetch performed for this file.
 
 ## Conventions
