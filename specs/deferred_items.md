@@ -1064,7 +1064,7 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       "nothing in the D1 run calls this"; `errors.py::NoHarvestFactorError` "Reserved for Stage 7 and deliberately
       unraised today"). These four carry no such note, and each lands in
       `runs/*/config.resolved.yaml` and folds into the run id, so each is a claim in a run's record
-      that no code backs. (1) `baselines.composite_fallback` (`config.yaml:61`, `config.py::BaselinesConfig`) —
+      that no code backs. (1) `baselines.composite_fallback` (`config.yaml`'s `baselines:` block, `config.py::BaselinesConfig`) —
       `fallback.py:158 declared_fallback` always builds via `establishment_fallback`, so the key
       selects nothing; its sibling `allow_declared_composite` IS read, which makes the asymmetry a
       slip rather than a convention. This is plan-9-era code that merged after the 2026-09-06
@@ -1536,7 +1536,7 @@ that was skipped — work the close itself uncovered.
       the rule's tail. LATENT, not live — but **CORRECTED 2026-09-08: the reason first recorded
       here was wrong.** This used to read "`constants.py:5` pins `WINDOW_START = "2017-01"`, so no
       current input reaches the wrong branch". `WINDOW_START` is never consulted on the fetch or
-      build path — it appears in `src/` only at its own definition, and `fetching.py::write_source_manifest` builds
+      build path — it appears in `src/` only at its own definition, and `fetching.py::fetch_source` builds
       its years from `cfg.project.start_month`, which `ProjectConfig` validates for `YYYY-MM` shape
       only. The gate is a `config.yaml` value, not a code constant, so the defect was one YAML edit
       from live rather than one code change away. Note the emitted strings for 2017-2024 must not
@@ -1717,11 +1717,14 @@ work the plan's changes either created, confirmed, or deliberately scoped out.
       `test_stage4_acceptance.py`. So the suite now has two spellings of one predicate, and the
       conftest's own comment says so. Not a defect — those five skip correctly today — but the
       inline copies each re-derive their own absolute `STAGED` from `__file__` via a module-level
-      `REPO`. **CORRECTED 2026-09-10: an earlier draft of this item said they use a cwd-relative
-      `Path("data/staged")`. They do not** — measured, four of the five spell
-      `STAGED = REPO / "data" / "staged"` and the fifth (`test_validate_cli.py`) defines no
-      `STAGED` at all. The cwd-relative spelling belonged to the NINE modules plan 13 already
-      converted, and attributing it here inflated the defect. What is actually left is duplication:
+      `REPO`. **CORRECTED TWICE, 2026-09-10 and 2026-09-11.** The first draft said they use a
+      cwd-relative `Path("data/staged")`; they do not. The second said "four of the five" did and
+      that `test_validate_cli.py` defines no `STAGED`; that was wrong too, and wrong in the way this
+      repo keeps getting caught by — the check grepped `tests/unit/test_validate_cli.py`, which does
+      not exist (the file is under `tests/integration/`), returned nothing, and the empty result was
+      written up as a measurement. **ALL FIVE** spell `STAGED = REPO / "data" / "staged"`
+      (`test_validate_cli.py:30-31`, used in its own `pytestmark` skipif). The cwd-relative spelling
+      belonged to the NINE modules plan 13 already converted. What is actually left is duplication:
       two spellings of one predicate, which is a tidying, not a correctness fix.
       Size: quick-fix. Done when: the five import `STAGED` / `requires_staged` from
       `tests.conftest` and the conftest comment listing them is deleted.
