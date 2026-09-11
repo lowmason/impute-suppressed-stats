@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -29,3 +31,26 @@ def test_promotion_gates_carry_appendix_a_defaults():
     assert p.minimum_wape_improvement == 0.05
     assert p.maximum_major_stratum_wape_degradation == 0.02
     assert p.nominal_coverage_tolerance == 0.05
+
+
+def test_the_promotion_keys_are_still_unread_and_the_docstring_still_says_so():
+    """R-S5G-3: a TRIPWIRE, not a prohibition. It fails when Stage 5 wires these keys.
+
+    `PromotionConfig`'s docstring records all three as inert. A docstring cannot notice when it
+    stops being true, and the failure mode is specific: the day a promotion path reads one of
+    these, the note becomes a false statement in the file a reader consults first. Derived by
+    searching `src/` rather than asserting a sentence exists, so it tracks the code and not the
+    prose. When it reddens, the fix is to update the docstring — not to delete this test.
+    """
+    src = Path(__file__).resolve().parents[2] / "src" / "logging_employment"
+    for key in (
+        "minimum_wape_improvement",
+        "maximum_major_stratum_wape_degradation",
+        "nominal_coverage_tolerance",
+    ):
+        readers = [
+            path.relative_to(src).as_posix()
+            for path in src.rglob("*.py")
+            if key in path.read_text() and path.name != "config.py"
+        ]
+        assert readers == [], f"{key} is now read by {readers}; update PromotionConfig's docstring"

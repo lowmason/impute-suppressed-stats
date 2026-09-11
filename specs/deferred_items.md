@@ -2020,3 +2020,13 @@ the event that makes it reachable rather than a date.
       (the §12.5 arm is reached only from tests), so no shipped number is affected. Note `D-041`
       owns the neighbouring dead `general_method` guard and Stage 6's `Consumes` owns the missing
       bounds parameter; this is the third, separate defect in the same function.
+
+- [ ] `D-109` **`PromotionConfig`'s three keys are recorded inert rather than read.** R-S5G-3 ruled
+      2026-09-11 that no §13.10 evaluator is built before Stage 5 exists: `minimum_wape_improvement`
+      needs a second `validation_scoreboard.parquet` and there is one,
+      and `maximum_major_stratum_wape_degradation` / `nominal_coverage_tolerance` have their input
+      as of R-S5G-1 but no candidate to evaluate. All three fold into `runs.run_id` via
+      `resolved_dict`, so this is `D-064`'s shape with a recorded reason rather than silence.
+      Size: quick-fix. Done when: Stage 5's promotion record reads all three —
+      `tests/unit/test_config_validation_block.py::test_the_promotion_keys_are_still_unread_and_the_docstring_still_says_so`
+      reddens on that day and names the keys that moved.

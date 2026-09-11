@@ -280,7 +280,31 @@ class ValidationConfig(_Strict):
 
 
 class PromotionConfig(_Strict):
-    """§13.10's gates. Configurable engineering thresholds, not findings."""
+    """§13.10's gates. Configurable engineering thresholds, not findings.
+
+    ALL THREE KEYS ARE INERT TODAY, and this note is the record R-S5G-3 requires rather than a
+    disclaimer. Each reaches `config.resolved.yaml` and folds into `runs.run_id`, so an unread key
+    is a claim in a run's record that no code backs -- the defect `D-064` names for four other
+    keys. The convention there is to write inertness into the code (`constraints/matrix.py`'s "NO
+    REAL INPUT UNTIL STAGE 6", `errors.py::NoHarvestFactorError`), which is what this is.
+
+    They are inert for TWO different reasons, and the distinction is the useful half:
+
+    - `maximum_major_stratum_wape_degradation` and `nominal_coverage_tolerance` have their INPUT as
+      of R-S5G-1. `validate/metrics.py` now emits a per-census-division WAPE and a per-division
+      90% coverage into `validation_metrics.parquet`, so both gates are evaluable from a shipped
+      artifact. What is missing is the CANDIDATE to evaluate: §13.10 compares a model against the
+      preferred transparent baseline and Stage 5 produces the model.
+    - `minimum_wape_improvement` is missing both. Its comparison needs a second scoreboard, and
+      `validation_scoreboard.parquet` exists in one copy -- the baseline one.
+
+    NO EVALUATOR IS BUILT HERE, deliberately. A function whose primary argument is Stage 5's
+    not-yet-designed output would fix that signature by guessing it, and three of §13.10's six
+    gates (hard constraints on draws, convergence diagnostics, disclosure review) are Stage-5 and
+    Stage-8 concepts an evaluator written now could not represent at all. Stage 5 wires these;
+    `tests/unit/test_config_validation_block.py` fails the day it does, so this docstring cannot
+    quietly outlive its truth.
+    """
 
     minimum_wape_improvement: float = 0.05
     maximum_major_stratum_wape_degradation: float = 0.02
