@@ -16,7 +16,7 @@ The first-contact trap: both QCEW parsers return every row the file gave them.
   for `assert_no_state_industry_size`. Its output is *all industries*. Measured on
   `tests/fixtures/qcew_size/2017_q1_by_size.zip`: 32,011 rows in → **17,745 out across 2,155
   industries**, of which 113310 is **6** (classes 1–6 only, `own_code` 5, `agglvl` 28). The shipped
-  table is 140,343 rows for the same reason (§17's D1 acceptance witness). Every consumer filters for itself:
+  table is 140,343 rows for the same reason (the §19 Phase 1 acceptance stamp under `## Rollout`). Every consumer filters for itself:
   `constraints/system.py::build_constraint_system`, `constraints/compat.py::run_compatibility_gates`, `constraints/cells.py::build_target_cells`,
   `validate/recover.py::mask_and_solve_size`. Add a consumer and you must add the `industry_code` filter.
 - `qcew.parse_qcew_monthly` returns counties, Puerto Rico and every ownership.
