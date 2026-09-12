@@ -4,8 +4,8 @@
 
 # Stage 5 gate inputs: §13.10's strata and §9.3's margins
 
-**Status:** COMPLETE (2026-09-11) — implemented by plan 14
-(`specs/plans/completed/14-stage5-gate-inputs.md`). **R-S5G-2 ruled Option A: §13.10 stands as
+**Status:** COMPLETE (2026-09-12) — implemented by plan 14
+(`specs/plans/completed/14-stage5-gate-inputs.md`). Retired to `specs/completed/`. **R-S5G-2 ruled Option A: §13.10 stands as
 written and is not amended.** Both stratum gates now read
 `validation_metrics.parquet`'s `stratum_kind = 'census_division'` rows — a per-division WAPE and a
 per-division 90% coverage over the nine Census divisions — and §13.6's state-share absolute error

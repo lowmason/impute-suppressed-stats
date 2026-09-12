@@ -1766,7 +1766,7 @@ work the plan's changes either created, confirmed, or deliberately scoped out.
 `d6591b6` and audited the Stage 1-4 deliverables blind against the spec. Everything below is live
 at that commit, sits in a ticked stage's own deliverable, and was owned by nothing when filed.
 `D-091` and `D-092` are the two the re-measurement ranked as Stage 5 preconditions; they are
-carried by `specs/stage5-gate-inputs.md` and are listed here so that spec has something to close.
+carried by `specs/completed/stage5-gate-inputs.md` and are listed here so that spec has something to close.
 
 The rest are backlog by measurement, not by triage convenience: for nearly every one the fact is
 confirmed and the consequence is unreachable on D1. Where that is so, the `Revisit if:` line names
@@ -1789,7 +1789,7 @@ the event that makes it reachable rather than a date.
       `PromotionConfig`'s docstring calls them "§13.10's gates". Stage 4's `Produces` claimed the
       §13.5-13.8 families; `specs/completed/stage5-preconditions.md` §2 and §6 declined to inherit
       it, which is how it came to be owned by a retired document.
-      Size: plan. Done when: `specs/stage5-gate-inputs.md` R-S5G-1..3 ship — a per-stratum WAPE and
+      Size: plan. Done when: `specs/completed/stage5-gate-inputs.md` R-S5G-1..3 ship — a per-stratum WAPE and
       90% coverage are computable, or §13.10 is amended and the three keys are read or recorded
       inert beside `D-064`'s four.
 
@@ -1813,7 +1813,7 @@ the event that makes it reachable rather than a date.
       a live `REQ-027` §14.4 case rather than a modelling improvement. The roadmap's settle-before
       trigger exists but sits in the **Stage 6** block while **Stage 5** already consumes
       `deterministic_bounds`.
-      Size: plan. Done when: `specs/stage5-gate-inputs.md` R-S5G-5..8 ship — the four state slices
+      Size: plan. Done when: `specs/completed/stage5-gate-inputs.md` R-S5G-5..8 ship — the four state slices
       are fetched and counted, the ruling is recorded where a stage will read it, and the trigger is
       re-pointed at Stage 5.
 

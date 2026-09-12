@@ -25,7 +25,7 @@ load-bearing numbers:
   since small cells are the ones suppressed — so R-PM-8 forbids reading 0.916 as the bound's
   tightness on them.
 
-**Routed from** `specs/stage5-gate-inputs.md` R-S5G-6/8 and plan 14 Task 8. It is NOT absorbed
+**Routed from** `specs/completed/stage5-gate-inputs.md` R-S5G-6/8 and plan 14 Task 8. It is NOT absorbed
 into plan 14 because R-S5G-8's own scope line is "the flag is actually set from the new margin,
 not that a new mechanism is built", and a bound *is* a new mechanism: new source rows, new cell
 kinds, a new constraint builder, a change to §13.2's mask, and a re-check of what

@@ -2,6 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: implement this plan task-by-task via subagent-driven-development (the default) — or executing-plans when your human partner chose inline execution at the handoff. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status: COMPLETE (2026-09-12)** — executed via executing-plans; deferred items in specs/deferred_items.md
+
+> Deviation (whole plan): suite absolutes in this plan were measured WITHOUT `data/`; this checkout
+> has it. Every per-task delta matched — 1388 → 1393 → 1396 → 1401 → 1402 (+5/+3/+5/+1) — and both
+> golden sha256s reproduced byte-for-byte. After execution, a whole-branch review (27 confirmed
+> findings, 2 critic gaps) and two verification passes led to commits `542ed37`, `5c484c0`,
+> `96fdda5` and the fix commit that precedes retirement; they also surfaced `D-112`, a PRE-EXISTING
+> Stage 4 residual-sign defect in §13.7's ensemble, filed rather than fixed.
+
 **Goal:** Make §13.10's two "major stratum" gates evaluable from a shipped artifact, emit §13.6's missing state-share metric, and measure — rather than assume — whether any §9.3 margin identifies a suppressed state cell, so Stage 5 is planned against a gate that reads something and an identification set that was counted.
 
 **Architecture:** Eight remediations against a shipped, green codebase. Four touch code, one adds a standalone measurement script, three are record-only. No new module boundary: the metric work lands inside `validate/metrics.py`, `contracts.py` and `validate/scoreboard.py`, and the measurement lands in `scripts/audit/`, which is outside the package by design. Task 1 comes first because it is one sentence and its whole purpose is to make Task 2 visible to the person who needs it; Task 2 comes next because it is the only network-bound task and the only one whose *result* can change later tasks.
@@ -68,7 +77,7 @@ R-S5G-7 is the cheapest requirement in the spec and explicitly MUST NOT be defer
 - Consumes: nothing.
 - Produces: a Stage 5 `Consumes` clause naming the margin precondition. Task 3 amends that same clause with the measured answer.
 
-- [ ] **Step 1: Confirm the sentence is where this task thinks it is, and appears once**
+- [x] **Step 1: Confirm the sentence is where this task thinks it is, and appears once**
 
 ```bash
 grep -c "if any margin is wanted it must be settled BEFORE this stage consumes" \
@@ -77,7 +86,7 @@ grep -n "^- \[ \] Stage 5:\|^- \[ \] Stage 6:" specs/logging-employment-spec-roa
 ```
 Expected: `1`, then two line numbers. Measured 2026-09-11: the sentence appears once, inside the Stage 6 block; Stage 5 is line 288 and Stage 6 is line 298. If the count is not 1, STOP — a duplicated stage block is the merge hazard the stage-block rules were written for, and reconciling it comes before this edit.
 
-- [ ] **Step 2: Delete the sentence from Stage 6's `Consumes`**
+- [x] **Step 2: Delete the sentence from Stage 6's `Consumes`**
 
 In the `- [ ] Stage 6:` block, remove exactly this trailing sentence from the `Consumes:` line:
 
@@ -87,7 +96,7 @@ In the `- [ ] Stage 6:` block, remove exactly this trailing sentence from the `C
 
 A correction REPLACES the sentence it corrects (stage-block rule 1). Do not leave it behind with a `MOVED` marker: two readings of one precondition, in two stages, is the defect.
 
-- [ ] **Step 3: Add the replacement to Stage 5's `Consumes`**
+- [x] **Step 3: Add the replacement to Stage 5's `Consumes`**
 
 Append to the `- [ ] Stage 5:` block's `Consumes:` line:
 
@@ -95,7 +104,7 @@ Append to the `- [ ] Stage 5:` block's `Consumes:` line:
  **The §9.3 margins are a precondition of THIS stage, not Stage 6's.** Every one of the 1,227 suppressed state cells is `[0, +inf)` — `selected_upper` null on all 1,227 — because the parent-industry, ownership and region margins were never fetched, declined or measured. This stage consumes `deterministic_bounds`, so the question is settled before it, by `specs/stage5-gate-inputs.md` R-S5G-5; `specs/findings/stage-5-log.md` carries the measurement.
 ```
 
-- [ ] **Step 4: Verify by count, not by eye**
+- [x] **Step 4: Verify by count, not by eye**
 
 ```bash
 grep -c "if any margin is wanted it must be settled BEFORE this stage consumes" specs/logging-employment-spec-roadmap.md
@@ -104,7 +113,7 @@ awk '/^- \[ \] Stage 5:/,/ROUTING: writing-plans/' specs/logging-employment-spec
 ```
 Expected: `0`, `1`, `1`. The third command is what proves the sentence landed in the Stage 5 block rather than merely somewhere in the file.
 
-- [ ] **Step 5: Log the move**
+- [x] **Step 5: Log the move**
 
 Append to `specs/findings/stage-5-log.md`:
 
@@ -125,7 +134,7 @@ not guard anything: by the time Stage 6 reads it, Stage 5 has already been gated
 against the identification set the measurement might change.
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add specs/logging-employment-spec-roadmap.md specs/findings/stage-5-log.md
@@ -154,7 +163,7 @@ R-S5G-5 requires a MEASUREMENT, not a ruling from the armchair: "a decline recor
 2. **Classify on CONTENT, not status.** Government APIs answer 200 with an error body. `_common.request` already returns the response for the caller to classify; a CSV that does not parse is a failure even at 200.
 3. **A measured absence is a result.** `own_code 0` may not exist at state × 6-digit at all. The summary must distinguish "fetched, no such row" from "not fetched" — that distinction is the whole difference between a measurement and the assertion `D-002` forbids.
 
-- [ ] **Step 1: Write the failing test for the script's only judgment**
+- [x] **Step 1: Write the failing test for the script's only judgment**
 
 Everything else in this script is fetching and counting. The one decision — which margin identifies a suppressed cell, and how strongly — is extracted so it can be tested without the network, which is the convention `tests/audit/test_qcew_routes.py` established for `column_parity`.
 
@@ -210,14 +219,14 @@ def test_exact_outranks_a_bound_when_both_are_available():
     assert m.identification(both) == m.EXACT
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 ```bash
 uv run pytest tests/audit/test_qcew_parent_margins.py -q
 ```
 Expected: collection error, `ModuleNotFoundError: No module named 'qcew_parent_margins'`.
 
-- [ ] **Step 3: Write the judgment**
+- [x] **Step 3: Write the judgment**
 
 Create `scripts/audit/qcew_parent_margins.py` with the header and this function. **Verified: these exact 5 tests pass against this exact function.**
 
@@ -267,14 +276,16 @@ def identification(row: Mapping[str, bool]) -> str:
     return NONE
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 ```bash
 uv run pytest tests/audit/test_qcew_parent_margins.py -q
 ```
 Expected, verified: `5 passed in 0.01s`.
 
-- [ ] **Step 5: Write the fetch and count half**
+- [x] **Step 5: Write the fetch and count half**
+
+> Deviation: `main()` corrected against reality — `io`/`httpx` imports; a 404 is recorded as a measured absence; any unparseable 200 or partial fetch halts (`fetch_verdict`, extracted after review); `agglvl_code` joined the required-column guard; `slice_outcomes` is recorded.
 
 Append to `scripts/audit/qcew_parent_margins.py`. `INDUSTRIES` carries `113310` as well as the three parents so the script re-derives its own baseline rather than trusting a written count.
 
@@ -449,7 +460,7 @@ if __name__ == "__main__":
 quarter and each quarter carries three monthly employment columns, so one disclosed parent quarter
 reaches three months at once.
 
-- [ ] **Step 6: Run the measurement**
+- [x] **Step 6: Run the measurement**
 
 ```bash
 cd scripts/audit && uv run --no-project qcew_parent_margins.py
@@ -470,7 +481,7 @@ Expected: 128 requests, then `data/raw/audit/qcew_parent_margins/summary.json` w
 
 **Region margins are NOT fetched and need not be.** QCEW publishes no region level: Stage 0's measured agglvl inventory for `113310` is `18 National / 48 MSA / 58 State / 78 County`, recorded in `registry/sources.yaml`'s `geography` field with the summary key it came from. A Census-division total does not exist to fetch, so R-S5G-5's region component is answered by a shipped measurement and Task 3 records it as such.
 
-- [ ] **Step 7: Format, lint, and run the suite**
+- [x] **Step 7: Format, lint, and run the suite**
 
 ```bash
 uv run ruff format scripts/audit/qcew_parent_margins.py
@@ -480,7 +491,7 @@ uv run pytest -q
 ```
 Expected, verified for the judgment half: `1 file left unchanged`, `All checks passed!`, and **passed up by exactly 5, skipped unchanged**. In plan order this is the first task to touch the suite, so the absolute is `1318 + 5` = **`1323 passed, 70 skipped`**. Note the first command names the file: `ruff format .` would rewrite `except (A, B):` into PEP 758 syntax in two other `scripts/audit/` files whose headers declare `>=3.12`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add scripts/audit/qcew_parent_margins.py tests/audit/test_qcew_parent_margins.py
@@ -504,11 +515,15 @@ R-S5G-6 is specific about form: the outcome goes somewhere "a later stage will a
 - Consumes: Task 2's `summary.json`.
 - Produces: the sentence Task 8 branches on.
 
-- [ ] **Step 1: Render the summary into a committed finding**
+- [x] **Step 1: Render the summary into a committed finding**
+
+> Deviation: the finding is rendered by a committed script, `scripts/audit/render_parent_margins.py` (hash-verified extracts, a digest pin, prose premises that halt a stale render), not written by hand; it also measures bound informativeness and the MILP-reachable subset (107 of 756 bounded month-values), which the plan did not ask for.
 
 `data/raw/audit/` is gitignored, so the summary itself is not the record. Create `specs/findings/qcew-parent-margins.md` with the run date, the exact command, the four industries and 32 quarters covered, the re-derived `1,572 / 409` pair with its `matches_2026_09_11_witness` verdict, the per-parent disclosed-where-child-suppressed counts, the observed `own_code` set, and the `exact` / `upper_bound` / `none` tally. **Every number derived from the summary, none retyped from this plan** — this repo has ten recorded instances of audit prose that was typed rather than derived.
 
-- [ ] **Step 2: Write the contract sentence into Stage 5's `Consumes`**
+- [x] **Step 2: Write the contract sentence into Stage 5's `Consumes`**
+
+> Deviation: Branch B, not the Branch A the plan expected — a disclosed private `113` bounds 252 of 409 suppressed quarters (756 months), 0 exact. Task 1's causal clause was replaced, not annotated (stage-block rule 1).
 
 Amend the clause Task 1 added. Use **Branch A** or **Branch B** according to what Task 2 measured; write one, not both.
 
@@ -524,11 +539,11 @@ Amend the clause Task 1 added. Use **Branch A** or **Branch B** according to wha
  MEASURED 2026-09-11: <N> of the 409 suppressed state-quarters (<3N> months) carry a disclosed margin — <N> exact via <1133|11331|own 0>, <N> bounded above via 113. This is NOT absorbed here. It changes: a `registry/sources.yaml` row per new slice; new cell kinds and a `rows.size_margin_rows`-style parent-margin builder in `constraints/`; §13.2 step-4 parent masking in `validate/recover.py`, which must hide the parent whenever it hides the child; and `disclosure/`'s `exact_reconstruction_flag` on the exact cases (REQ-027, §14.4). Routed to its own spec by Task 8; Stage 5 MUST NOT consume `deterministic_bounds` as identification-complete until it lands.
 ```
 
-- [ ] **Step 3: Log the measurement**
+- [x] **Step 3: Log the measurement**
 
 Append the dated measurement to `specs/findings/stage-5-log.md` — stage-block rule 2 puts measurements in the log and the current *contract* in the block, which is what Step 2 wrote.
 
-- [ ] **Step 4: Verify the record is where a reader will hit it**
+- [x] **Step 4: Verify the record is where a reader will hit it**
 
 ```bash
 awk '/^- \[ \] Stage 5:/,/ROUTING: writing-plans/' specs/logging-employment-spec-roadmap.md \
@@ -537,11 +552,11 @@ grep -c "qcew-parent-margins.md" specs/logging-employment-spec-roadmap.md
 ```
 Expected: `1` and `1`.
 
-- [ ] **Step 5: Tick `D-092`**
+- [x] **Step 5: Tick `D-092`**
 
 In `specs/deferred_items.md`, tick `D-092` with a pointer: `- [x] ... → done in plan 14`. Never delete it.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add specs/findings/ specs/logging-employment-spec-roadmap.md specs/deferred_items.md
@@ -569,7 +584,7 @@ This task comes **before** Task 5 deliberately. It adds a metric *name* to an ex
 - Consumes: `contracts.HarmonizedData.qcew_monthly`'s `area_type` / `reference_month` / `employment_value`.
 - Produces: `national_monthly_totals(monthly: pl.DataFrame) -> pl.DataFrame` with columns `("reference_month", "national_employment")`; `point_metrics` gains a **required** keyword `national_totals: pl.DataFrame`. Task 5 restructures the same function — read both tasks before editing either.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Replace `tests/unit/test_validate_metrics_point.py`'s `_scores()` and add three tests. The fixture gains `state_fips` and `reference_month`, which Task 5 also needs.
 
@@ -641,14 +656,14 @@ def test_a_month_with_no_national_row_is_excluded_rather_than_counted_as_zero_er
 
 The three existing tests in this file also gain `national_totals=_national()` at their `point_metrics(...)` call — the parameter is required, so they will not run otherwise.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 uv run pytest tests/unit/test_validate_metrics_point.py -q
 ```
 Expected, verified: `6 failed in 0.16s`, every failure `TypeError: point_metrics() got an unexpected keyword argument 'national_totals'` (message text verified against the pre-task signature).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `metrics.py`, extend `_POINT_NAMES` and add the denominator builder and the metric:
 
@@ -730,14 +745,14 @@ append this paragraph to its docstring —
             "state_share_absolute_error": _state_share_absolute_error(scored),
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 ```bash
 uv run pytest tests/unit/test_validate_metrics_point.py -q
 ```
 Expected, verified: `6 passed in 0.12s`.
 
-- [ ] **Step 5: Wire the harness**
+- [x] **Step 5: Wire the harness**
 
 Add `national_monthly_totals` to the `from .metrics import (...)` block, and replace the `point_metrics` call in `run_pseudo_suppression`'s scoring loop:
 
@@ -756,7 +771,7 @@ Add `national_monthly_totals` to the `from .metrics import (...)` block, and rep
             )
 ```
 
-- [ ] **Step 6: Repair the scoreboard test fixtures the required parameter breaks**
+- [x] **Step 6: Repair the scoreboard test fixtures the required parameter breaks**
 
 `national_totals` is now required and `tests/unit/test_validate_scoreboard.py` calls `point_metrics`
 twice. **Measured in plan order: without this step the suite is `19 failed`, all in this one file.**
@@ -805,7 +820,7 @@ Then pass the denominator at both `point_metrics` call sites:
 
 Run: `uv run pytest tests/unit/test_validate_scoreboard.py -q` — expected, verified: `25 passed`.
 
-- [ ] **Step 7: Characterize the golden delta BEFORE regenerating it**
+- [x] **Step 7: Characterize the golden delta BEFORE regenerating it**
 
 §17.6 requires a documented reason for re-pinning a golden, and "the tests went green" is not one. Run this and read the output:
 
@@ -835,7 +850,7 @@ Expected, verified: `columns identical: True`, `rows 1168 -> 1238`, `columns mov
 
 **`nulls_equal=True` is load-bearing, not decoration.** `decline_and_basis_report` emits no `metric_name`, so it is NULL on 70 of the golden's rows; without it those 70 fail to join on both sides and read as 8 moved columns — a false positive that looks exactly like the regression this step exists to catch. (`join_nulls` is the pre-1.24 spelling and is deprecated.)
 
-- [ ] **Step 8: Regenerate the golden**
+- [x] **Step 8: Regenerate the golden**
 
 ```bash
 uv run python -c "
@@ -856,7 +871,7 @@ uv run pytest tests/integration/test_validation_golden.py tests/unit/test_valida
 ```
 Expected, verified: `rows 1238 sha256 5caaa3dbaa8ac8dfd3f0205b0fad0d4e8406297e420691f29b1cd5680757e91b`, then `13 passed in 12.30s`.
 
-- [ ] **Step 9: Commit, with the reason in the message**
+- [x] **Step 9: Commit, with the reason in the message**
 
 ```bash
 git add src/logging_employment/validate/ tests/unit/test_validate_metrics_point.py tests/unit/test_validate_scoreboard.py tests/fixtures/validation/validation_metrics_golden.parquet
@@ -893,7 +908,7 @@ The stratum is `validate/regimes.py::CENSUS_DIVISIONS` and **no second partition
 1. **`build_scoreboard` fans out.** Its headline filter is `metric_family == "point" & metric_name == "wape"`. Per-division rows match both clauses, the left join to `basis` multiplies, and `validate_frame` compares names and dtypes — it cannot see a row count. §13.10's comparand is `runs/f03023ac9f3a/validation_scoreboard.parquet` at `(270, 13)`; a fan-out there corrupts the number Stage 5 is promoted against. The filter gains `stratum_kind == "overall"` **in this task**, not later.
 2. **The golden's sort key stops being total.** `wape` and `coverage_0.90` now appear once as `overall` and once per division under otherwise identical key values, so a sort on the old six fields leaves them tied and `.equals` compares whatever order each side happened to emit.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/unit/test_validate_metrics_point.py`:
 
@@ -978,7 +993,7 @@ def test_the_board_keeps_one_row_per_group_when_the_metrics_carry_strata():
     assert board.select("regime", "seed", "estimator_id").n_unique() == board.height
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 ```bash
 uv run pytest tests/unit/test_validate_metrics_point.py tests/unit/test_validate_scoreboard.py -q
@@ -991,7 +1006,7 @@ polars.exceptions.ColumnNotFoundError: unable to find column "stratum_kind"; val
 
 and one `Failed: DID NOT RAISE ConceptViolationError` — the Puerto Rico test, because `with_census_division` does not exist yet and so nothing refuses.
 
-- [ ] **Step 3: Declare the closed set, the columns, and the partition inverse**
+- [x] **Step 3: Declare the closed set, the columns, and the partition inverse**
 
 In `contracts.py`, immediately after `MASK_ARMS`:
 
@@ -1048,7 +1063,9 @@ DIVISION_OF: dict[str, str] = {
 
 Check it, verified: `set(DIVISION_OF) == set(constants.STATES_DC_FIPS)` is `True` at 51 keys.
 
-- [ ] **Step 4: Emit the strata**
+- [x] **Step 4: Emit the strata**
+
+> Deviation: per-division coverage rows first shipped inheriting the estimator's `n_scored` (51 of 72 golden rows had `n_scored > denominator`); fixed after review with an independent unit module. Stratification is `state_total`-only, and division coverage exists only on the ensemble branch, so the WAPE and coverage families do not always share strata — gates must outer-join.
 
 In `metrics.py`, add the imports `from ..errors import ConceptViolationError` and `from .regimes import DIVISION_OF` (no cycle: `regimes` imports `mask` and `propensity`, never `metrics`), then above `bound_metrics`:
 
@@ -1217,7 +1234,7 @@ In `probabilistic_metrics`, iterate `with_census_division(scores).group_by(...)`
 
 The ineligible / fewer-than-two-scored branch `continue`s before this and emits only its overall null row — a division-level coverage over an estimator with no ensemble would be a row whose value is null for a reason the gate cannot distinguish from failure.
 
-- [ ] **Step 5: Keep the scoreboard's grain**
+- [x] **Step 5: Keep the scoreboard's grain**
 
 In `scoreboard.build_scoreboard`, extend the headline filter:
 
@@ -1234,7 +1251,7 @@ In `scoreboard.build_scoreboard`, extend the headline filter:
     ).select(
 ```
 
-- [ ] **Step 6: Give `STRATUM_KINDS` a runtime caller**
+- [x] **Step 6: Give `STRATUM_KINDS` a runtime caller**
 
 In `harness.run_pseudo_suppression`, immediately before `board = build_scoreboard(metrics)`:
 
@@ -1245,7 +1262,7 @@ In `harness.run_pseudo_suppression`, immediately before `board = build_scoreboar
     assert_declared_provenance(metrics)
 ```
 
-- [ ] **Step 7: Repair the two test fixtures the new columns break**
+- [x] **Step 7: Repair the two test fixtures the new columns break**
 
 Each is a real consequence, not a chore, and each is named so the implementer does not mistake it for a regression. `tests/unit/test_validate_scoreboard.py` is NOT in this list: Task 4 Step 6 already gave it the columns and the denominator, and its `_metrics()` helper picks up the stratified rows for free — which is what Step 1's grain guard reads.
 
@@ -1259,7 +1276,7 @@ Each is a real consequence, not a chore, and each is named so the implementer do
             "stratum_value": ["all", "all"],
 ```
 
-- [ ] **Step 8: Restore the golden's total sort order and scope its oracle**
+- [x] **Step 8: Restore the golden's total sort order and scope its oracle**
 
 In `tests/integration/test_validation_golden.py`, extend the key in `test_the_metrics_match_the_golden`:
 
@@ -1289,7 +1306,9 @@ and scope the hand-derived oracle in `test_a_hand_derived_row_reproduces_the_gol
         & (pl.col("stratum_kind") == "overall")
 ```
 
-- [ ] **Step 9: Characterize the delta, then regenerate**
+- [x] **Step 9: Characterize the delta, then regenerate**
+
+> Deviation: `765e43a1…` reproduced but carried the `n_scored` defect; the golden was regenerated after review to `2bec94b0…` (only `n_scored` moved, on 51 division coverage rows). The characterization's pre-existing-rows join could not see defects in the rows this task ADDED.
 
 Run the Task 4 Step 7 snippet again with **two** changes — the `old` line, and the first `print`, which must now report the added columns rather than assert none were added:
 
@@ -1306,7 +1325,7 @@ which is the question this step exists to answer.
 
 Expected, verified: `new columns: ['stratum_kind', 'stratum_value']`, `rows 1238 -> 1490` (`overall rows 1238`, `stratified rows 252`), `columns moved on pre-existing rows: []`, stratified metric names `['coverage_0.90', 'wape']`, all nine divisions present, and `0` nulls in both new columns. Then regenerate with the Task 4 Step 8 snippet — verified: `rows 1490 sha256 765e43a101795a465893d235dbb00d67c1a1198425979f14f6e6e6e4d43efa30`.
 
-- [ ] **Step 10: Run every gate**
+- [x] **Step 10: Run every gate**
 
 ```bash
 uv run ruff format src tests && uv run ruff check src tests --fix && uv run ruff check src tests
@@ -1315,7 +1334,7 @@ uv run pytest -q
 ```
 Expected: `All checks passed!`, `RESULT: PASSED (minimum: 100.0%, actual: 100.0%)`, and **passed up by exactly 5 (four point tests plus the board-grain guard), skipped unchanged**. In plan order the absolute is `1326 + 5` = **`1331 passed, 70 skipped`**. The `--fix` is not optional: the new `metrics.py` imports trip `I001` and ruff fixes them. Every test added here is fixture-based and none is data-bound, which is why `skipped` must not move.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add src/logging_employment/ tests/ tests/fixtures/validation/validation_metrics_golden.parquet
@@ -1344,7 +1363,7 @@ R-S5G-3 offers two outcomes: the keys are read by the promotion code path, or th
 - Consumes: Task 5's stratified metrics — they are what makes two of the three keys inert for a *different* reason than the third, which is the whole content of this record.
 - Produces: no symbol. A tripwire test that reddens the day Stage 5 wires a key.
 
-- [ ] **Step 1: Write the failing tripwire test**
+- [x] **Step 1: Write the failing tripwire test**
 
 Append to `tests/unit/test_config_validation_block.py` (and add `from pathlib import Path` to its imports):
 
@@ -1372,14 +1391,14 @@ def test_the_promotion_keys_are_still_unread_and_the_docstring_still_says_so():
         assert readers == [], f"{key} is now read by {readers}; update PromotionConfig's docstring"
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 ```bash
 uv run pytest tests/unit/test_config_validation_block.py -q
 ```
 Expected, verified: `4 passed in 0.02s`. **This test passes immediately, and that is correct** — it pins today's truth so tomorrow's change is announced. It is the docstring in Step 3 that is the deliverable; the test is what keeps it honest. (Without the `Path` import it fails with `NameError`, which is the only red this step produces.)
 
-- [ ] **Step 3: Write the record**
+- [x] **Step 3: Write the record**
 
 Replace `PromotionConfig`'s docstring in `config.py`:
 
@@ -1416,7 +1435,7 @@ class PromotionConfig(_Strict):
     nominal_coverage_tolerance: float = 0.05
 ```
 
-- [ ] **Step 4: File the deferred item beside `D-064`'s four**
+- [x] **Step 4: File the deferred item beside `D-064`'s four**
 
 Append to `specs/deferred_items.md`. **`D-091` is NOT ticked here** — its closure text is "R-S5G-1..3 ship", and R-S5G-2 is Task 7's ruling. Task 7 ticks it.
 
@@ -1432,7 +1451,7 @@ Append to `specs/deferred_items.md`. **`D-091` is NOT ticked here** — its clos
       reddens on that day and names the keys that moved.
 ```
 
-- [ ] **Step 5: Run the gates**
+- [x] **Step 5: Run the gates**
 
 ```bash
 uv run ruff format src tests && uv run ruff check src tests
@@ -1440,7 +1459,7 @@ uv run interrogate src && uv run pytest -q
 ```
 Expected: `All checks passed!`, `RESULT: PASSED`, and **passed up by exactly 1, skipped unchanged** — in plan order **`1332 passed, 70 skipped`**.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/logging_employment/config.py tests/unit/test_config_validation_block.py specs/deferred_items.md
@@ -1465,7 +1484,7 @@ R-S5G-2 is a DECISION requirement whose output is a written ruling. It refuses a
 - Consumes: Tasks 4, 5 and 6 as shipped.
 - Produces: the sentence Stage 5's planner reads to know which gates bind.
 
-- [ ] **Step 1: Confirm which option the work actually landed on**
+- [x] **Step 1: Confirm which option the work actually landed on**
 
 ```bash
 uv run python -c "
@@ -1479,7 +1498,9 @@ print('state_share rows:', g.filter(pl.col('metric_name') == 'state_share_absolu
 ```
 Expected: `['coverage_0.90', 'wape']`, `9`, `70`. Both of §13.10's stratum gates now have an input, so **Option A holds and §13.10 stands as written.** Only if this output disagrees does Option B — amending §13.10 and striking or deferring the stratum clauses with a named owner — come into play.
 
-- [ ] **Step 2: Write the ruling into the Status line**
+- [x] **Step 2: Write the ruling into the Status line**
+
+> Deviation: the Status line also records R-S5G-5's refutation of spec §1.2, the routed bound (`D-111`), the regenerated D1 artifact, and `D-112`'s caveat that the coverage gate must not be applied yet.
 
 Replace `specs/stage5-gate-inputs.md`'s Status line:
 
@@ -1494,7 +1515,7 @@ is emitted. The three `PromotionConfig` keys are recorded inert per key rather t
 applied over NINE of the thirteen regimes (`D-071`).
 ```
 
-- [ ] **Step 3: Do NOT amend the spec under Option A**
+- [x] **Step 3: Do NOT amend the spec under Option A**
 
 The spec header says nothing here amends `specs/logging-employment-spec.md` unconditionally — only under Option B, and only as that requirement's recorded output. Under Option A, `specs/logging-employment-spec.md` is untouched by this task. Verify:
 
@@ -1503,13 +1524,13 @@ git diff --name-only HEAD -- specs/logging-employment-spec.md
 ```
 Expected: empty.
 
-- [ ] **Step 4: Tick `D-091`**
+- [x] **Step 4: Tick `D-091`**
 
 Its closure condition is "R-S5G-1..3 ship", which is true only once this ruling is written: R-S5G-1
 shipped in Task 5, R-S5G-3 in Task 6, R-S5G-2 here. In `specs/deferred_items.md`, tick it with
 `→ done in plan 14`. Never delete it.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add specs/stage5-gate-inputs.md specs/deferred_items.md
@@ -1532,13 +1553,15 @@ R-S5G-8 binds **only if Task 2 found a disclosed parent**. It is a two-branch de
 - Consumes: Task 3's recorded ruling.
 - Produces: either a closed requirement or a routed spec. Not code, either way.
 
-- [ ] **Step 1: Read the branch off the record, not off memory**
+- [x] **Step 1: Read the branch off the record, not off memory**
 
 ```bash
 grep -o "MEASURED 2026-09-11[^.]*\." specs/logging-employment-spec-roadmap.md
 ```
 
-- [ ] **Step 2A — Branch A (no disclosed parent): close it and say what would reopen it**
+- [x] **Step 2A — Branch A (no disclosed parent): close it and say what would reopen it**
+
+> Deviation: applied only to the EXACT half, and scoped (`D-110`): no measured margin gives a live REQ-027 case, but the `113 - 1131 - 1132` path is unmeasured, so exactness is unknown on 252 quarters.
 
 Append to `specs/deferred_items.md`:
 
@@ -1556,7 +1579,9 @@ Append to `specs/deferred_items.md`:
 
 Then tick `D-092` if Task 3 did not, and **stop**. Under Branch A nothing else in R-S5G-8 binds: there is no new margin for the flag to be set from.
 
-- [ ] **Step 2B — Branch B (a disclosed parent exists): route it, do not absorb it**
+- [x] **Step 2B — Branch B (a disclosed parent exists): route it, do not absorb it**
+
+> Deviation: taken for the BOUND — routed to `specs/stage5-parent-margin.md` (R-PM-1..8, later corrected: a visible parent is retained per §13.2 step 4, and MILP reaches only the under-threshold subset) and `D-111`.
 
 Setting the flag from a real margin is not a one-line change, and R-S5G-6 already enumerates why. Create `specs/stage5-parent-margin.md` with the header `> For agentic workers: REQUIRED SKILL: writing-plans`, this plan and `specs/findings/qcew-parent-margins.md` as its measured input, and requirements covering at minimum:
 
@@ -1569,7 +1594,7 @@ Setting the flag from a real margin is not a one-line change, and R-S5G-6 alread
 
 File a deferred item pointing at it, tick `D-092`, and record in the Stage 5 roadmap block that the stage is blocked on it.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add specs/

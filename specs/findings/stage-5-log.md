@@ -53,7 +53,7 @@ rendered in full at `specs/findings/qcew-parent-margins.md`):
 | `own_code 0` rows at state x 6-digit | **0** — a measured absence, `fetched: true` beside it |
 | `exact` / `upper_bound` / `none` | **0 / 252 / 157** |
 
-**Superseded reading** (`specs/stage5-gate-inputs.md` §1.2, and `D-092` as filed):
+**Superseded reading** (`specs/completed/stage5-gate-inputs.md` §1.2, and `D-092` as filed):
 
 > With that single-child chain, a disclosed `1133`, `11331` or total-ownership `113310` cell
 > where `113310` private is `N` is an **exact reconstruction** of the suppressed value
