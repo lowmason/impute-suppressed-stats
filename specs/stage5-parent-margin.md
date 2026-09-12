@@ -28,7 +28,8 @@ load-bearing numbers:
 **Routed from** `specs/stage5-gate-inputs.md` R-S5G-6/8 and plan 14 Task 8. It is NOT absorbed
 into plan 14 because R-S5G-8's own scope line is "the flag is actually set from the new margin,
 not that a new mechanism is built", and a bound *is* a new mechanism: new source rows, new cell
-kinds, a new constraint builder, a change to §13.2's mask, and a moved comparand.
+kinds, a new constraint builder, a change to §13.2's mask, and a re-check of what
+the comparand depends on (R-PM-7).
 
 **Consumed by:** Stage 5. **Stage 5 MUST NOT consume `deterministic_bounds` as
 identification-complete until this lands** — the roadmap's Stage 5 `Consumes` says so.
@@ -54,8 +55,8 @@ and a great deal of shipped behaviour is latent because of it.
   "retain only the margins that would remain public under the synthetic pattern". On D1 a
   private `113` stays public on 252 of the 409 real suppressions. A mask that ALWAYS hides `113`
   with the child is therefore as wrong as one that never does: the first scores methods under harder identification than production (on today's call
-  graph that moves only §13.5's bound metrics, because baselines never read masked bounds —
-  `D-087`), and the second can
+  graph that moves §13.5's bound metrics and `validation_scores`' `selected_*` columns, not WAPE,
+  coverage or the scoreboard, because baselines never read masked bounds — `D-087`), and the second can
   leave an exactly-recoverable case (a visible parent with disclosed siblings) unlabelled, which
   step 6 forbids. A visible `113` alone gives `113310 <= 113` and recovers nothing, so it is not a
   §13.4 leak.
@@ -72,8 +73,9 @@ that the parents are served at **their own digit-depth agglvl codes** — measur
 filters on `58` returns zero parent rows and reads as a clean absence; the audit script discovers
 the level instead, and the ingest path MUST do the same or record the codes as measured facts. Ingesting the state `113`
 series also unblocks §13.2 step 1's "parent share" predictor, which `validate/propensity.py`
-declines today for want of it — subject to §13.4: a same-month share contains the hidden target,
-so it needs a leave-one-out form, and `113` is itself undisclosed on 157 of 409 real suppressions.
+declines today for want of it. An EMPLOYMENT share contains the hidden target (§13.4) and would
+need a leave-one-out form; an establishment-count share needs only the ingest, because establishment
+counts are published even where employment is suppressed.
 
 **R-PM-2 (constraints).** New cell kinds for the parent margins, and a builder in the shape of
 `constraints/rows.py::size_support_rows` / `size_margin_rows`. The parent row is a
@@ -84,14 +86,16 @@ guarding it — this spec does not weaken it and must not be read as doing so.
 **R-PM-3 (§13.2 steps 4 and 6).** `validate/recover.py` MUST decide the parent's visibility under the
 synthetic pattern, per step 4 — NOT hide it unconditionally. A visible `113` gives only
 `113310 <= 113` and does not recover the held-out value, so leaving it public is not a §13.4 leak:
-it reproduces what production sees on 252 of 409 real suppressions, and hiding it always would score methods under harder identification than production. On
-today's call graph that moves only §13.5's bound metrics — baselines never read masked bounds
-(`D-087`) — but any method that clips to them, such as Stage 5's reconciled draws, would be
+it reproduces what production sees on 252 of 409 real suppressions, and hiding it always would score methods under harder identification than production. On today's call graph that moves §13.5's bound metrics and `validation_scores`' `selected_*`
+columns, not WAPE, coverage or the scoreboard — baselines never read masked bounds (`D-087`) — but any method that clips to them, such as Stage 5's reconciled draws, would be
 handicapped. The pattern MUST be stated and justified — e.g. a co-suppression propensity on public
-predictors fitted to the measured pattern (157 of 409 real suppressions have no disclosed `113`); a
-flat rate is the weakest acceptable form.
-Where a visible parent plus disclosed siblings recovers the child EXACTLY (R-PM-5), step 6 applies:
-reject or separately label the case. `D-087` (bounds unenforced on the validation path) is adjacent
+predictors fitted to the measured pattern (157 of 409 real suppressions have no disclosed `113`); a flat rate must justify why co-suppression would be independent of the child's share of the
+parent, which nothing measured yet supports.
+Step 3's complementary cells MUST be chosen so parent-minus-siblings does not trivially recover the
+target; where a visible parent plus disclosed siblings still recovers the child EXACTLY (R-PM-5),
+step 6 applies: reject or separately label the case. Once the bound is finite, §13.5's out-of-bounds
+rule — a pseudo-hidden truth outside `deterministic_bounds` fails the run as a constraint-data bug —
+becomes live on the state-total arm too, and is this requirement's to wire, not Stage 6's. `D-087` (bounds unenforced on the validation path) is adjacent
 and should be settled in the same pass.
 
 **R-PM-4 (disclosure).** `disclosure/`'s `exact_reconstruction_flag` MUST be set from **exact**
@@ -153,6 +157,7 @@ published joint distribution gives no reason to expect it vacuous.
 4. R-PM-5's sibling measurement has a recorded outcome, and R-PM-4 is ruled on that basis.
 5. The Stage 5 roadmap block's "MUST NOT consume as identification-complete" clause is lifted, by
    the same stage-block rule that put it there.
-6. Every note that names `D-111` as pending is updated in the same change: the Stage 2, 7 and 8
-   qualifications in `specs/logging-employment-spec.md`'s stage stamps, `README.md`, and the
-   `reconcile/scaling.py` and `validate/propensity.py` docstrings.
+6. Every note that treats `D-111` as pending is updated in the same change, found by grepping rather
+   than from a list: `grep -rn 'D-111\|756 of the 1,227' src specs README.md`, plus the §13.5
+   vacuity notes that do not name it — `validate/metrics.py`'s module docstring and
+   `validate/CLAUDE.md`.

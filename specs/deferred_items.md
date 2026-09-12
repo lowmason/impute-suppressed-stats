@@ -1641,15 +1641,16 @@ names but no existing item owns; the Stage 4 `Exit:` line cites them.
       (`validate/recover.py:67`) and `mask_and_solve_size` (`:80`) have no caller anywhere in
       `src/`; `validate/harness.py` raises only `ConceptViolationError` (in `run_pseudo_suppression` and `_mask_arm`), never on
       recoverability or on a bound violation. What ships instead is measurement:
-      `validate/metrics.py::bound_metrics` emit `truth_in_bound_rate` and `exact_recovery_rate` as metric
+      `validate/metrics.py::bound_metrics` emits `truth_in_bound_rate` and `exact_recovery_rate` as metric
       rows, both present in `runs/f03023ac9f3a/validation_metrics.parquet`. The only executable
       witnesses are `tests/integration/test_validate_exact_recovery.py`, which calls
       `mask_and_solve_size` directly and skips unless a March with zero suppressed classes exists.
       This is not a wrong number on D1: every state cell is `unbounded` with a null
       `selected_upper`, so the bounds rule cannot fire on the state-total arm at all.
       *(Qualified 2026-09-12: once `D-111` lands, 756 state cells carry a finite upper, and
-      `specs/stage5-parent-margin.md` R-PM-3 owns §13.2 step 6 for the parent case; this item keeps
-      the size-class arm.)*
+      `specs/stage5-parent-margin.md` R-PM-3 owns BOTH rules on the state-total arm -- §13.2 step 6 for
+      the parent case and §13.5's out-of-bounds rule. This item keeps the size-class arm, and its
+      Done-when applies to that arm.)*
       Target: Stage 6 — the first stage with a size-class estimator and state x size cells, which
       is where both rules can first bind. Size: plan.
       Done when: a mask whose target stays exactly recoverable is rejected (or separately
@@ -2043,8 +2044,8 @@ the event that makes it reachable rather than a date.
 - [ ] `D-109` **`PromotionConfig`'s three keys are recorded inert rather than read.** R-S5G-3 ruled
       2026-09-11 that no §13.10 evaluator is built before Stage 5 exists: `minimum_wape_improvement`
       needs a second `validation_scoreboard.parquet` and there is one,
-      and `maximum_major_stratum_wape_degradation` / `nominal_coverage_tolerance` have their input
-      as of R-S5G-1 but no candidate to evaluate. All three fold into `runs.run_id` via
+      and `maximum_major_stratum_wape_degradation` / `nominal_coverage_tolerance` have their input as of R-S5G-1 (though the coverage VALUES carry `D-112`'s
+      sign defect) but no candidate to evaluate. All three fold into `runs.run_id` via
       `resolved_dict`, so this is `D-064`'s shape with a recorded reason rather than silence.
       Size: quick-fix. Done when: Stage 5's promotion record reads all three —
       `tests/unit/test_config_validation_block.py::test_the_promotion_keys_are_still_unread_and_the_docstring_still_says_so`
@@ -2076,8 +2077,10 @@ the event that makes it reachable rather than a date.
       cells the bound applies to (`specs/stage5-parent-margin.md` R-PM-8). Routed there (R-PM-1..8):
       registry rows, new cell kinds and a `size_margin_rows`-shaped builder, a §13.2 step-4 rule for
       when `validate/recover.py` keeps the parent visible (it is public on 252 of 409 real
-      suppressions, so hiding it always scores methods under harder identification than production;
-      step 6 labels any exact case), the
+      suppressions, so hiding it always scores methods under harder identification than production -- today
+      that moves §13.5's bound metrics and `validation_scores`' `selected_*` columns, not WAPE,
+      coverage or the scoreboard, since baselines never read masked bounds (`D-087`); step 6 labels
+      any exact case), the
       unmeasured `1131`/`1132` sibling path, MILP only where the new LP width falls under §9.6's
       threshold, and whether Stage 4's comparand is re-run. **Stage 5's roadmap `Consumes` blocks
       on this.**
@@ -2089,17 +2092,22 @@ the event that makes it reachable rather than a date.
       `validate/intervals.py::residual_ensemble` ADDS the pool to the point estimate, so cell i's
       ensemble is `estimate_i + (estimate_j - truth_j)`. The predictive distribution of `truth_i` is
       `estimate_i - (estimate_j - truth_j)`: the shipped form doubles a bias instead of removing it.
-      Measured 2026-09-12 with the shipped `intervals` helpers on a synthetic 40-cell method that
-      over-estimates by 25%: 90% coverage **0.00** as shipped, **0.85** with the sign corrected. On an
-      unbiased method the two agree to sampling noise (0.90 vs 0.85), which is why symmetric residuals
-      hide it. Present since `8939026` (2026-09-07, Stage 4); §10.7 states no sign convention.
+      Measured 2026-09-12 with the shipped `intervals` helpers on a synthetic method (n = 40,
+      `numpy.random.default_rng(0)`, truth ~ U(80, 120), estimate = 1.25 x truth + N(0, 3)): 90%
+      coverage **0.00** as shipped, **0.85** with the sign corrected. A bias that dominates the
+      residual spread collapses coverage; a smaller one biases it downward. On an unbiased method the
+      two agree to sampling noise (0.90 vs 0.85). Present since `8939026` (2026-09-07, Stage 4); §10.7 states no sign convention.
       Blast radius: every `probabilistic` row -- `coverage_*`, `mean_interval_width_0.90` (through the
       zero clip), `crps`, `n_clipped_at_zero` -- overall AND the per-division `coverage_0.90` rows plan
       14 added for §13.10's gate. NOT WAPE, so `validation_scoreboard.parquet` and
-      `preferred_baseline` are untouched. Both oracles mirror the shipped sign with symmetric
-      residuals and so cannot catch it:
+      `preferred_baseline` are untouched. Both oracles COPY the code's `estimate + (estimate - truth)` expression, so they move with the
+      defect rather than against it:
       `tests/integration/test_validation_golden.py::test_a_hand_derived_row_reproduces_the_golden_interval`
-      (`covered == 33`) and `tests/unit/test_validate_metrics_probabilistic.py`. Found by plan 14's
+      (`covered == 33`) and `tests/unit/test_validate_metrics_probabilistic.py`. **Expect a large golden
+      delta, not a cosmetic one:** the golden fixture's residuals are NOT symmetric (62.2% of the
+      oracle group's 37 are positive), and the corrected sign changes `coverage_0.90` in 37 of its 43
+      interval-bearing groups, the oracle's own from 33 to 31 of 37 -- derived 2026-09-12 by running
+      `HEAD`'s code on the committed fixture with the sign flipped in memory. Found by plan 14's
       review-verification pass and NOT fixed there, because it changes Stage 4's shipped
       probabilistic numbers. **§13.10's coverage gate MUST NOT be applied until this lands.**
       Size: quick-fix. Done when: the pool is `truth - estimate` (or `residual_ensemble` subtracts); a

@@ -150,9 +150,13 @@ coverage oracle was independent of the code. **Not introduced by plan 14:** pres
 `probabilistic_metrics` pools `estimate - truth`, and `residual_ensemble` ADDS the pool to the point
 estimate, so cell i's ensemble is `estimate_i + (estimate_j - truth_j)`. The predictive distribution of
 `truth_i` is `estimate_i - (estimate_j - truth_j)`. Measured with the shipped `intervals` helpers on a
-synthetic 40-cell method that over-estimates by 25%: 90% coverage **0.00** as shipped, **0.85** with
-the sign corrected. On an unbiased method the two agree to sampling noise (0.90 vs 0.85) — which is
-why a symmetric fixture, the golden's hand-derived oracle and plan 14's own new oracle all pass.
+synthetic 40-cell method (`default_rng(0)`,
+truth ~ U(80, 120), estimate = 1.25 x truth + N(0, 3)): 90% coverage **0.00** as shipped, **0.85** with
+the sign corrected. On an unbiased method the two agree to sampling noise (0.90 vs
+0.85). The oracles do not pass because of symmetry — both COPY the code's expression. On the golden
+fixture the residuals are one-sided (62.2% positive in the oracle group), and the corrected sign
+changes `coverage_0.90` in 37 of 43 interval-bearing groups, the hand-derived oracle's from 33 to 31
+of 37.
 
 **Why it matters for Stage 5.** Plan 14 made §13.10's coverage gate evaluable; this makes its values
 untrustworthy for exactly the estimators a gate exists to catch. WAPE and the (270, 13) scoreboard are

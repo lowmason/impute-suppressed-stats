@@ -93,7 +93,10 @@ def test_division_calibration_samples_add_up_to_the_overall_one():
 def test_every_masked_division_gets_a_row_and_an_all_declined_one_is_null_like_wape():
     """Inside the ensemble branch, coverage emits a row for every division WAPE does, null where
     nothing reached an ensemble. Outside it -- no interval family, or fewer than two scored cells --
-    it emits none (the next two tests), so a gate reading both families must outer-join.
+    it emits none
+    (`test_an_estimator_without_intervals_emits_one_overall_null_row_and_no_divisions` and
+    `test_an_interval_family_with_fewer_than_two_scored_cells_emits_no_division_rows`), so a gate
+    reading both families must outer-join.
     """
     rows = _division_rows(probabilistic_metrics(_scores(), regime="r", seed=1, arm="state_total"))
     assert set(rows) == {"pacific", "new_england", "east_north_central"}

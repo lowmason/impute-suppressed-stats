@@ -30,8 +30,8 @@ def _scores():
             "estimator_id": ["cbp_intensity"] * 2 + ["harvest_proportional"] * 2,
             "cell_id": ["c1", "c2"] * 2,
             # TWO divisions (pacific, new_england) with DIFFERENT errors: pacific 10/100 = 0.1,
-            # new_england |150-200|/200 = 0.25, overall 60/300 = 0.2. With one division, or equal
-            # errors, a board that picked division rows -- by filter or by dedupe -- would pass.
+            # new_england |150-200|/200 = 0.25, overall 60/300 = 0.2. With one division a board
+            # that picked division rows would pass; with two, the value and denominator checks catch it.
             "state_fips": ["06", "23"] * 2,
             "reference_month": ["2019-03", "2019-03"] * 2,
             "truth": truth * 2,

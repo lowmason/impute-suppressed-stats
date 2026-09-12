@@ -150,3 +150,19 @@ def test_a_body_with_the_columns_parses():
     body = b'"area_fips","own_code","industry_code","agglvl_code","disclosure_code"\n"06000","5","113310","58",""\n'
     frame = m.parse_slice("u", body)
     assert frame is not None and frame.height == 1
+
+
+def test_a_body_missing_one_required_column_does_not_parse():
+    """The check is that ALL required columns are present, not that any overlap."""
+    body = b'"area_fips","own_code","industry_code","agglvl_code"\n"06000","5","113310","58"\n'
+    assert m.parse_slice("u", body) is None
+
+
+def test_a_real_slice_with_extra_columns_parses():
+    """A real header carries far more than the required five; extras must not reject it."""
+    body = (
+        b'"area_fips","own_code","industry_code","agglvl_code","size_code","disclosure_code",'
+        b'"qtrly_estabs"\n"06000","5","113310","58","0","","12"\n'
+    )
+    frame = m.parse_slice("u", body)
+    assert frame is not None and frame.height == 1

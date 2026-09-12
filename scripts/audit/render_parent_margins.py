@@ -67,6 +67,8 @@ def load_extracts(summary: dict) -> tuple[dict[str, pl.DataFrame], str, int]:
         if SOURCE not in parts:
             raise SystemExit(f"{rec['path']} is not under a {SOURCE}/ directory; not this audit's")
         rel = Path(*parts[len(parts) - parts[::-1].index(SOURCE) :])
+        if ".." in rel.parts:
+            raise SystemExit(f"{rec['path']} escapes the {SOURCE}/ directory")
         data = (root / rel).read_bytes()
         digest = hashlib.sha256(data).hexdigest()
         if digest != rec["sha256"]:
@@ -146,6 +148,14 @@ def bound_widths(parent: pl.DataFrame, suppressed: set[tuple[str, str, str]]) ->
     )
 
 
+def milp_counts(widths: pl.DataFrame, threshold: float) -> tuple[int, int, int]:
+    """(bounded month-values, those under the MILP threshold, quarters touched by one), for both the
+    premise and the sentence, so the two cannot count differently."""
+    values = widths.unpivot(index=["area_fips", "year", "qtr"], on=list(MONTHS))["value"]
+    quarters = widths.filter(pl.any_horizontal([pl.col(m) < threshold for m in MONTHS])).height
+    return len(values), int((values < threshold).sum()), quarters
+
+
 def milp_threshold() -> float:
     """§9.6's MILP width trigger, read from `config.yaml` rather than typed here."""
     text = (REPO_ROOT / "config.yaml").read_text(encoding="utf-8")
@@ -194,15 +204,26 @@ def summary_premises(findings: dict, *, expected_slices: int) -> list[str]:
     return broken
 
 
-def extract_premises(*, dash_hit: int, median_ratio: float) -> list[str]:
-    """The template's conclusions only the EXTRACTS decide, as conditions; the broken ones."""
+def extract_premises(
+    *, dash_hit: int, median_ratio: float | None, n_under: int, n_values: int
+) -> list[str]:
+    """The template's conclusions only the EXTRACTS decide, as conditions; the broken ones.
+
+    An empty ratio series (no quarter with both industries published) is a broken premise, not a
+    crash: `render` would otherwise have nothing to call "not vacuous". The MILP sentence says the gap
+    binds on a PROPER subset, so both 0 and all of the bounded values break it.
+    """
     broken: list[str] = []
     if dash_hit:
         broken.append(
             "a '-' 113 falls on a suppressed quarter: `identification` needs a true-zero rung"
         )
-    if median_ratio < RATIO_FLOOR:
+    if median_ratio is None:
+        broken.append("no disclosed pair to measure '113 does not routinely dwarf 113310'")
+    elif median_ratio < RATIO_FLOOR:
         broken.append(f"'113 does not routinely dwarf 113310' is false: median {median_ratio:.3f}")
+    if not 0 < n_under < n_values:
+        broken.append(f"'the MILP gap binds on a subset' is false: {n_under} of {n_values}")
     return broken
 
 
@@ -228,7 +249,16 @@ def main() -> None:
     suppressed = keys(child.filter(pl.col("disclosure_code") == "N"))
     dash = keys(parent.filter(pl.col("disclosure_code") == "-"))
     ratios = bound_tightness(child, parent)
-    _halt(extract_premises(dash_hit=len(dash & suppressed), median_ratio=ratios.median()))
+    widths, threshold = bound_widths(parent, suppressed), milp_threshold()
+    n_values, n_under, _ = milp_counts(widths, threshold)
+    _halt(
+        extract_premises(
+            dash_hit=len(dash & suppressed),
+            median_ratio=ratios.median(),
+            n_under=n_under,
+            n_values=n_values,
+        )
+    )
     dest = c.FINDINGS_DIR / "qcew-parent-margins.md"
     dest.write_text(
         render(
@@ -237,8 +267,8 @@ def main() -> None:
             suppressed=suppressed,
             dash=dash,
             ratios=ratios,
-            widths=bound_widths(parent, suppressed),
-            threshold=milp_threshold(),
+            widths=widths,
+            threshold=threshold,
             digest=digest,
             n_extracts=n_extracts,
         ),
@@ -261,9 +291,10 @@ def render(
 ) -> str:
     """The finding's markdown.
 
-    Every MEASURED number is interpolated; the 2026-09-11 witness pair (1,572 / 409) and Stage 0's
-    agglvl inventory are quoted references, and the text labels them so. Every data-dependent
-    conclusion is guarded by `summary_premises` or `extract_premises` before this runs.
+    Every MEASURED number is interpolated; the 2026-09-11 witness pair (1,572 / 409), its 1,227
+    cells, and Stage 0's agglvl inventory are quoted references, and the text labels them so. Every
+    data-dependent conclusion -- including the MILP-subset sentence -- is guarded by
+    `summary_premises` or `extract_premises` before this runs.
     """
     cov, ident = summary["coverage_span"], findings["identification"]
     child_f, own, parents = (
@@ -276,17 +307,21 @@ def render(
     ids = ident["exact"] + ident["upper_bound"]
     pct = 100 * ids / child_f["suppressed_rows"]
     r_med, r_q05, r_q95 = ratios.median(), ratios.quantile(0.05), ratios.quantile(0.95)
-    r_half = 100 * (ratios >= 0.5).sum() / len(ratios)
-    month_values = widths.unpivot(index=["area_fips", "year", "qtr"], on=list(MONTHS))["value"]
-    n_values = len(month_values)
-    n_under = int((month_values < threshold).sum())
-    q_under = widths.filter(pl.any_horizontal([pl.col(m) < threshold for m in MONTHS])).height
+    r_half = 100 * (ratios >= RATIO_FLOOR).sum() / len(ratios)
+    n_values, n_under, q_under = milp_counts(widths, threshold)
     table = "\n".join(
         f"| `{i}` | {p['agglvl_codes_present'][0]} | {p['state_quarter_rows_private']} | "
         f"{p['disclosed_private']} | **{p['disclosed_where_child_suppressed']}** |"
         for i, p in sorted(parents.items())
     )
     p1133, p11331 = parents["1133"], parents["11331"]
+    witness_cells = (
+        "— equal to the 1,227 that\n`deterministic_bounds.parquet` reported `unbounded` on "
+        "2026-09-11 (a quoted reference)."
+        if child_f["matches_2026_09_11_witness"]
+        else "— which no longer matches the 1,227 that\n`deterministic_bounds.parquet` reported "
+        "`unbounded` on 2026-09-11 (a quoted reference);\nthat artifact predates this measurement."
+    )
     n_sup = child_f["suppressed_rows"]
     return f"""# §9.3 parent-industry and ownership margins on D1 — measured
 
@@ -326,8 +361,7 @@ Census-division total does not exist to fetch.
 | of those, `disclosure_code = 'N'` | {n_sup} |
 | matches the 2026-09-11 witness (1,572 / 409) | `{str(child_f["matches_2026_09_11_witness"]).lower()}` |
 
-{n_sup} x 3 = {3 * n_sup} suppressed monthly cells — the count `deterministic_bounds.parquet`
-reported `unbounded` on 2026-09-11.
+{n_sup} x 3 = {3 * n_sup} suppressed monthly cells {witness_cells}
 
 ## Parent industries, private ownership
 
@@ -393,7 +427,7 @@ month-observations):
 | median | **{r_med:.3f}** |
 | 5th percentile | {r_q05:.3f} |
 | 95th percentile | {r_q95:.3f} |
-| share at or above 0.5 | {r_half:.1f}% |
+| share at or above {RATIO_FLOOR:g} | {r_half:.1f}% |
 
 **Not vacuous on the published distribution** — where both are published, `113310` is a median
 {100 * r_med:.0f}% of `113`. That describes DISCLOSED pairs. The bounded cells are suppressed ones,

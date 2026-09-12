@@ -124,7 +124,8 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
   on the `state_total` arm only — a per-Census-division `wape` and `coverage_0.90` (R-S5G-1). So
   §13.5's infeasible-component rate and LP-vs-MILP tightening, §13.6's size-share / rank metrics,
   §13.7's calibration by state size, gap duration, propensity and distance from the nearest
-  CBP anchor year (region IS covered, for 90% coverage only), and §13.9's sensitivity and ablation are **not** covered by this module.
+  CBP anchor year (region IS covered, for 90% coverage only), §13.8's residual norms and row-sum and
+  class-margin violations, and §13.9's sensitivity and ablation are **not** covered by this module.
 
 ## Invariants a fresh agent gets wrong
 
@@ -188,9 +189,10 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
   `probabilistic_metrics` emits division coverage only for an interval family with at least two
   scored cells (null where a division's cells never reached an ensemble). A gate reading both must
   OUTER-join them on the division.
-  **Every `probabilistic` value carries `D-112`'s residual-sign defect** — the ensemble adds
-  `estimate - truth` to the estimate instead of subtracting it — so do not gate on coverage, width
-  or CRPS until it lands. WAPE is unaffected. The `national_size` arm is not stratified (`state_fips = "US"`).
+  **`D-112`'s residual-sign defect is in the whole `probabilistic` family** — the ensemble
+  adds `estimate - truth` to the estimate instead of subtracting it. It moves coverage, CRPS and
+  `n_clipped_at_zero`, and `mean_interval_width_0.90` only where the zero clip binds. Do not gate on
+  any of them until it lands. WAPE is unaffected. The `national_size` arm is not stratified (`state_fips = "US"`).
 - `intervals` offers CRPS and refuses log score on purpose: an empirical ensemble gives -inf
   whenever the truth falls outside its range. §13.7 permits either.
 
@@ -200,7 +202,7 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
 uv run pytest tests/unit/test_validate_scoreboard.py tests/unit/test_validate_intervals.py \
   tests/unit/test_validate_metrics_point.py tests/unit/test_validate_metrics_probabilistic.py \
   tests/unit/test_validate_metrics_bounds.py tests/unit/test_validate_metrics_constraint.py
-  # 57 passed (measured 2026-09-12, plan 14; was 40 over the five modules before it) — no data/ needed
+  # 59 passed (measured 2026-09-12 after plan 14's review fixes; was 40 over the five modules before it) — no data/ needed
 uv run pytest tests/integration/test_validation_golden.py   # 7 passed, 11s — in-git fixtures
 uv run logging-estimates validate --config config.yaml [--estimators id,id]
 ```

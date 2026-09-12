@@ -140,6 +140,10 @@ def test_a_hand_derived_row_reproduces_the_golden_interval(fixture_run):
     (`whole_seasonal_blocks` x `cbp_intensity`, 37 scored cells) from the SCORES — which are data —
     without calling `probabilistic_metrics`. It is also what proves R-S5P-7 moved a label only: it
     passes unchanged on both sides of the rename.
+
+    It does NOT catch the residual SIGN. It copies the code's `estimate + (estimate - truth)`
+    construction, so it moves WITH `D-112`'s defect rather than against it; correcting the sign
+    changes this group's `covered` from 33 to 31 of 37 (derived in `D-112`).
     """
     regime, estimator = "whole_seasonal_blocks", "cbp_intensity"
     group = fixture_run.scores.filter(

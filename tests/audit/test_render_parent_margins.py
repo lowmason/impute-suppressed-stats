@@ -86,10 +86,45 @@ def test_an_unfetched_parent_halts_by_name_before_any_extract_is_indexed():
     assert any("113 was fetched" in b for b in broken)
 
 
-def test_extract_premises_guard_the_true_zero_and_the_ratio_sentence():
-    assert r.extract_premises(dash_hit=0, median_ratio=0.9) == []
-    assert any("true-zero" in b for b in r.extract_premises(dash_hit=1, median_ratio=0.9))
-    assert any("dwarf" in b for b in r.extract_premises(dash_hit=0, median_ratio=0.3))
+def _extract_premises(**over):
+    kwargs = {"dash_hit": 0, "median_ratio": 0.9, "n_under": 107, "n_values": 756} | over
+    return r.extract_premises(**kwargs)
+
+
+def test_extract_premises_hold_on_the_measured_extracts():
+    assert _extract_premises() == []
+
+
+@pytest.mark.parametrize(
+    ("over", "names"),
+    [
+        ({"dash_hit": 1}, "true-zero"),
+        ({"median_ratio": 0.3}, "dwarf"),
+        ({"median_ratio": None}, "no disclosed pair"),
+        ({"n_under": 0}, "subset"),
+        ({"n_under": 756}, "subset"),
+    ],
+)
+def test_each_broken_extract_premise_halts_by_naming_its_sentence(over, names):
+    assert any(names in b for b in _extract_premises(**over))
+
+
+def test_main_halts_on_the_summary_before_it_touches_an_extract(monkeypatch):
+    """The ORDER inside `main`: a parent never fetched must halt by name before `load_extracts`."""
+    findings = copy.deepcopy(CLEAN)
+    findings["parents"]["113"] = {"fetched": False}
+    summary = {
+        "findings": findings,
+        "coverage_span": {"covered": [str(y) for y in range(2017, 2025)]},
+    }
+    monkeypatch.setattr(r.c, "load_summary", lambda _source: summary)
+
+    def unreachable(_summary):
+        raise AssertionError("load_extracts ran before the summary premises halted")
+
+    monkeypatch.setattr(r, "load_extracts", unreachable)
+    with pytest.raises(SystemExit, match="113 was fetched"):
+        r.main()
 
 
 def _extract(tmp_path, monkeypatch, content: bytes, recorded_sha: str):
@@ -119,6 +154,13 @@ def test_an_extract_whose_bytes_changed_halts(tmp_path, monkeypatch):
         r.load_extracts(summary)
 
 
+def test_a_path_that_escapes_the_audit_directory_halts(monkeypatch, tmp_path):
+    monkeypatch.setattr(r.c, "AUDIT_ROOT", tmp_path)
+    escaping = f"/x/data/raw/audit/{r.SOURCE}/../secrets/a.csv"
+    with pytest.raises(SystemExit, match="escapes"):
+        r.load_extracts({"extracts": [{"path": escaping, "sha256": "0" * 64}]})
+
+
 def test_a_path_outside_the_audit_directory_halts(monkeypatch, tmp_path):
     monkeypatch.setattr(r.c, "AUDIT_ROOT", tmp_path)
     with pytest.raises(SystemExit, match="not under"):
@@ -130,9 +172,10 @@ def test_a_path_outside_the_audit_directory_halts(monkeypatch, tmp_path):
 def test_the_renderer_predicate_agrees_with_the_measurement_script():
     frame = pl.DataFrame(
         {
-            "industry_code": ["113"] * 7,
-            "area_fips": ["06000", "11000", "72000", "US000", "C1010", "06001", "41000"],
-            "own_code": ["5", "5", "5", "5", "5", "5", "3"],
+            # The last row is a DIFFERENT industry, so the industry clause is exercised too.
+            "industry_code": ["113"] * 7 + ["113310"],
+            "area_fips": ["06000", "11000", "72000", "US000", "C1010", "06001", "41000", "53000"],
+            "own_code": ["5", "5", "5", "5", "5", "5", "3", "5"],
         }
     )
     expected = measure.state_rows(frame, "113").filter(pl.col("own_code") == "5")

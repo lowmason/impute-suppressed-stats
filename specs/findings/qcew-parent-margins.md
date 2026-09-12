@@ -36,8 +36,8 @@ Census-division total does not exist to fetch.
 | of those, `disclosure_code = 'N'` | 409 |
 | matches the 2026-09-11 witness (1,572 / 409) | `true` |
 
-409 x 3 = 1227 suppressed monthly cells — the count `deterministic_bounds.parquet`
-reported `unbounded` on 2026-09-11.
+409 x 3 = 1227 suppressed monthly cells — equal to the 1,227 that
+`deterministic_bounds.parquet` reported `unbounded` on 2026-09-11 (a quoted reference).
 
 ## Parent industries, private ownership
 

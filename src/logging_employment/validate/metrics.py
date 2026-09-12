@@ -367,7 +367,8 @@ def probabilistic_metrics(
         # the set `point_metrics` emits WAPE for. The early `continue` above (no interval family, or
         # fewer than two scored cells) emits only the overall null row and NO division rows, by
         # design, so the two families do NOT always share strata: a §13.10 gate reading both must
-        # OUTER-join them on the division, or it silently drops point-only estimators. A division
+        # OUTER-join them on the division, or it silently drops point-only estimators and interval
+        # families with fewer than two scored cells. A division
         # whose masked cells all declined, or whose scored cells never reached a leave-one-out
         # ensemble, has `seen == 0` and a NULL value, never 0.0. Each row carries ITS division's base:
         # masked rows as `denominator`, scored rows as `n_scored`, ensembled rows as
