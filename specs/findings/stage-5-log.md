@@ -11,7 +11,9 @@ stale code pin (roadmap `## Stages`, stage-block rules 1 and 2).
 > but its only `src/` caller is `baselines/runner.py:218`.
 
 **Why it changed.** There are two callers, and neither is at that line:
-`baselines/runner.py:312` and `validate/harness.py::run_pseudo_suppression`. The second arrived with
+`baselines/runner.py:312` and `validate/harness.py:165` (line numbers as recorded at `1be5bbf` and left
+as the historical record; both have since drifted, so find the calls by symbol — `run_baselines`
+and `run_pseudo_suppression`). The second arrived with
 the Stage 4 harness and the block was never re-validated against it.
 
 **Why it mattered.** The clause was load-bearing for the argument that followed
@@ -138,3 +140,21 @@ count, and `n_scored > denominator` held on 717 of them before and on **0** afte
 **This supersedes the counts in the entry above.** Its 6,929 / 2,129 were the defect's shape — the
 right rows with a wrong column — not a correct artifact. The byte-identical scoreboard is again the
 check that matters: §13.10's promotion comparand did not move across either regeneration.
+
+## 2026-09-12 — §13.7's residual ensemble has the wrong sign (`D-112`)
+
+**Found by** plan 14's review-verification pass, while checking whether plan 14's new per-division
+coverage oracle was independent of the code. **Not introduced by plan 14:** present since `8939026`
+(2026-09-07, Stage 4).
+
+`probabilistic_metrics` pools `estimate - truth`, and `residual_ensemble` ADDS the pool to the point
+estimate, so cell i's ensemble is `estimate_i + (estimate_j - truth_j)`. The predictive distribution of
+`truth_i` is `estimate_i - (estimate_j - truth_j)`. Measured with the shipped `intervals` helpers on a
+synthetic 40-cell method that over-estimates by 25%: 90% coverage **0.00** as shipped, **0.85** with
+the sign corrected. On an unbiased method the two agree to sampling noise (0.90 vs 0.85) — which is
+why a symmetric fixture, the golden's hand-derived oracle and plan 14's own new oracle all pass.
+
+**Why it matters for Stage 5.** Plan 14 made §13.10's coverage gate evaluable; this makes its values
+untrustworthy for exactly the estimators a gate exists to catch. WAPE and the (270, 13) scoreboard are
+unaffected. Recorded as a Stage 5 precondition in the roadmap block rather than fixed in plan 14,
+because the fix changes Stage 4's shipped probabilistic numbers.

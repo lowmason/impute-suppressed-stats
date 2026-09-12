@@ -15,9 +15,11 @@ Three disciplines, each answering a way a rendered finding can lie:
    refuses any whose bytes no longer hash to what the summary recorded. `_common.record_extract`
    rewrites a slice in place, so a partial re-fetch leaves two vintages side by side that a glob
    would stack silently. The finding pins a digest over what was read.
-2. **Its prose is guarded, not just its numbers.** Conclusions such as "neither yields an exact
-   reconstruction" are fixed sentences. `prose_premises` states each as a condition on the data,
-   and `main` halts rather than render a finding whose tables contradict its text.
+2. **Its conclusions are guarded, not just its numbers.** Sentences such as "neither yields an exact
+   reconstruction" are fixed prose. `summary_premises` and `extract_premises` state each as a
+   condition on the data, and `main` halts rather than render a finding whose tables contradict its
+   text. The witness pair and Stage 0's agglvl inventory are QUOTED references, not measurements
+   of this run, and the finding says so.
 3. **Two things come from the extracts rather than the summary**, because they answer objections the
    summary's tally cannot: the `'-'` true-zero intersection (which makes `exact = 0` measured rather
    than an artefact of `identification`'s ladder), and the widths a parent bound would give (which
@@ -41,26 +43,36 @@ MONTHS = ("month1_emplvl", "month2_emplvl", "month3_emplvl")
 PRIVATE, PUERTO_RICO = "5", "72000"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MILP_KEY = "use_milp_when_lp_interval_width_below"
+# What "nothing in the published data suggests 113 routinely dwarfs 113310" is taken to mean: a
+# median disclosed-pair ratio at or above one half. It encodes a SENTENCE in `render`, not a finding;
+# change the sentence and this together.
+RATIO_FLOOR = 0.5
 
 
 def load_extracts(summary: dict) -> tuple[dict[str, pl.DataFrame], str, int]:
     """Exactly the extracts the summary lists, each checked against its recorded sha256.
 
-    NOT a glob, for the reason in the module docstring. A missing file raises FileNotFoundError and
-    a changed one halts; either way no finding is written from bytes the summary did not measure.
-    Returns the frames by industry, a digest over the sorted `(sha256, path)` pairs, and the count.
+    NOT a glob, for the reason in the module docstring. Each path is REBUILT under this checkout's
+    `data/raw/audit/<source>/` from the part the summary recorded below that directory, so a clone at
+    another root reads its own bytes rather than failing on, or silently reading, the absolute path
+    the audit ran at. A missing file raises FileNotFoundError and a changed one halts; either way no
+    finding is written from bytes the summary did not measure. Returns the frames by industry, a
+    digest over the sorted `(sha256, relative path)` pairs, and the count.
     """
     frames: dict[str, list[pl.DataFrame]] = {}
     pairs: list[str] = []
     root = c.AUDIT_ROOT / SOURCE
     for rec in summary["extracts"]:
-        path = Path(rec["path"])
-        data = path.read_bytes()
+        parts = Path(rec["path"]).parts
+        if SOURCE not in parts:
+            raise SystemExit(f"{rec['path']} is not under a {SOURCE}/ directory; not this audit's")
+        rel = Path(*parts[len(parts) - parts[::-1].index(SOURCE) :])
+        data = (root / rel).read_bytes()
         digest = hashlib.sha256(data).hexdigest()
         if digest != rec["sha256"]:
-            raise SystemExit(f"{path} no longer hashes to the summary's {rec['sha256']}; re-run it")
-        pairs.append(f"{digest}  {path.relative_to(root).as_posix()}")
-        frames.setdefault(path.parent.name, []).append(
+            raise SystemExit(f"{root / rel} no longer hashes to the summary's {rec['sha256']}")
+        pairs.append(f"{digest}  {rel.as_posix()}")
+        frames.setdefault(rel.parts[0], []).append(
             pl.read_csv(io.BytesIO(data), infer_schema_length=0)
         )
     manifest = "\n".join(sorted(pairs)) + "\n"
@@ -72,9 +84,8 @@ def private_state_rows(frame: pl.DataFrame, industry: str) -> pl.DataFrame:
     """The private state rows, at whatever agglvl serves this industry.
 
     Repeats `qcew_parent_margins.state_rows`'s predicate rather than importing it, and the two must
-    agree. Importing would make this renderer depend on the measurement script at import time; the
-    predicate is four clauses and the duplication is visible, where an import-time coupling between
-    a measurement and its rendering would not be.
+    agree -- `tests/audit/test_render_parent_margins.py` pins that they do. Importing would make this
+    renderer depend on the measurement script at import time.
     """
     return frame.filter(
         (pl.col("industry_code") == industry)
@@ -144,12 +155,12 @@ def milp_threshold() -> float:
     return float(found.group(1))
 
 
-def prose_premises(findings: dict, *, dash_hit: int, expected_slices: int) -> list[str]:
-    """Every data-dependent sentence `render` writes as fixed prose, as a condition; the broken ones.
+def summary_premises(findings: dict, *, expected_slices: int) -> list[str]:
+    """The template's conclusions the SUMMARY alone decides, as conditions; the broken ones.
 
-    `render` interpolates numbers, but its CONCLUSIONS are prose. A re-run on revised data could make
-    any of them false while the tables beside them stay right, and the finding would contradict
-    itself. Nothing here is a threshold on the data -- each line is a sentence in `render`.
+    Checked BEFORE any extract is indexed, so a parent the route never served halts here by name
+    rather than as a KeyError further down. Nothing here is a threshold on the data -- each line is a
+    sentence in `render`.
     """
     broken: list[str] = []
     for industry, got in findings["slice_outcomes"].items():
@@ -157,14 +168,21 @@ def prose_premises(findings: dict, *, dash_hit: int, expected_slices: int) -> li
             broken.append(f"'every slice answered 200 with a parsable CSV' is false for {industry}")
     parents = findings["parents"]
     for industry in ("113", "1133", "11331"):
-        if not parents[industry].get("fetched"):
+        parent = parents.get(industry, {})
+        if not parent.get("fetched"):
             broken.append(f"the parent table assumes {industry} was fetched; it was not")
+            continue
+        codes = parent.get("agglvl_codes_present", [])
+        if len(codes) != 1 or "58" in codes:
+            broken.append(
+                f"'each parent has its own agglvl, not 58' is false for {industry}: {codes}"
+            )
     for industry in ("1133", "11331"):
-        if parents[industry].get("disclosed_where_child_suppressed"):
+        if parents.get(industry, {}).get("disclosed_where_child_suppressed"):
             broken.append(
                 f"'neither yields an exact reconstruction' is false: {industry} is disclosed"
             )
-    if not parents["113"].get("disclosed_where_child_suppressed"):
+    if not parents.get("113", {}).get("disclosed_where_child_suppressed"):
         broken.append("'113 stays disclosable where its grandchild does not' is false")
     own = findings["total_ownership_113310"]
     if own["own_code_0_rows"]:
@@ -173,31 +191,44 @@ def prose_premises(findings: dict, *, dash_hit: int, expected_slices: int) -> li
         broken.append("'the subtraction route is closed from both ends' is false")
     if findings["identification"]["exact"]:
         broken.append("'none carries an exact reconstruction' is false")
+    return broken
+
+
+def extract_premises(*, dash_hit: int, median_ratio: float) -> list[str]:
+    """The template's conclusions only the EXTRACTS decide, as conditions; the broken ones."""
+    broken: list[str] = []
     if dash_hit:
         broken.append(
             "a '-' 113 falls on a suppressed quarter: `identification` needs a true-zero rung"
         )
+    if median_ratio < RATIO_FLOOR:
+        broken.append(f"'113 does not routinely dwarf 113310' is false: median {median_ratio:.3f}")
     return broken
+
+
+def _halt(broken: list[str]) -> None:
+    if broken:
+        raise SystemExit(
+            "the finding's prose no longer matches the data; rewrite render() first:\n- "
+            + "\n- ".join(broken)
+        )
 
 
 def main() -> None:
     """Write the finding, or halt with the sentences the data no longer supports."""
     summary = c.load_summary(SOURCE)
     findings = summary["findings"]
+    _halt(summary_premises(findings, expected_slices=len(summary["coverage_span"]["covered"]) * 4))
     frames, digest, n_extracts = load_extracts(summary)
+    for needed in ("113310", "113"):
+        if needed not in frames:
+            raise SystemExit(f"the summary lists no verified extracts for {needed}")
     child = private_state_rows(frames["113310"], "113310")
     parent = private_state_rows(frames["113"], "113")
     suppressed = keys(child.filter(pl.col("disclosure_code") == "N"))
     dash = keys(parent.filter(pl.col("disclosure_code") == "-"))
-    expected_slices = len(summary["coverage_span"]["covered"]) * 4
-    broken = prose_premises(
-        findings, dash_hit=len(dash & suppressed), expected_slices=expected_slices
-    )
-    if broken:
-        raise SystemExit(
-            "the finding's prose no longer matches the data; rewrite render() first:\n- "
-            + "\n- ".join(broken)
-        )
+    ratios = bound_tightness(child, parent)
+    _halt(extract_premises(dash_hit=len(dash & suppressed), median_ratio=ratios.median()))
     dest = c.FINDINGS_DIR / "qcew-parent-margins.md"
     dest.write_text(
         render(
@@ -205,7 +236,7 @@ def main() -> None:
             findings,
             suppressed=suppressed,
             dash=dash,
-            ratios=bound_tightness(child, parent),
+            ratios=ratios,
             widths=bound_widths(parent, suppressed),
             threshold=milp_threshold(),
             digest=digest,
@@ -228,7 +259,12 @@ def render(
     digest: str,
     n_extracts: int,
 ) -> str:
-    """The finding's markdown. Every number interpolated; every conclusion guarded by `prose_premises`."""
+    """The finding's markdown.
+
+    Every MEASURED number is interpolated; the 2026-09-11 witness pair (1,572 / 409) and Stage 0's
+    agglvl inventory are quoted references, and the text labels them so. Every data-dependent
+    conclusion is guarded by `summary_premises` or `extract_premises` before this runs.
+    """
     cov, ident = summary["coverage_span"], findings["identification"]
     child_f, own, parents = (
         findings["private_113310"],
@@ -257,7 +293,9 @@ def render(
 **Measured:** {summary["generated_utc"]} (R-S5G-5, plan 14 Task 2). **Derived from
 `data/raw/audit/qcew_parent_margins/summary.json`, not retyped** — by
 `scripts/audit/render_parent_margins.py`, which is committed because the summary it reads is
-gitignored, and which refuses to render if any sentence below stops matching the data.
+gitignored, and which refuses to render if a conclusion its `summary_premises` or `extract_premises`
+guards stops matching the data. The witness pair and Stage 0's agglvl inventory below are quoted
+references, not measurements of this run.
 
 **Extracts read:** {n_extracts}, each verified against the sha256 the summary recorded, pinned
 together by digest `{digest}` over their sorted `(sha256, path)` pairs.
@@ -288,8 +326,8 @@ Census-division total does not exist to fetch.
 | of those, `disclosure_code = 'N'` | {n_sup} |
 | matches the 2026-09-11 witness (1,572 / 409) | `{str(child_f["matches_2026_09_11_witness"]).lower()}` |
 
-{n_sup} x 3 = {3 * n_sup} suppressed monthly cells, the `unbounded` count in
-`deterministic_bounds.parquet`.
+{n_sup} x 3 = {3 * n_sup} suppressed monthly cells — the count `deterministic_bounds.parquet`
+reported `unbounded` on 2026-09-11.
 
 ## Parent industries, private ownership
 
@@ -361,7 +399,8 @@ month-observations):
 {100 * r_med:.0f}% of `113`. That describes DISCLOSED pairs. The bounded cells are suppressed ones,
 a different population (small cells are the ones suppressed), so this is **not** the bound's
 tightness on them, and `specs/stage5-parent-margin.md` R-PM-8 forbids quoting it as such. It
-establishes only that nothing in the published data suggests `113` routinely dwarfs `113310`.
+establishes only that nothing in the published data suggests `113` routinely dwarfs `113310` (the
+renderer halts if that median falls below {RATIO_FLOOR:g}).
 
 ## How many bounded cells could reach MILP?
 

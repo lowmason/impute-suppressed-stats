@@ -4,6 +4,11 @@ Every expectation is derived with numpy from the fixture's own residuals, never 
 `probabilistic_metrics` or its helpers: an expectation computed by the code under test is derived
 from the bug it should catch. The ensemble arithmetic mirrors the hand-derived oracle in
 `tests/integration/test_validation_golden.py`.
+
+What this module does NOT pin is the residual SIGN. Its oracle adds `estimate - truth` to the estimate
+exactly as the code does, and its residuals are symmetric, so it cannot tell the shipped sign from the
+corrected one -- and the shipped sign is wrong (`D-112`). It pins the division bucketing, the bases
+each row carries, and which divisions are emitted.
 """
 
 from __future__ import annotations
@@ -86,9 +91,9 @@ def test_division_calibration_samples_add_up_to_the_overall_one():
 
 
 def test_every_masked_division_gets_a_row_and_an_all_declined_one_is_null_like_wape():
-    """WAPE emits a null row for a division whose masked cells all declined; coverage emitted
-    NOTHING, so the two families disagreed on which divisions exist and a §13.10 gate reading both
-    would have had to outer-join them to notice.
+    """Inside the ensemble branch, coverage emits a row for every division WAPE does, null where
+    nothing reached an ensemble. Outside it -- no interval family, or fewer than two scored cells --
+    it emits none (the next two tests), so a gate reading both families must outer-join.
     """
     rows = _division_rows(probabilistic_metrics(_scores(), regime="r", seed=1, arm="state_total"))
     assert set(rows) == {"pacific", "new_england", "east_north_central"}
@@ -123,3 +128,16 @@ def test_a_territory_is_refused_on_the_probabilistic_path_too():
     )
     with pytest.raises(ConceptViolationError, match="72"):
         probabilistic_metrics(rogue, regime="r", seed=1, arm="state_total")
+
+
+def test_an_interval_family_with_fewer_than_two_scored_cells_emits_no_division_rows():
+    """The branch where the families' strata differ: `point_metrics` still emits division WAPE here."""
+    one = _scores().with_columns(
+        pl.when(pl.col("cell_id") == "c1")
+        .then(pl.col("estimate"))
+        .otherwise(pl.lit(None, dtype=pl.Float64))
+        .alias("estimate")
+    )
+    out = probabilistic_metrics(one, regime="r", seed=1, arm="state_total")
+    assert out.height == 1
+    assert out["stratum_kind"].item() == "overall"

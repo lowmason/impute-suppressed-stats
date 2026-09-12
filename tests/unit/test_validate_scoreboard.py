@@ -29,12 +29,13 @@ def _scores():
         {
             "estimator_id": ["cbp_intensity"] * 2 + ["harvest_proportional"] * 2,
             "cell_id": ["c1", "c2"] * 2,
-            # TWO divisions (pacific, new_england). With one, every stratified WAPE row equals its
-            # overall row, so a board that selected the division rows would pass the grain guard.
+            # TWO divisions (pacific, new_england) with DIFFERENT errors: pacific 10/100 = 0.1,
+            # new_england |150-200|/200 = 0.25, overall 60/300 = 0.2. With one division, or equal
+            # errors, a board that picked division rows -- by filter or by dedupe -- would pass.
             "state_fips": ["06", "23"] * 2,
             "reference_month": ["2019-03", "2019-03"] * 2,
             "truth": truth * 2,
-            "estimate": [110.0, 180.0, None, None],
+            "estimate": [110.0, 150.0, None, None],
             "decline_kind": [None, None, "by_design", "by_design"],
             "weight_basis": ["own_estimator", "establishment_fallback", "none", "none"],
         }
@@ -514,6 +515,22 @@ def test_the_board_keeps_one_row_per_group_when_the_metrics_carry_strata():
         "fixture must span two divisions, or a division-selecting filter passes too"
     )
     board = build_scoreboard(metrics)
+    overall = metrics.filter(
+        (pl.col("metric_family") == "point")
+        & (pl.col("metric_name") == "wape")
+        & (pl.col("stratum_kind") == "overall")
+    ).select(
+        "regime",
+        "seed",
+        "estimator_id",
+        pl.col("value").alias("wape_overall"),
+        pl.col("denominator").alias("denominator_overall"),
+    )
+    joined = board.join(overall, on=["regime", "seed", "estimator_id"], how="left")
+    # The board's VALUES are the overall row's, not a division's: a dedupe that kept a division row
+    # passes the height check below and fails here.
+    assert joined.filter(~pl.col("wape").eq_missing(pl.col("wape_overall"))).height == 0
+    assert (joined["denominator"] == joined["denominator_overall"]).all()
     assert (
         board.height
         == metrics.filter(

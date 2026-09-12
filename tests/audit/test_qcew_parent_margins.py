@@ -3,14 +3,16 @@
 Nothing here touches the network or `data/raw/audit/`. The script makes TWO judgments and both are
 tested here: which margin identifies a suppressed cell and how strongly (`identification`), and
 whether a walk's slice outcomes are a measurement at all (`fetch_verdict`). The row predicates those
-judgments stand on (`state_rows`, `disclosed_keys`) are pinned too. The HTTP calls themselves are
-`_common`'s and are tested there. `qcew_parent_margins` is imported bare, like `_common`, per
+judgments stand on (`state_rows`, `disclosed_keys`) are pinned too. `_common`'s retry and backoff are tested
+there; `fetch_slice`'s one departure from them -- a 404 is answered, not raised -- is pinned here,
+with `parse_slice`'s content check. `qcew_parent_margins` is imported bare, like `_common`, per
 `tests/conftest.py`; importing it is inert because its side effects sit behind
 `if __name__ == "__main__"`.
 """
 
 from __future__ import annotations
 
+import httpx
 import polars as pl
 import pytest
 import qcew_parent_margins as m
@@ -118,3 +120,33 @@ def test_state_rows_keeps_states_and_dc_and_nothing_else():
         }
     )
     assert m.state_rows(frame, "113")["area_fips"].to_list() == ["06000", "11000"]
+
+
+def _client(status: int, body: bytes = b"") -> httpx.Client:
+    return httpx.Client(
+        transport=httpx.MockTransport(lambda _request: httpx.Response(status, content=body))
+    )
+
+
+def test_a_404_slice_is_an_answer_not_a_crash():
+    assert m.fetch_slice(_client(404), "https://example.test/x.csv") is None
+
+
+def test_any_other_client_error_still_halts():
+    with pytest.raises(httpx.HTTPStatusError):
+        m.fetch_slice(_client(403), "https://example.test/x.csv")
+
+
+def test_a_served_slice_returns_its_bytes():
+    assert m.fetch_slice(_client(200, b"a,b\n1,2\n"), "https://example.test/x.csv") == b"a,b\n1,2\n"
+
+
+def test_a_200_error_body_does_not_parse_as_a_slice():
+    """Classify on content: a 200 carrying an HTML error page is not a slice."""
+    assert m.parse_slice("u", b"<html><title>Access Denied</title></html>") is None
+
+
+def test_a_body_with_the_columns_parses():
+    body = b'"area_fips","own_code","industry_code","agglvl_code","disclosure_code"\n"06000","5","113310","58",""\n'
+    frame = m.parse_slice("u", body)
+    assert frame is not None and frame.height == 1

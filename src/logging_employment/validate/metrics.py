@@ -36,12 +36,13 @@ def with_census_division(scores: pl.DataFrame) -> pl.DataFrame:
         pl.col("state_fips").replace_strict(DIVISION_OF, default=None).alias("census_division")
     )
     uncovered = out.filter(pl.col("census_division").is_null())["state_fips"].to_list()
-    # Stringified before sorting: a null FIPS beside a real one would otherwise make `sorted` raise
-    # TypeError and hide the named refusal behind a crash.
-    unknown = sorted({"null" if v is None else str(v) for v in uncovered})
+    # repr() before sorting: a null beside an uncovered string FIPS would otherwise make `sorted`
+    # raise TypeError and hide the named refusal, and repr keeps a null distinct from a literal
+    # "null" string.
+    unknown = sorted({repr(v) for v in uncovered})
     if unknown:
         raise ConceptViolationError(
-            f"state_fips {unknown} falls in no Census division; the partition is "
+            f"state_fips {', '.join(unknown)} falls in no Census division; the partition is "
             f"validate/regimes.py::CENSUS_DIVISIONS and covers states+DC only"
         )
     return out
@@ -362,8 +363,11 @@ def probabilistic_metrics(
         )
         # The clip is REPORTED, not absorbed: it shifts nominal coverage.
         rows.append({**common, "metric_name": "n_clipped_at_zero", "value": float(clipped_total)})
-        # EVERY division this estimator has masked cells in gets a row -- the same set `point_metrics`
-        # emits WAPE for -- so §13.10's two stratum inputs agree on which strata exist. A division
+        # Within this ensemble branch, every division the estimator has masked cells in gets a row --
+        # the set `point_metrics` emits WAPE for. The early `continue` above (no interval family, or
+        # fewer than two scored cells) emits only the overall null row and NO division rows, by
+        # design, so the two families do NOT always share strata: a §13.10 gate reading both must
+        # OUTER-join them on the division, or it silently drops point-only estimators. A division
         # whose masked cells all declined, or whose scored cells never reached a leave-one-out
         # ensemble, has `seen == 0` and a NULL value, never 0.0. Each row carries ITS division's base:
         # masked rows as `denominator`, scored rows as `n_scored`, ensembled rows as

@@ -46,11 +46,13 @@ PROMOTION_KEYS = frozenset(
 def _named_keys(source: str) -> set[str]:
     """The promotion keys a module NAMES in code, ignoring comments and docstrings.
 
-    An attribute access (`cfg.promotion.nominal_coverage_tolerance`) or a string constant equal to a
-    key (what `getattr(cfg.promotion, "...")` and `model_dump()["..."]` spell) counts. A comment is
-    not in the AST, and a docstring is excluded by position, so a cross-reference that merely
-    MENTIONS a key cannot trip the tripwire. What this cannot see is a reader that never spells a
-    key at all -- `cfg.promotion.model_dump().items()` iterated generically.
+    Counted: an attribute access (`cfg.promotion.nominal_coverage_tolerance`), a string constant equal
+    to a key (what `getattr(p, "...")` and `model_dump()["..."]` spell), a parameter name
+    (`def gate(*, nominal_coverage_tolerance)`, which `**cfg.promotion.model_dump()` would fill), and a
+    keyword argument (`PromotionConfig(minimum_wape_improvement=...)`). A comment is not in the AST
+    and a docstring is excluded by position, so a cross-reference that merely MENTIONS a key cannot
+    trip the tripwire. Not counted: a reader that never spells a key -- a generic
+    `model_dump().items()` loop -- and a field DECLARATION, which is an annotated `Name` target.
     """
     tree = ast.parse(source)
     docstrings = {
@@ -63,15 +65,16 @@ def _named_keys(source: str) -> set[str]:
     }
     named: set[str] = set()
     for node in ast.walk(tree):
-        if isinstance(node, ast.Attribute) and node.attr in PROMOTION_KEYS:
-            named.add(node.attr)
-        elif (
-            isinstance(node, ast.Constant)
-            and isinstance(node.value, str)
-            and node.value in PROMOTION_KEYS
-            and id(node) not in docstrings
-        ):
-            named.add(node.value)
+        if isinstance(node, ast.Attribute):
+            spelled = node.attr
+        elif isinstance(node, (ast.arg, ast.keyword)):
+            spelled = node.arg
+        elif isinstance(node, ast.Constant) and id(node) not in docstrings:
+            spelled = node.value
+        else:
+            continue
+        if isinstance(spelled, str) and spelled in PROMOTION_KEYS:
+            named.add(spelled)
     return named
 
 
@@ -84,6 +87,12 @@ def test_the_tripwire_detector_sees_reads_and_ignores_mentions():
     assert _named_keys('v = p.model_dump()["maximum_major_stratum_wape_degradation"]') == {
         "maximum_major_stratum_wape_degradation"
     }
+    assert _named_keys("def gate(s, *, nominal_coverage_tolerance): ...") == {
+        "nominal_coverage_tolerance"
+    }
+    assert _named_keys("c = PromotionConfig(minimum_wape_improvement=0.1)") == {
+        "minimum_wape_improvement"
+    }
     mentions = (
         '"""Feeds nominal_coverage_tolerance."""\n'
         "# see minimum_wape_improvement\n"
@@ -92,24 +101,25 @@ def test_the_tripwire_detector_sees_reads_and_ignores_mentions():
         "    return 1\n"
     )
     assert _named_keys(mentions) == set()
+    # The recorded blind spot, pinned so a change to it is deliberate.
+    assert _named_keys("gate(**cfg.promotion.model_dump())") == set()
 
 
 def test_the_promotion_keys_are_still_unread_and_the_docstring_still_says_so():
-    """R-S5G-3: a TRIPWIRE, not a prohibition. It fails when a `src/` reader NAMES one of these keys.
+    """R-S5G-3: a TRIPWIRE, not a prohibition. It fails when `src/` code NAMES one of these keys.
 
     `PromotionConfig`'s docstring records all three as inert. A docstring cannot notice when it
     stops being true, and the failure mode is specific: the day a promotion path reads one of
     these, the note becomes a false statement in the file a reader consults first. Derived from the
     code's AST (`_named_keys`) rather than asserting a sentence exists, so it tracks code, not prose.
-    The declaring module is excluded by RESOLVED PATH, not basename, so a future `config.py` in a
-    subpackage is still scanned. When it reddens, the fix is to update the docstring -- not to
-    delete this test.
+    `config.py` is scanned too: its field declarations are annotated `Name` targets and do not count,
+    so a validator there that READS a key still trips this. When it reddens, the fix is to update the
+    docstring -- not to delete this test.
     """
     src = Path(__file__).resolve().parents[2] / "src" / "logging_employment"
-    declaring = (src / "config.py").resolve()
     readers = {
         path.relative_to(src).as_posix(): sorted(named)
         for path in sorted(src.rglob("*.py"))
-        if path.resolve() != declaring and (named := _named_keys(path.read_text(encoding="utf-8")))
+        if (named := _named_keys(path.read_text(encoding="utf-8")))
     }
     assert readers == {}, f"now read by {readers}; update PromotionConfig's docstring"

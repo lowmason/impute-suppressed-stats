@@ -3,7 +3,9 @@
 **Measured:** 2026-09-11T16:24:31+00:00 (R-S5G-5, plan 14 Task 2). **Derived from
 `data/raw/audit/qcew_parent_margins/summary.json`, not retyped** — by
 `scripts/audit/render_parent_margins.py`, which is committed because the summary it reads is
-gitignored, and which refuses to render if any sentence below stops matching the data.
+gitignored, and which refuses to render if a conclusion its `summary_premises` or `extract_premises`
+guards stops matching the data. The witness pair and Stage 0's agglvl inventory below are quoted
+references, not measurements of this run.
 
 **Extracts read:** 128, each verified against the sha256 the summary recorded, pinned
 together by digest `e620bb5ead34003d5f4324dc8fe16a7fa3738c62124c4de5b0bf56baf282477b` over their sorted `(sha256, path)` pairs.
@@ -34,8 +36,8 @@ Census-division total does not exist to fetch.
 | of those, `disclosure_code = 'N'` | 409 |
 | matches the 2026-09-11 witness (1,572 / 409) | `true` |
 
-409 x 3 = 1227 suppressed monthly cells, the `unbounded` count in
-`deterministic_bounds.parquet`.
+409 x 3 = 1227 suppressed monthly cells — the count `deterministic_bounds.parquet`
+reported `unbounded` on 2026-09-11.
 
 ## Parent industries, private ownership
 
@@ -109,7 +111,8 @@ month-observations):
 92% of `113`. That describes DISCLOSED pairs. The bounded cells are suppressed ones,
 a different population (small cells are the ones suppressed), so this is **not** the bound's
 tightness on them, and `specs/stage5-parent-margin.md` R-PM-8 forbids quoting it as such. It
-establishes only that nothing in the published data suggests `113` routinely dwarfs `113310`.
+establishes only that nothing in the published data suggests `113` routinely dwarfs `113310` (the
+renderer halts if that median falls below 0.5).
 
 ## How many bounded cells could reach MILP?
 

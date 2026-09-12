@@ -190,3 +190,24 @@ def test_the_national_size_arm_is_not_stratified_and_not_refused():
         national, regime="r", seed=1, arm="national_size", national_totals=_national()
     )
     assert set(out["stratum_kind"]) == {"overall"}
+
+
+def test_a_cell_without_a_national_row_is_dropped_while_the_rest_still_count():
+    """The EXCLUDED half of the rule, beside the all-excluded half above.
+
+    c1 (2019-03) has a denominator and scores |110-100|/1000 = 0.01. c2 (2019-04) has none and is
+    dropped. Counting it as zero error instead would give (0.01 + 0) / 2 = 0.005.
+    """
+    out = point_metrics(
+        _scores(),
+        regime="r",
+        seed=1,
+        arm="state_total",
+        national_totals=pl.DataFrame(
+            {"reference_month": ["2019-03"], "national_employment": [1000.0]}
+        ),
+    )
+    value = out.filter(
+        (pl.col("estimator_id") == "a") & (pl.col("metric_name") == "state_share_absolute_error")
+    )["value"].item()
+    assert abs(value - 0.01) < 1e-12

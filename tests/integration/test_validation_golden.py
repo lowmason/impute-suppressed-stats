@@ -117,8 +117,8 @@ def test_the_interval_source_names_leave_one_out_rather_than_rolling(fixture_run
     pool is every OTHER scored residual in the same (regime, seed, arm, estimator) group, with no
     time ordering and no window. Nothing rolls. The old value `rolling_residual_ensemble` promised
     §13.10's coverage gate a time-ordered interval that the code never computed, and the gate
-    cannot tell the difference: `interval_source` is outside `assert_declared_provenance`'s five
-    columns, so `INTERVAL_SOURCES` is checked by nothing at runtime and this test IS the check.
+    cannot tell the difference: `interval_source` is outside `assert_declared_provenance`'s six
+    closed-set checks, so `INTERVAL_SOURCES` is checked by nothing at runtime and this test IS the check.
 
     Scope is the label. A time-ordered rolling interval is explicitly NOT built here
     (`specs/completed/stage5-preconditions.md` §4).

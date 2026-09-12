@@ -72,7 +72,11 @@ def test_a_never_observed_state_never_appears_as_scored(four_rung_run):
 
 def test_one_metric_row_is_reproducible_from_the_scores(four_rung_run):
     """Derived, not typed. Recompute a WAPE from `validation_scores` and match the metric row."""
-    row = four_rung_run.metrics.filter(pl.col("metric_name") == "wape").row(0, named=True)
+    row = four_rung_run.metrics.filter(
+        # OVERALL: the recomputation below pools the whole (regime, seed, estimator); a division row
+        # shares the metric name and would match only by emission order.
+        (pl.col("metric_name") == "wape") & (pl.col("stratum_kind") == "overall")
+    ).row(0, named=True)
     subset = four_rung_run.scores.filter(
         (pl.col("regime") == row["regime"])
         & (pl.col("seed") == row["seed"])

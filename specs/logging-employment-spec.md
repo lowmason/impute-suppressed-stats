@@ -2421,7 +2421,7 @@ Other §21 rows keep their Appendix A defaults until a stage's plan or finding c
 > - **Every one of the 1,227 suppressed state-month employment cells is `unbounded`.** Measured,
 >   not predicted: `selected_lower` is 0 and `selected_upper` is **null**. `SRC-QCEW-006`'s
 >   `decline` leaves nonnegativity as the only public fact touching a state cell.
->   *Qualified 2026-09-11 (plan 14): true of what the engine CONSUMES, not of what is published — a
+>   *Qualified 2026-09-12 (plan 14; measured 2026-09-11): true of what the engine CONSUMES, not of what is published — a
 >   disclosed private `113` parent bounds 756 of the 1,227 above (`specs/findings/qcew-parent-margins.md`),
 >   not yet a constraint row (`D-111`).*
 > - **The identifying content is 14 cells.** The suppressed national size classes come back
@@ -2481,7 +2481,7 @@ Other §21 rows keep their Appendix A defaults until a stage's plan or finding c
 >   from above. Only `model_sensitivity_low` meets a binding deterministic endpoint.
 >   *Until `D-111` lands (measured 2026-09-11): a disclosed private `113` parent publishes an upper
 >   endpoint on 756 of the 1,227, and once it is a constraint row those cells are clipped from above.*
-> - **Stage 8 (the REQ-027 exactness path has no live instance).** *(Scoped 2026-09-11: through any
+> - **Stage 8 (the REQ-027 exactness path has no live instance).** *(Scoped 2026-09-12, plan 14: through any
 >   measured margin. The `113 - 1131 - 1132` path is unmeasured on 252 quarters — `D-110`.)*
 >   `exact_reconstruction_flag` fires on no real cell in this run, so the §14.4 route
 >   for an exactly-reconstructed `N`-flagged cell can be exercised only by constructed

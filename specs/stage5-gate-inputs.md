@@ -12,6 +12,9 @@ per-division 90% coverage over the nine Census divisions — and §13.6's state-
 is emitted. The three `PromotionConfig` keys are recorded inert per key rather than read (R-S5G-3,
 `D-109`); no evaluator is built before the stage that produces the candidate. §13.10's gate remains
 applied over NINE of the thirteen regimes (`D-071`). The shipped artifact matches: `runs/f03023ac9f3a/validation_metrics.parquet` was regenerated under this schema on 2026-09-11 (6,932 rows, 2,132 stratified, at `542ed37`), and its `validation_scoreboard.parquet` came back byte-identical at (270, 13) — see `specs/findings/stage-5-log.md`.
+**Evaluable is not yet correct for coverage:** a pre-existing residual-sign defect in §13.7's ensemble
+(`D-112`, found 2026-09-12) collapses coverage for biased estimators, so the coverage gate — overall
+and per division — MUST NOT be applied until `D-112` lands. WAPE is unaffected.
 
 **R-S5G-5's measurement refuted §1.2 below, and R-S5G-8 is therefore NOT closed here.** §1.2
 predicted that a disclosed `1133` / `11331` / total-ownership parent would be an EXACT
@@ -25,8 +28,7 @@ is a **bound**: `113` is disclosed on **252 of 409** (756 of the 1,227 months), 
 See `specs/findings/qcew-parent-margins.md`.
 
 **§1.4 below overstates what a finite bound activates**, and is corrected here rather than in place:
-`D-032` needs `enforce_integrality = false`, and `_needs_milp` also needs an LP width under 25, so a
-bound makes only its narrow subset MILP-eligible (`specs/stage5-parent-margin.md` R-PM-6). Likewise §1.2's
+`D-032` needs `enforce_integrality = false`, and `_needs_milp` also needs an LP width under 25, so a bound sends only its narrow under-threshold subset to MILP (`specs/stage5-parent-margin.md` R-PM-6). Likewise §1.2's
 "exact reconstruction" premise did not survive measurement (above).
 
 **Source:** `docs/reviews/2026-09-11-stage14-revisit.md`, items 1 and 2 of its ranked verdict.
@@ -134,7 +136,9 @@ Both items are cheap now and expensive later, for the same reason: they feed the
   `_needs_milp` skips any cell whose `lower` or `upper` is `None`, so MILP ran on **0 of 4,775**
   rows (`milp_lower` and `milp_upper` are null everywhere; `solver_status` is `unbounded` 1,227 /
   `not_solved` 3,534 / `optimal` 14). `D-093` (the HiGHS `mip_rel_gap`), `D-032` and the §9.6
-  width trigger all become reachable the first time a bound is finite. That is a reason to
+  width trigger all become reachable the first time a bound is finite. *(Overstated — corrected in the
+  Status line above: `D-032` needs `enforce_integrality = false`, and MILP also needs an LP width under
+  25.)* That is a reason to
   measure the margins *early*, while their consequences are still cheap to absorb.
 
 ## 2. Requirements

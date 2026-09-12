@@ -123,8 +123,8 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
   metrics, four coverage levels + width + CRPS + clip count, and three constraint metrics, plus —
   on the `state_total` arm only — a per-Census-division `wape` and `coverage_0.90` (R-S5G-1). So
   §13.5's infeasible-component rate and LP-vs-MILP tightening, §13.6's size-share / rank metrics,
-  §13.7's calibration by state size, gap duration and propensity (region IS covered, for 90%
-  coverage only), and §13.9's sensitivity and ablation are **not** covered by this module.
+  §13.7's calibration by state size, gap duration, propensity and distance from the nearest
+  CBP anchor year (region IS covered, for 90% coverage only), and §13.9's sensitivity and ablation are **not** covered by this module.
 
 ## Invariants a fresh agent gets wrong
 
@@ -182,9 +182,15 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
   filter on `metric_name == "wape"` alone fans out. `scoreboard.build_scoreboard` filters
   `stratum_kind == "overall"`; §13.10's stratum gates read the division rows from
   `validation_metrics`, never from the board. Each division row carries ITS division's
-  `denominator`, `n_scored` and `calibration_sample_size`; the leave-one-out calibration POOL stays
-  estimator-wide. Every division with masked cells gets a row in both families, null when nothing
-  was scored or ensembled. The `national_size` arm is not stratified (`state_fips = "US"`).
+  `denominator` and `n_scored`, and a division COVERAGE row also its `calibration_sample_size` (WAPE
+  rows carry none); the leave-one-out calibration POOL stays estimator-wide. The two families do NOT
+  always share strata: `point_metrics` emits division WAPE for every estimator, while
+  `probabilistic_metrics` emits division coverage only for an interval family with at least two
+  scored cells (null where a division's cells never reached an ensemble). A gate reading both must
+  OUTER-join them on the division.
+  **Every `probabilistic` value carries `D-112`'s residual-sign defect** — the ensemble adds
+  `estimate - truth` to the estimate instead of subtracting it — so do not gate on coverage, width
+  or CRPS until it lands. WAPE is unaffected. The `national_size` arm is not stratified (`state_fips = "US"`).
 - `intervals` offers CRPS and refuses log score on purpose: an empirical ensemble gives -inf
   whenever the truth falls outside its range. §13.7 permits either.
 

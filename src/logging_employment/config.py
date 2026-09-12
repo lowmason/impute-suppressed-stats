@@ -293,7 +293,9 @@ class PromotionConfig(_Strict):
     - `maximum_major_stratum_wape_degradation` and `nominal_coverage_tolerance` have their INPUT as
       of R-S5G-1. `validate/metrics.py` now emits a per-census-division WAPE and a per-division
       90% coverage into `validation_metrics.parquet`, so both gates are evaluable from a shipped
-      artifact. What is missing is the CANDIDATE to evaluate: §13.10 compares a model against the
+      artifact. Evaluable is not yet correct: every `probabilistic` value, the coverage input
+      `nominal_coverage_tolerance` would gate on, carries a residual-sign defect (`D-112`), and must
+      not gate until it is fixed. What is missing is the CANDIDATE to evaluate: §13.10 compares a model against the
       preferred transparent baseline and Stage 5 produces the model.
     - `minimum_wape_improvement` is missing both. Its comparison needs a second scoreboard, and
       `validation_scoreboard.parquet` exists in one copy -- the baseline one.
@@ -302,9 +304,10 @@ class PromotionConfig(_Strict):
     not-yet-designed output would fix that signature by guessing it, and three of §13.10's six
     gates (hard constraints on draws, convergence diagnostics, disclosure review) are Stage-5 and
     Stage-8 concepts an evaluator written now could not represent at all. Stage 5 wires these;
-    `tests/unit/test_config_validation_block.py` fails the day a `src/` reader names one of the keys,
-    so this docstring cannot quietly outlive that truth. A reader that never spells a key (a generic
-    `model_dump()` loop) would not trip it -- update this note by hand in that case.
+    `tests/unit/test_config_validation_block.py` fails the day `src/` code names one of the keys --
+    as an attribute, a string, a parameter or a keyword argument, `config.py` itself included -- so
+    this docstring cannot quietly outlive that truth. A reader that never spells a key (a generic
+    `model_dump()` loop) would not trip it; update this note by hand in that case.
     """
 
     minimum_wape_improvement: float = 0.05
