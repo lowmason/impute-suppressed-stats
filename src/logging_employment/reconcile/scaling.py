@@ -9,8 +9,10 @@ every cell is clipped, and Newton or a secant method stalls on exactly those fla
 `test_the_clipped_sum_is_monotone_in_lambda` pins the property the choice rests on.
 
 WHY NULL UPPERS ARE INFINITE. On the D1 window `selected_upper` is null on 1,227 of 1,241 unknown
-cells, because `SRC-QCEW-006` came back `decline` and nonnegativity is the only public fact
-touching a state cell. `None` maps to `math.inf`, which makes the clip's upper arm a no-op and the
+cells, because `SRC-QCEW-006` came back `decline` and no other public fact has been made a
+constraint row. (One exists: a disclosed private `113` parent bounds 756 of the 1,227 above, measured
+2026-09-11 and routed to `specs/stage5-parent-margin.md`; until it lands every such upper is null.)
+`None` maps to `math.inf`, which makes the clip's upper arm a no-op and the
 `sum U < R_t` half of §12.3's predicate vacuous. Coercing null to a large finite number instead
 would invent the "arbitrary top-class cap" §9.3 forbids by name, and would silently change results
 whenever the chosen number happened to bind.

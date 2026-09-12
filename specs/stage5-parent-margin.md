@@ -16,11 +16,14 @@ load-bearing numbers:
   `deterministic_bounds.parquet` carries `+inf`.
 - **0** are exactly reconstructed. `1133` and `11331` are disclosed on **0 of 409** (a 1:1 chain
   is suppressed together), `own_code 0` does not exist at state x 6-digit, and no disclosed `113`
-  parent on a suppressed quarter is a `'-'` true zero. `REQ-027`/§14.4 has **no live instance**
-  (`D-110`), and this spec must not assume one.
-- The bound is **tight**. On the 3,069 month-observations where both are disclosed, `113310 / 113`
-  has median **0.916** (5th pct 0.659). The median suppressed cell's upper bound would sit roughly
-  9% above its true value rather than at `+inf`.
+  parent on a suppressed quarter is a `'-'` true zero. No MEASURED margin gives `REQ-027`/§14.4 a live instance (`D-110`) — but
+  the `113 - 1131 - 1132` path was NOT measured (R-PM-5), so on the 252 bounded quarters exactness
+  is **unknown**, not absent. This spec must neither assume an exact case nor rule one out.
+- The bound is **not vacuous on the published distribution**. On the 3,069 month-observations
+  where `113310` and `113` are BOTH disclosed, `113310 / 113` has median **0.916** (5th pct 0.659).
+  That describes disclosed pairs. The bounded cells are suppressed ones — a different population,
+  since small cells are the ones suppressed — so R-PM-8 forbids reading 0.916 as the bound's
+  tightness on them.
 
 **Routed from** `specs/stage5-gate-inputs.md` R-S5G-6/8 and plan 14 Task 8. It is NOT absorbed
 into plan 14 because R-S5G-8's own scope line is "the flag is actually set from the new margin,
@@ -30,7 +33,8 @@ kinds, a new constraint builder, a change to §13.2's mask, and a moved comparan
 **Consumed by:** Stage 5. **Stage 5 MUST NOT consume `deterministic_bounds` as
 identification-complete until this lands** — the roadmap's Stage 5 `Consumes` says so.
 
-**Closes (on completion):** `D-111`. Makes `D-093` and `D-032` reachable for the first time.
+**Closes (on completion):** `D-111`. Makes `D-093` reachable for the bounded cells whose LP width
+falls below §9.6's MILP threshold (R-PM-6).
 
 ---
 
@@ -39,13 +43,21 @@ identification-complete until this lands** — the roadmap's Stage 5 `Consumes` 
 Every consequence below follows from one fact: today **no state cell has a finite upper bound**,
 and a great deal of shipped behaviour is latent because of it.
 
-- `_needs_milp` skips any cell whose `lower` or `upper` is `None`, so **MILP has run on 0 of
-  4,775 rows** (`milp_lower`/`milp_upper` null everywhere; `solver_status` is `unbounded` 1,227 /
-  `not_solved` 3,534 / `optimal` 14). The first finite upper bound turns that on.
-- §13.2 step 4's mask in `validate/recover.py` hides a state cell and knows nothing about a
-  parent. Once a parent identifies the child, a mask that hides the child and leaves the parent
-  visible **scores a cell it never actually hid** — a §13.4 leak directly into the Stage 4
-  comparand.
+- **MILP has run on 0 of 4,775 rows** (`milp_lower`/`milp_upper` null everywhere; `solver_status`
+  is `unbounded` 1,227 / `not_solved` 3,534 / `optimal` 14). `_needs_milp` has three gates, not
+  one: `enforce_integrality`, a finite `lower` AND `upper` on an integer cell, and an LP width
+  below `use_milp_when_lp_interval_width_below` (25 in `config.yaml`). The 1,227 state cells fail
+  the second; the 14 finite national cells fail the third (widths 130–894). A parent bound opens
+  the second gate on the bounded cells, and only those whose new width is under 25 reach MILP —
+  `specs/findings/qcew-parent-margins.md` derives how many that is on the measured `113` values.
+- §13.2's mask in `validate/recover.py` knows nothing about a parent, and §13.2 step 4 says to
+  "retain only the margins that would remain public under the synthetic pattern". On D1 a
+  private `113` stays public on 252 of the 409 real suppressions. A mask that ALWAYS hides `113`
+  with the child is therefore as wrong as one that never does: the first scores estimators under
+  harder conditions than production and biases the Stage 4 comparand pessimistic; the second can
+  leave an exactly-recoverable case (a visible parent with disclosed siblings) unlabelled, which
+  step 6 forbids. A visible `113` alone gives `113310 <= 113` and recovers nothing, so it is not a
+  §13.4 leak.
 - Stage 4's scoreboard and `runs/f03023ac9f3a` were computed against the unbounded set. Their
   numbers are the §13.10 comparand Stage 5 is promoted against.
 
@@ -65,13 +77,19 @@ the level instead, and the ingest path MUST do the same or record the codes as m
 guards a **different** margin (`SRC-QCEW-006`, the national/state-sum identity) and MUST keep
 guarding it — this spec does not weaken it and must not be read as doing so.
 
-**R-PM-3 (§13.2 step 4).** `validate/recover.py` MUST mask the parent whenever it masks the child.
-This is the leakage requirement and it is not optional: a harness that hides `113310` and leaves a
-disclosed `113` in the constraint system has not hidden the cell. `D-087` (bounds unenforced on
-the validation path) is adjacent and should be settled in the same pass.
+**R-PM-3 (§13.2 steps 4 and 6).** `validate/recover.py` MUST decide the parent's visibility under the
+synthetic pattern, per step 4 — NOT hide it unconditionally. A visible `113` gives only
+`113310 <= 113` and does not recover the held-out value, so leaving it public is not a §13.4 leak:
+it reproduces what production sees on 252 of 409 real suppressions, and hiding it always would bias
+the §13.10 comparand pessimistic. The pattern MUST be stated and justified — e.g. co-suppress the
+parent at a propensity matched to the 157 of 409 real suppressions where no `113` is disclosed.
+Where a visible parent plus disclosed siblings recovers the child EXACTLY (R-PM-5), step 6 applies:
+reject or separately label the case. `D-087` (bounds unenforced on the validation path) is adjacent
+and should be settled in the same pass.
 
 **R-PM-4 (disclosure).** `disclosure/`'s `exact_reconstruction_flag` MUST be set from **exact**
-cases only. Today there are none, so this requirement is **conditional and must not invent one**:
+cases only. No MEASURED margin yields one today (R-PM-5's sibling path is unmeasured), so this requirement is
+**conditional and must not invent one**:
 an `upper_bound` case is a bound, and a bound MUST NOT reach `release_observed` or
 `release_model_estimate` through this route (§14.4). If R-PM-5 finds an exact case, this
 requirement binds for real.
@@ -82,10 +100,14 @@ reconstruction of `113310`. `1131` and `1132` were outside R-S5G-5's named scope
 fetched**. This MUST be measured before R-PM-4 is ruled on, by the same script and the same
 ladder. It is the one path that could still produce a live `REQ-027` case.
 
-**R-PM-6 (`D-093` and the MILP gap).** The first finite upper bound activates `_needs_milp`, and
-with it HiGHS's default `mip_rel_gap = 1e-4`, `D-032`, and §9.6's width trigger — together, not
-one at a time. `D-093` measured 124 of 298 models returning a minimum above the true optimum at
-this engine's variable count. This is cited as **scope**, not discovered later.
+**R-PM-6 (`D-093` and the MILP gap).** A finite upper bound makes a cell ELIGIBLE for `_needs_milp`;
+it reaches MILP only if its LP width also falls below `use_milp_when_lp_interval_width_below`
+(§9.6's width trigger, 25 today). Where it does, HiGHS's default `mip_rel_gap = 1e-4` binds —
+`D-093` measured 124 of 298 models returning a minimum above the true optimum at this engine's
+variable count. The spec MUST size this work against the derived count of bounded cells under the
+threshold (`specs/findings/qcew-parent-margins.md`), not against all 756. `D-032` is NOT activated
+by this spec: it is reachable only when `enforce_integrality` is `false`. Cited as **scope**, not
+discovered later.
 
 **R-PM-7 (the comparand moves, and the spec must say how).** Stage 4's `validation_scoreboard`
 and `runs/f03023ac9f3a` were computed against an identification set with no finite state upper
@@ -114,9 +136,10 @@ published joint distribution gives no reason to expect it vacuous.
 1. `deterministic_bounds.parquet` carries a finite `selected_upper` on the cells the measurement
    identified, and the count matches `specs/findings/qcew-parent-margins.md` (or the difference is
    explained).
-2. `validate/recover.py` masks the parent with the child, with a test that fails if it does not.
-3. `solver_status` is no longer `unbounded` on those cells, and `D-093`'s gap question has a
-   recorded answer rather than a default.
+2. `validate/recover.py` decides the parent's visibility under a stated synthetic pattern (R-PM-3)
+   and labels exactly-recoverable cases per §13.2 step 6, with a test that fails if either is dropped.
+3. `solver_status` is no longer `unbounded` on those cells, and — for the ones under the MILP width
+   threshold — `D-093`'s gap question has a recorded answer rather than a default.
 4. R-PM-5's sibling measurement has a recorded outcome, and R-PM-4 is ruled on that basis.
 5. The Stage 5 roadmap block's "MUST NOT consume as identification-complete" clause is lifted, by
    the same stage-block rule that put it there.

@@ -1,9 +1,11 @@
 """§13.2 step 1: a configurable propensity over PUBLIC predictors only.
 
 §13.2 names five predictors. Four are implemented. The fifth — "parent share" — is NOT, and is not
-approximated: `qcew_monthly` carries industry 113310 alone, so there is no parent 1133 or 113 state
-series to form a share against. Fabricating one from the national total would make the predictor a
-function of the residual this harness is trying to score.
+approximated: the staged tables carry industry 113310 alone, so the pipeline has no parent 1133 or
+113 state series to form a share against. A private 113 state series IS published -- measured
+2026-09-11 in `specs/findings/qcew-parent-margins.md` -- but it is not ingested (`D-111`), and
+ingesting it is what would make this predictor implementable. Fabricating one from the national
+total instead would make the predictor a function of the residual this harness is trying to score.
 
 Every predictor below is computable from data that stays public when the target is hidden:
 establishment counts are published even for employment-suppressed cells, and the volatility and

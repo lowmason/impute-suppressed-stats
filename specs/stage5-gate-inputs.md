@@ -17,11 +17,17 @@ applied over NINE of the thirteen regimes (`D-071`). The shipped artifact matche
 predicted that a disclosed `1133` / `11331` / total-ownership parent would be an EXACT
 reconstruction. Measured across all 32 D1 quarters: those parents are disclosed on **0** of the
 409 suppressed private state-quarters (a 1:1 chain is suppressed together) and `own_code 0` does
-not exist at state x 6-digit — so `REQ-027`/§14.4 has no live instance (`D-110`). What does exist
+not exist at state x 6-digit — so no MEASURED margin gives `REQ-027`/§14.4 a live instance (`D-110`;
+the `113 - 1131 - 1132` path is unmeasured, R-PM-5). What does exist
 is a **bound**: `113` is disclosed on **252 of 409** (756 of the 1,227 months), giving
 `113310 <= 113`. That is routed to `specs/stage5-parent-margin.md` (`D-111`), not absorbed, and
 **Stage 5 MUST NOT consume `deterministic_bounds` as identification-complete until it lands.**
 See `specs/findings/qcew-parent-margins.md`.
+
+**§1.4 below overstates what a finite bound activates**, and is corrected here rather than in place:
+`D-032` needs `enforce_integrality = false`, and `_needs_milp` also needs an LP width under 25, so a
+bound makes only its narrow subset MILP-eligible (`specs/stage5-parent-margin.md` R-PM-6). Likewise §1.2's
+"exact reconstruction" premise did not survive measurement (above).
 
 **Source:** `docs/reviews/2026-09-11-stage14-revisit.md`, items 1 and 2 of its ranked verdict.
 That document re-measured both 2026-09-09/10 reviews against `d6591b6` and found these the only

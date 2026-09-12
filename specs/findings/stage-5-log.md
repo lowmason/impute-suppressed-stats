@@ -11,7 +11,7 @@ stale code pin (roadmap `## Stages`, stage-block rules 1 and 2).
 > but its only `src/` caller is `baselines/runner.py:218`.
 
 **Why it changed.** There are two callers, and neither is at that line:
-`baselines/runner.py:312` and `validate/harness.py:165`. The second arrived with
+`baselines/runner.py:312` and `validate/harness.py::run_pseudo_suppression`. The second arrived with
 the Stage 4 harness and the block was never re-validated against it.
 
 **Why it mattered.** The clause was load-bearing for the argument that followed
@@ -59,8 +59,9 @@ rendered in full at `specs/findings/qcew-parent-margins.md`):
 **Why it changed.** The inference was sound and its antecedent is false. `1133` and `11331` are
 disclosed on 1,163 of 1,572 state-quarters — and on **zero** of the 409 where the child is
 suppressed. A 1:1 chain is suppressed *together*: that is what makes the chain safe for BLS to
-publish at all. The exact-reconstruction hazard the spec anticipated does not exist on D1, so
-`REQ-027`/§14.4 still has no live instance and `exact_reconstruction_flag` stays test-only.
+publish at all. The exact-reconstruction hazard the spec anticipated does not arise through ANY MEASURED margin
+on D1. It is not ruled out: `113 - 1131 - 1132` was not measured (`D-110`), so on the 252 bounded
+quarters `REQ-027`'s status is unknown rather than absent.
 
 **What is real instead.** `113` aggregates `1131` and `1132` as well, so it survives the
 suppression that kills the chain below it, and it is disclosed on 252 of the 409. By
@@ -75,8 +76,8 @@ hiding an exact case.
 
 **Why it mattered.** Stage 4's scoreboard and `runs/f03023ac9f3a` were computed against an
 identification set with no finite state upper bound anywhere. A finite upper bound on 756 months
-also makes `D-093`'s MILP gap reachable for the first time: `_needs_milp` skips every cell whose
-`upper` is None, which is why MILP has run on 0 of 4,775 rows.
+makes those cells ELIGIBLE for MILP, which has run on 0 of 4,775 rows. `_needs_milp` also requires
+the LP width to fall below 25, so `D-093`'s gap binds only on the narrow subset the finding derives.
 
 **Not measured, and named rather than assumed.** `113 - 1131 - 1132 = 1133`, and the chain below
 `1133` is 1:1 — so a quarter with all three disclosed is an *exact* reconstruction. `1131` and

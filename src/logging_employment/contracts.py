@@ -243,9 +243,9 @@ def assert_declared_provenance(frame: pl.DataFrame) -> None:
         ("decline_kind", DECLINE_KINDS),
         ("suppression_type", SUPPRESSION_TYPES),
         # R-S5G-1. Added with a CALLER: `validate/harness.py` runs this over the assembled metrics
-        # frame. `INTERVAL_SOURCES` is declared and checked by nothing at runtime, and
-        # `validate/CLAUDE.md` already carries that as an open item -- a second undeclared-in-
-        # practice set is the thing this addition exists not to become.
+        # frame, and `tests/unit/test_contracts_validation.py` refuses an undeclared value.
+        # `INTERVAL_SOURCES` is the cautionary case: its own comment in this module records it as
+        # enforced by nothing at runtime, and a second declared-but-unenforced set is what this avoids.
         ("stratum_kind", STRATUM_KINDS),
     ):
         if column not in frame.columns:
@@ -464,8 +464,8 @@ STRATUM_KINDS: tuple[str, ...] = ("overall", "census_division")
 # window. (The superseded string is spelled out in the test named below, so a reader who greps for
 # it lands on the reason; it is deliberately not repeated in `src/`.)
 # §13.10's coverage gate reads these intervals and cannot tell a time-ordered interval from this
-# one, so the name is the only thing carrying the distinction. Unlike WEIGHT_BASES and its four
-# siblings above, this tuple is enforced by nothing at runtime — `assert_declared_provenance` does
+# one, so the name is the only thing carrying the distinction. Unlike WEIGHT_BASES and its five
+# siblings above (STRATUM_KINDS joined them in R-S5G-1), this tuple is enforced by nothing at runtime — `assert_declared_provenance` does
 # not cover `interval_source` — so `tests/integration/test_validation_golden.py` is its only check.
 # Renaming the value here does not build the rolling version; that is Stage 5's, per
 # `specs/completed/stage5-preconditions.md` §4.
@@ -520,8 +520,10 @@ VALIDATION_SCORE_SCHEMA: dict[str, pl.DataType] = {
     "constraint_set_hash": pl.String,
 }
 
-# One row per (regime, seed, estimator, metric_family): the §13.5-13.8 aggregates, each carrying
-# its own denominator.
+# One row per (regime, seed, mask_arm, estimator, metric_family, metric_name, stratum_kind,
+# stratum_value): the §13.5-13.8 aggregates, each carrying the denominator of the set it was
+# computed over -- a stratified row's is its stratum's, not the estimator's (R-S5G-1). The six-field
+# key without the stratum pair is NOT total: `wape` and `coverage_0.90` repeat per division.
 VALIDATION_METRIC_SCHEMA: dict[str, pl.DataType] = {
     "regime": pl.String,
     "seed": pl.Int64,
@@ -544,9 +546,10 @@ VALIDATION_METRIC_SCHEMA: dict[str, pl.DataType] = {
     "calibration_sample_size": pl.Int64,
     "bound_cells_finite_upper": pl.Int64,
     "constraint_rows_scored": pl.Int64,
-    # APPENDED, not inserted (R-S5G-1). `schema_fingerprint` hashes the ORDERED pairs, so placing
-    # these beside the columns they qualify would re-fingerprint every field after them for no
-    # gain; appended, the diff is two pairs at the end.
+    # APPENDED, not inserted (R-S5G-1). No artifact records this schema's fingerprint today --
+    # `cli.py` fingerprints the constraint and baseline tables, not this one -- and `validate_frame`
+    # ignores column order, so the choice buys stability rather than a hash: every existing position
+    # stays where a positional reader, or a fingerprint added later, would expect it.
     "stratum_kind": pl.String,
     "stratum_value": pl.String,
 }

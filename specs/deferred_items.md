@@ -1639,7 +1639,7 @@ names but no existing item owns; the Stage 4 `Exit:` line cites them.
       (`validate/recover.py:67`) and `mask_and_solve_size` (`:80`) have no caller anywhere in
       `src/`; `validate/harness.py` raises only `ConceptViolationError` (`:76`, `:296`), never on
       recoverability or on a bound violation. What ships instead is measurement:
-      `validate/metrics.py:45,52` emit `truth_in_bound_rate` and `exact_recovery_rate` as metric
+      `validate/metrics.py::bound_metrics` emit `truth_in_bound_rate` and `exact_recovery_rate` as metric
       rows, both present in `runs/f03023ac9f3a/validation_metrics.parquet`. The only executable
       witnesses are `tests/integration/test_validate_exact_recovery.py`, which calls
       `mask_and_solve_size` directly and skips unless a March with zero suppressed classes exists.
@@ -1682,7 +1682,7 @@ work the plan's changes either created, confirmed, or deliberately scoped out.
 - [ ] `D-087` **INV-002's per-cell half is enforced on the production path only, not on the
       validation harness.** Plan 13 Task 4 (R-S5P-3) wired `bounds` into `run_baselines` and made
       `solve-bounds` a precondition of `run-baselines` in `cli.py`, so every released estimate is
-      now checked against its §9 interval. `validate/harness.py:161` deliberately keeps passing
+      now checked against its §9 interval. `validate/harness.py::run_pseudo_suppression` deliberately keeps passing
       nothing, and `run_baselines`' own docstring records why: `deterministic_bounds.parquet`
       carries the published value for a cell the pseudo-suppression mask hides, so its intervals
       were solved from a system containing the truth the harness scores against, and clipping to
@@ -1691,7 +1691,7 @@ work the plan's changes either created, confirmed, or deliberately scoped out.
       with nothing noticing, which is exactly the condition INV-002 exists to refuse.
       **CORRECTED 2026-09-10, before any work started: this item's original premise was false.**
       It said closing this "needs bounds re-solved under the mask, which is a Stage 6 job, not a
-      parameter change". The re-solve already exists: `validate/harness.py:160` calls
+      parameter change". The re-solve already exists: `validate/harness.py::run_pseudo_suppression` calls
       `recover.mask_and_solve`, which rebuilds the constraint system from the MASKED frame and
       solves it, returning `MaskedSystem.bounds` — one line before the `run_baselines` call on
       :161. So masked, non-leaking bounds are already in hand at the call site, and wiring them in
@@ -1821,12 +1821,14 @@ the event that makes it reachable rather than a date.
       coefficients only, 11 of 400. At employment magnitudes near 41,667 the gap is ~4 employees.
       `grep -rni 'mip_rel_gap|mip_abs_gap'` over `src/ tests/ specs/ docs/` returns zero hits, so
       this is an unexamined default rather than a recorded decision.
-      Size: quick-fix. Revisit if: any state cell gets a finite bound -- MILP ran on 0 of 4,775 rows
-      on D1 (`milp_lower`/`milp_upper` null everywhere) because `_needs_milp` skips a cell whose
-      `upper` is None. **`D-092` measured one 2026-09-11**: a disclosed `113` parent bounds 756 of
-      the 1,227 suppressed cells above, so this fires the moment `D-111`
-      (`specs/stage5-parent-margin.md` R-PM-6) builds that bound into the constraint system. It is
-      cited there as scope rather than left to be rediscovered.
+      Size: quick-fix. Revisit if: an integer cell's LP interval is finite AND narrower than
+      `use_milp_when_lp_interval_width_below` (25) -- the two gates `_needs_milp` applies after
+      `enforce_integrality`. MILP ran on 0 of 4,775 rows on D1 (`milp_lower`/`milp_upper` null
+      everywhere): the 1,227 state cells fail the first gate and the 14 finite national cells fail
+      the second (widths 130-894). **`D-092` measured a bound 2026-09-11**: a disclosed `113` parent
+      bounds 756 of the 1,227 suppressed cells above, so this fires for the subset under the width
+      threshold once `D-111` (`specs/stage5-parent-margin.md` R-PM-6) builds that bound into the
+      system -- `specs/findings/qcew-parent-margins.md` derives how many that is.
 
 - [ ] `D-094` **Harmonized `snapshot_id` is the raw file's filename stem, so the §7.2 join key
       resolves to nothing.** `build.py` passes `snapshot_id=path.stem` at all three parser calls
@@ -2031,6 +2033,8 @@ the event that makes it reachable rather than a date.
       owns the neighbouring dead `general_method` guard and Stage 6's `Consumes` owns the missing
       bounds parameter; this is the third, separate defect in the same function.
 
+## 14-stage5-gate-inputs — 2026-09-11
+
 - [ ] `D-109` **`PromotionConfig`'s three keys are recorded inert rather than read.** R-S5G-3 ruled
       2026-09-11 that no §13.10 evaluator is built before Stage 5 exists: `minimum_wape_improvement`
       needs a second `validation_scoreboard.parquet` and there is one,
@@ -2041,28 +2045,34 @@ the event that makes it reachable rather than a date.
       `tests/unit/test_config_validation_block.py::test_the_promotion_keys_are_still_unread_and_the_docstring_still_says_so`
       reddens on that day and names the keys that moved.
 
-- [ ] `D-110` **`exact_reconstruction_flag` has no live instance, and the §9.3 measurement did not
-      create one.** R-S5G-5 measured the parent-industry and ownership margins across all 32 D1
-      quarters for `113`, `1133`, `11331` and total ownership at `113310`. No suppressed private
-      state-quarter is exactly reconstructed: `1133` and `11331` are disclosed on **0 of 409**
-      (a 1:1 chain is suppressed together, which is what makes it publishable), `own_code 0` does
-      not exist at state x 6-digit, and **0** of the 3 `'-'` true-zero `113` rows falls on a
-      suppressed quarter. The pattern is in `specs/findings/qcew-parent-margins.md`. `REQ-027`'s
-      §14.4 route therefore stays exercisable only by constructed tests, as Stage 2's stamp already
-      recorded. NOTE this closes the EXACT half only; the bound is `D-111`.
-      Size: quick-fix. Revisit if: a QCEW revision publishes a parent where the child is `N`, or
-      `specs/stage5-parent-margin.md` R-PM-5 finds `113`/`1131`/`1132` jointly disclosed --
-      re-run `scripts/audit/qcew_parent_margins.py`, which re-derives its own 1,572 / 409 baseline
-      and records whether the 2026-09-11 witness still holds.
+- [ ] `D-110` **No MEASURED §9.3 margin gives `exact_reconstruction_flag` a live instance -- but one
+      named path was not measured.** R-S5G-5 measured `113`, `1133`, `11331` and total ownership at
+      `113310` across all 32 D1 quarters. None exactly reconstructs a suppressed private
+      state-quarter: `1133` and `11331` are disclosed on **0 of 409** (a 1:1 chain is suppressed
+      together, which is what makes it publishable), `own_code 0` does not exist at state x 6-digit,
+      and **0** of the 3 `'-'` true-zero `113` rows falls on a suppressed quarter. **Not measured:**
+      `113 - 1131 - 1132 = 1133` is exact wherever all three are disclosed, and it applies to exactly
+      the 252 quarters where `113` is -- so on those quarters `REQ-027`'s status is UNKNOWN, not
+      absent, and R-S5G-8's "before any release path can reach those cells" still binds. Measuring
+      it is `specs/stage5-parent-margin.md` R-PM-5. Pattern: `specs/findings/qcew-parent-margins.md`.
+      Size: quick-fix. Revisit if: R-PM-5 finds `113`, `1131` and `1132` jointly disclosed on a
+      suppressed quarter, or a QCEW revision publishes a parent where the child is `N`. Re-running
+      `scripts/audit/qcew_parent_margins.py` OVERWRITES the stored extracts it would be compared
+      against (`_common.record_extract` rewrites in place), so first check them against the extract
+      digest `specs/findings/qcew-parent-margins.md` pins, or copy
+      `data/raw/audit/qcew_parent_margins/` aside.
 
 - [ ] `D-111` **A disclosed `113` parent bounds 252 of the 409 suppressed state-quarters above, and
       nothing consumes it.** Measured 2026-09-11 (R-S5G-5): 756 of the 1,227 suppressed monthly
       cells have a finite upper bound available from a published accounting fact, and the shipped
-      `deterministic_bounds.parquet` carries `+inf` on all of them. The bound is tight -- on the
-      3,069 month-observations where both are disclosed, `113310 / 113` has median 0.916 -- so this
-      is an identification result, not a curiosity. Routed to `specs/stage5-parent-margin.md`
-      (R-PM-1..8): registry rows, new cell kinds and a `size_margin_rows`-shaped builder, §13.2
-      step-4 parent masking in `validate/recover.py` (without which the harness scores a cell it
-      never hid), the unmeasured `1131`/`1132` sibling path, and whether Stage 4's comparand is
-      re-run. **Stage 5's roadmap `Consumes` blocks on this.**
+      `deterministic_bounds.parquet` carries `+inf` on all of them. It is not vacuous on the
+      published distribution: where `113310` and `113` are both disclosed, `113310 / 113` has median
+      0.916 over 3,069 month-observations -- a description of disclosed pairs, not of the suppressed
+      cells the bound applies to (`specs/stage5-parent-margin.md` R-PM-8). Routed there (R-PM-1..8):
+      registry rows, new cell kinds and a `size_margin_rows`-shaped builder, a §13.2 step-4 rule for
+      when `validate/recover.py` keeps the parent visible (it is public on 252 of 409 real
+      suppressions, so hiding it always biases the comparand; step 6 labels any exact case), the
+      unmeasured `1131`/`1132` sibling path, MILP only where the new LP width falls under §9.6's
+      threshold, and whether Stage 4's comparand is re-run. **Stage 5's roadmap `Consumes` blocks
+      on this.**
       Size: plan. Done when: `specs/stage5-parent-margin.md` §4's five conditions hold.

@@ -302,8 +302,9 @@ class PromotionConfig(_Strict):
     not-yet-designed output would fix that signature by guessing it, and three of §13.10's six
     gates (hard constraints on draws, convergence diagnostics, disclosure review) are Stage-5 and
     Stage-8 concepts an evaluator written now could not represent at all. Stage 5 wires these;
-    `tests/unit/test_config_validation_block.py` fails the day it does, so this docstring cannot
-    quietly outlive its truth.
+    `tests/unit/test_config_validation_block.py` fails the day a `src/` reader names one of the keys,
+    so this docstring cannot quietly outlive that truth. A reader that never spells a key (a generic
+    `model_dump()` loop) would not trip it -- update this note by hand in that case.
     """
 
     minimum_wape_improvement: float = 0.05

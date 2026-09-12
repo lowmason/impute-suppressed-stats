@@ -29,7 +29,9 @@ def _scores():
         {
             "estimator_id": ["cbp_intensity"] * 2 + ["harvest_proportional"] * 2,
             "cell_id": ["c1", "c2"] * 2,
-            "state_fips": ["06", "41"] * 2,
+            # TWO divisions (pacific, new_england). With one, every stratified WAPE row equals its
+            # overall row, so a board that selected the division rows would pass the grain guard.
+            "state_fips": ["06", "23"] * 2,
             "reference_month": ["2019-03", "2019-03"] * 2,
             "truth": truth * 2,
             "estimate": [110.0, 180.0, None, None],
@@ -508,6 +510,9 @@ def test_the_board_keeps_one_row_per_group_when_the_metrics_carry_strata():
     metrics = _metrics()
     stratified = metrics.filter(pl.col("stratum_kind") == "census_division")
     assert stratified.height > 0, "fixture must actually carry stratified rows"
+    assert stratified["stratum_value"].n_unique() >= 2, (
+        "fixture must span two divisions, or a division-selecting filter passes too"
+    )
     board = build_scoreboard(metrics)
     assert (
         board.height

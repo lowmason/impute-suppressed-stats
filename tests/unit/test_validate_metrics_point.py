@@ -1,5 +1,7 @@
 import polars as pl
+import pytest
 
+from logging_employment.errors import ConceptViolationError
 from logging_employment.validate.metrics import point_metrics
 
 
@@ -9,7 +11,7 @@ def _scores():
             "estimator_id": ["a", "a", "a", "b", "b", "b"],
             "cell_id": ["c1", "c2", "c3"] * 2,
             "state_fips": ["06", "41", "23"] * 2,
-            "reference_month": ["2019-03", "2019-03", "2019-04"] * 2,
+            "reference_month": ["2019-03", "2019-04", "2019-04"] * 2,
             "truth": [100.0, 200.0, 300.0] * 2,
             "estimate": [110.0, 180.0, None, None, None, None],
             "decline_kind": [None, None, "data_gap", "by_design", "by_design", "by_design"],
@@ -21,7 +23,7 @@ def _national():
     return pl.DataFrame(
         {
             "reference_month": ["2019-03", "2019-04"],
-            "national_employment": [1000.0, 2000.0],
+            "national_employment": [1000.0, 4000.0],
         }
     )
 
@@ -67,10 +69,12 @@ def test_wape_is_computed_over_the_scored_rows_only():
 def test_state_share_absolute_error_divides_each_cell_by_its_own_month_national_total():
     """§13.6's state-share absolute error, R-S5G-4.
 
-    Both scored cells fall in 2019-03, whose national total is 1000: |110-100|/1000 = 0.01 and
-    |180-200|/1000 = 0.02, so the mean is 0.015. Computing it against a pooled denominator instead
-    would let a large month dominate a small one, which is the comparison a SHARE metric exists to
-    avoid.
+    The two scored cells fall in DIFFERENT months so the arithmetic can tell the readings apart.
+    c1 is 2019-03 (national 1000): |110-100|/1000 = 0.01. c2 is 2019-04 (national 4000):
+    |180-200|/4000 = 0.005. Per month, the mean is 0.0075. A pooled denominator gives
+    30/5000 = 0.006, and mean-error over mean-national gives 15/2500 = 0.006 -- both wrong. With
+    both cells in one month all three coincide, which is how this test once passed against any of
+    them.
     """
     out = point_metrics(
         _scores(), regime="r", seed=1, arm="state_total", national_totals=_national()
@@ -78,7 +82,7 @@ def test_state_share_absolute_error_divides_each_cell_by_its_own_month_national_
     value = out.filter(
         (pl.col("estimator_id") == "a") & (pl.col("metric_name") == "state_share_absolute_error")
     )["value"].item()
-    assert abs(value - 0.015) < 1e-12
+    assert abs(value - 0.0075) < 1e-12
 
 
 def test_state_share_absolute_error_is_null_when_nothing_scored():
@@ -98,7 +102,9 @@ def test_a_month_with_no_national_row_is_excluded_rather_than_counted_as_zero_er
         regime="r",
         seed=1,
         arm="state_total",
-        national_totals=_national().filter(pl.col("reference_month") == "2019-04"),
+        national_totals=pl.DataFrame(
+            {"reference_month": ["2019-05"], "national_employment": [1000.0]}
+        ),
     )
     value = out.filter(
         (pl.col("estimator_id") == "a") & (pl.col("metric_name") == "state_share_absolute_error")
@@ -148,10 +154,6 @@ def test_an_unstratified_row_carries_the_overall_sentinel_and_never_a_null():
 
 def test_a_state_outside_the_census_partition_is_refused_rather_than_bucketed():
     """`72` is Puerto Rico: a REQ-002 universe violation, not a stratum needing a home."""
-    import pytest
-
-    from logging_employment.errors import ConceptViolationError
-
     rogue = _scores().with_columns(
         pl.when(pl.col("cell_id") == "c1")
         .then(pl.lit("72"))
@@ -160,3 +162,31 @@ def test_a_state_outside_the_census_partition_is_refused_rather_than_bucketed():
     )
     with pytest.raises(ConceptViolationError, match="72"):
         point_metrics(rogue, regime="r", seed=1, arm="state_total", national_totals=_national())
+
+
+def test_a_null_and_an_uncovered_fips_together_are_refused_by_name_not_by_a_type_error():
+    """`sorted({None, "72"})` raises TypeError before the named refusal can."""
+    rogue = _scores().with_columns(
+        pl.when(pl.col("cell_id") == "c1")
+        .then(pl.lit(None, dtype=pl.String))
+        .when(pl.col("cell_id") == "c2")
+        .then(pl.lit("72"))
+        .otherwise(pl.col("state_fips"))
+        .alias("state_fips")
+    )
+    with pytest.raises(ConceptViolationError, match="72"):
+        point_metrics(rogue, regime="r", seed=1, arm="state_total", national_totals=_national())
+
+
+def test_the_national_size_arm_is_not_stratified_and_not_refused():
+    """`US` is a national cell's `state_fips`, not a territory, and a division is meaningless.
+
+    `MASK_ARMS` declares `national_size`. Its arm is unwired today, so this pins the behaviour for
+    the day Stage 6 wires it: overall rows only, rather than a ConceptViolationError from inside
+    the metrics.
+    """
+    national = _scores().with_columns(pl.lit("US").alias("state_fips"))
+    out = point_metrics(
+        national, regime="r", seed=1, arm="national_size", national_totals=_national()
+    )
+    assert set(out["stratum_kind"]) == {"overall"}

@@ -27,11 +27,18 @@ def with_census_division(scores: pl.DataFrame) -> pl.DataFrame:
     territory or a malformed code reached the scoring frame -- the REQ-002 universe violation
     `harmonize/universe.py` exists to prevent, not a stratum that needs a home. Bucketing it would
     put a row §13.10 must not gate on into a stratum §13.10 gates on.
+
+    Called for the `state_total` arm ONLY. A `national_size` cell carries `state_fips = "US"`, for
+    which no division exists, so both emitters skip stratification on that arm rather than route a
+    legal national row into this refusal.
     """
     out = scores.with_columns(
         pl.col("state_fips").replace_strict(DIVISION_OF, default=None).alias("census_division")
     )
-    unknown = sorted(set(out.filter(pl.col("census_division").is_null())["state_fips"].to_list()))
+    uncovered = out.filter(pl.col("census_division").is_null())["state_fips"].to_list()
+    # Stringified before sorting: a null FIPS beside a real one would otherwise make `sorted` raise
+    # TypeError and hide the named refusal behind a crash.
+    unknown = sorted({"null" if v is None else str(v) for v in uncovered})
     if unknown:
         raise ConceptViolationError(
             f"state_fips {unknown} falls in no Census division; the partition is "
@@ -154,7 +161,12 @@ def point_metrics(
     error". `national_monthly_totals` builds the frame.
     """
     rows: list[dict[str, object]] = []
-    joined = with_census_division(scores.join(national_totals, on="reference_month", how="left"))
+    joined = scores.join(national_totals, on="reference_month", how="left")
+    # Stratified on the STATE arm only -- see `with_census_division`. A division WAPE over national
+    # size-class cells would mean nothing.
+    stratify = arm == "state_total"
+    if stratify:
+        joined = with_census_division(joined)
     for (estimator,), group in joined.group_by("estimator_id", maintain_order=True):
         rows.extend(
             _point_rows(
@@ -166,7 +178,8 @@ def point_metrics(
         # five metrics no gate reads. The divisions PRESENT are enumerated, never the nine: a
         # division this replicate did not mask has no rows, and a zero-row WAPE of null would be
         # indistinguishable from a division that scored and failed.
-        for division in sorted(set(group["census_division"].to_list())):
+        divisions = sorted(set(group["census_division"].to_list())) if stratify else []
+        for division in divisions:
             rows.extend(
                 _point_rows(
                     group.filter(pl.col("census_division") == division),
@@ -257,9 +270,10 @@ def probabilistic_metrics(
 ) -> pl.DataFrame:
     """§13.7's coverage, width and CRPS from §10.7's residual-shifted ensembles."""
     rows: list[dict[str, object]] = []
-    for (estimator,), group in with_census_division(scores).group_by(
-        "estimator_id", maintain_order=True
-    ):
+    # State arm only, for the reason `with_census_division` gives.
+    stratify = arm == "state_total"
+    frame = with_census_division(scores) if stratify else scores
+    for (estimator,), group in frame.group_by("estimator_id", maintain_order=True):
         name = str(estimator)
         eligible = any(name.startswith(f) or name == f for f in _INTERVAL_FAMILIES)
         scored = group.filter(pl.col("estimate").is_not_null())
@@ -316,9 +330,10 @@ def probabilistic_metrics(
                     # leave-one-out over every scored residual, never over the division's alone.
                     # Stratifying the pool would shrink each sample to a handful of cells and
                     # report the resulting noise as miscalibration.
-                    tally = by_division.setdefault(row["census_division"], [0, 0])
-                    tally[0] += 1
-                    tally[1] += int(hit)
+                    if stratify:
+                        tally = by_division.setdefault(row["census_division"], [0, 0])
+                        tally[0] += 1
+                        tally[1] += int(hit)
             crps_values.append(crps(ensemble, row["truth"]))
 
         n = len(crps_values)
@@ -347,7 +362,17 @@ def probabilistic_metrics(
         )
         # The clip is REPORTED, not absorbed: it shifts nominal coverage.
         rows.append({**common, "metric_name": "n_clipped_at_zero", "value": float(clipped_total)})
-        for division, (seen, hits) in sorted(by_division.items()):
+        # EVERY division this estimator has masked cells in gets a row -- the same set `point_metrics`
+        # emits WAPE for -- so §13.10's two stratum inputs agree on which strata exist. A division
+        # whose masked cells all declined, or whose scored cells never reached a leave-one-out
+        # ensemble, has `seen == 0` and a NULL value, never 0.0. Each row carries ITS division's base:
+        # masked rows as `denominator`, scored rows as `n_scored`, ensembled rows as
+        # `calibration_sample_size`. Inheriting the estimator-wide `n_scored` from `common` would
+        # report more scored cells than the division has masked cells, an impossible state.
+        divisions = sorted(set(group["census_division"].to_list())) if stratify else []
+        for division in divisions:
+            in_division = group.filter(pl.col("census_division") == division)
+            seen, hits = by_division.get(division, (0, 0))
             rows.append(
                 {
                     **common,
@@ -355,9 +380,8 @@ def probabilistic_metrics(
                     "stratum_value": division,
                     "metric_name": "coverage_0.90",
                     "value": hits / seen if seen else None,
-                    "denominator": float(
-                        group.filter(pl.col("census_division") == division).height
-                    ),
+                    "denominator": float(in_division.height),
+                    "n_scored": in_division.filter(pl.col("estimate").is_not_null()).height,
                     "calibration_sample_size": seen,
                 }
             )

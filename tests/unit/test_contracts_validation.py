@@ -119,3 +119,20 @@ def test_a_required_column_missing_entirely_is_refused():
         contracts.assert_required_columns_present(
             pl.DataFrame({"unrelated": [1]}), "validation_metrics"
         )
+
+
+def test_a_stratum_kind_outside_the_declared_set_is_refused():
+    """removing `("stratum_kind", STRATUM_KINDS)` from the provenance loop must redden this.
+
+    `validate/harness.py` runs the gate over the assembled metrics frame; without a refusal test
+    the entry could be deleted with the suite green, which is `INTERVAL_SOURCES`' situation.
+    """
+    frame = pl.DataFrame({"stratum_kind": ["overall", "by_state"]})
+    with pytest.raises(ConceptViolationError, match="stratum_kind"):
+        contracts.assert_declared_provenance(frame)
+
+
+def test_every_declared_stratum_kind_passes():
+    contracts.assert_declared_provenance(
+        pl.DataFrame({"stratum_kind": list(contracts.STRATUM_KINDS)})
+    )

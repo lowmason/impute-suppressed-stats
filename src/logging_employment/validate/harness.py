@@ -223,8 +223,8 @@ def run_pseudo_suppression(
         # that matters is the RESULT's, not the accumulator's.
         metrics = pl.DataFrame(schema=VALIDATION_METRIC_SCHEMA)
     # The metrics frame gets the same closed-set gate the scores frame has had (R-S5G-1).
-    # Declaring `STRATUM_KINDS` without a caller would repeat `INTERVAL_SOURCES`, which
-    # `validate/CLAUDE.md` already records as declared-and-enforced-by-nothing.
+    # Declaring `STRATUM_KINDS` without a caller would repeat `INTERVAL_SOURCES`, which its own
+    # comment in `contracts.py` records as enforced by nothing at runtime.
     assert_declared_provenance(metrics)
     board = build_scoreboard(metrics)
     return ValidationResult(scores, metrics, board, manifest)

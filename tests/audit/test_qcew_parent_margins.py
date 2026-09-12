@@ -1,13 +1,18 @@
 """Judgment-logic tests for `qcew_parent_margins` (R-S5G-5).
 
-Nothing here touches the network or `data/raw/audit/`. The script's only decision is which margin
-identifies a suppressed cell and how strongly; the fetching around it is `_common`'s and is tested
-there. `qcew_parent_margins` is imported bare, like `_common`, per `tests/conftest.py`; importing
-it is inert because its side effects sit behind `if __name__ == "__main__"`.
+Nothing here touches the network or `data/raw/audit/`. The script makes TWO judgments and both are
+tested here: which margin identifies a suppressed cell and how strongly (`identification`), and
+whether a walk's slice outcomes are a measurement at all (`fetch_verdict`). The row predicates those
+judgments stand on (`state_rows`, `disclosed_keys`) are pinned too. The HTTP calls themselves are
+`_common`'s and are tested there. `qcew_parent_margins` is imported bare, like `_common`, per
+`tests/conftest.py`; importing it is inert because its side effects sit behind
+`if __name__ == "__main__"`.
 """
 
 from __future__ import annotations
 
+import polars as pl
+import pytest
 import qcew_parent_margins as m
 
 NOTHING = {
@@ -45,3 +50,71 @@ def test_exact_outranks_a_bound_when_both_are_available():
     """The strongest margin wins: a cell with both is a REQ-027 case, not a bounded one."""
     both = {**NOTHING, "parent_113_disclosed": True, "parent_1133_disclosed": True}
     assert m.identification(both) == m.EXACT
+
+
+EXPECTED = 32
+
+
+def _outcomes(**overrides):
+    base = {i: {"ok": EXPECTED, "not_found": 0, "unparseable": 0} for i in m.INDUSTRIES}
+    base.update(overrides)
+    return base
+
+
+def test_a_complete_fetch_is_a_measurement():
+    m.fetch_verdict(_outcomes(), EXPECTED)
+
+
+def test_a_parent_the_route_never_serves_is_a_measured_absence():
+    """Every quarter 404s: that is an answer to R-S5G-5, recorded as `fetched: false`."""
+    absent = {"ok": 0, "not_found": EXPECTED, "unparseable": 0}
+    m.fetch_verdict(_outcomes(**{"113": absent}), EXPECTED)
+
+
+def test_a_parent_answering_200_without_the_csv_halts_rather_than_reading_as_absent():
+    """Classify on content: a 200 error body is a failure, never an absence (plan Task 2 property 2).
+
+    Before this verdict was extracted, an industry whose every slice came back unparseable had
+    `ok == 0`, slipped past the `0 < ok < expected` partial guard, and was recorded as a measured
+    absence -- scored as "not disclosed" on every suppressed quarter.
+    """
+    garbled = {"ok": 0, "not_found": 0, "unparseable": EXPECTED}
+    with pytest.raises(SystemExit, match="unparseable"):
+        m.fetch_verdict(_outcomes(**{"113": garbled}), EXPECTED)
+
+
+def test_a_partial_fetch_halts():
+    with pytest.raises(SystemExit, match="partial"):
+        m.fetch_verdict(
+            _outcomes(**{"1133": {"ok": 31, "not_found": 1, "unparseable": 0}}), EXPECTED
+        )
+
+
+def test_the_child_is_the_denominator_and_may_not_be_absent_even_uniformly():
+    absent = {"ok": 0, "not_found": EXPECTED, "unparseable": 0}
+    with pytest.raises(SystemExit, match="113310"):
+        m.fetch_verdict(_outcomes(**{"113310": absent}), EXPECTED)
+
+
+def test_a_published_value_and_a_true_zero_are_disclosed_and_n_is_not():
+    """`''` and `'-'` both publish a value; `'-'` publishes ZERO, which forces the child to zero."""
+    rows = pl.DataFrame(
+        {
+            "area_fips": ["06000", "41000", "53000", "23000"],
+            "own_code": ["5", "5", "5", "3"],
+            "disclosure_code": ["", "-", "N", ""],
+            "year": ["2019"] * 4,
+            "qtr": ["1"] * 4,
+        }
+    )
+    assert m.disclosed_keys(rows, "5") == {("06000", "2019", "1"), ("41000", "2019", "1")}
+
+
+def test_state_rows_keeps_states_and_dc_and_nothing_else():
+    frame = pl.DataFrame(
+        {
+            "industry_code": ["113"] * 6 + ["1133"],
+            "area_fips": ["06000", "11000", "72000", "US000", "C1010", "06001", "06000"],
+        }
+    )
+    assert m.state_rows(frame, "113")["area_fips"].to_list() == ["06000", "11000"]

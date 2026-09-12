@@ -123,11 +123,39 @@ def parse_slice(url: str, body: bytes) -> pl.DataFrame | None:
     CLASSIFY ON CONTENT, NOT STATUS. These endpoints answer 200 with an error body, so
     `raise_for_status` inside `_common.request` cannot be the check; a body missing the columns
     this script reads is a failure at 200. Returned rather than raised for the same reason
-    `fetch_slice` swallows a 404: `main` decides, once it can see whether the whole industry
-    answered this way (a measured absence) or only one quarter did (an anomaly that halts).
+    `fetch_slice` swallows a 404: `fetch_verdict` decides, and ANY unparseable slice
+    halts -- a 200 that is not this CSV is a failure to observe, never an observed absence.
     """
     frame = pl.read_csv(io.BytesIO(body), infer_schema_length=0)
     return None if REQUIRED_COLUMNS - set(frame.columns) else frame
+
+
+def fetch_verdict(outcomes: Mapping[str, Mapping[str, int]], expected: int) -> None:
+    """Halt unless every industry's slice outcomes amount to a measurement.
+
+    Three rules, checked in this order:
+
+    1. ANY unparseable slice halts. `parse_slice` returns None for a 200 whose body is not this CSV,
+       and such a body is a failure to observe, never an observation of absence -- the
+       classify-on-content rule. The guard this replaces checked only `0 < ok < expected`, so an
+       industry whose every slice answered 200 with an error body had `ok == 0`, passed, and was
+       recorded as a measured absence: "not disclosed" on every suppressed quarter.
+    2. A PARTIAL fetch halts. An industry served for some of D1 and not the rest under-counts its
+       disclosures by exactly the quarters that went missing, and nothing downstream can see it.
+    3. `113310` must be complete, because it is the denominator; even a uniform absence of the
+       child is not a result.
+
+    What passes is complete, or a UNIFORM 404 -- the route does not serve that industry at all,
+    which `main` records as `fetched: false`, a measured absence.
+    """
+    garbled = {i: o for i, o in outcomes.items() if o["unparseable"]}
+    if garbled:
+        raise SystemExit(f"unparseable 200 responses are failures, not absences: {garbled}")
+    partial = {i: o for i, o in outcomes.items() if 0 < o["ok"] < expected}
+    if partial:
+        raise SystemExit(f"partial fetch, counts would be wrong: {partial}")
+    if outcomes["113310"]["ok"] != expected:
+        raise SystemExit(f"113310 is the denominator and must be complete: {outcomes['113310']}")
 
 
 def main() -> None:
@@ -160,16 +188,7 @@ def main() -> None:
                         c.record_extract(SOURCE, url, f"{industry}/{year}q{qtr}.csv", body)
                     )
 
-    # A UNIFORM absence is a measurement and is recorded; a PARTIAL one is not. An industry served
-    # for some of D1 and not the rest under-counts its disclosures by exactly the quarters that
-    # went missing, and nothing downstream can see the shortfall -- so it halts here rather than
-    # reporting a smaller identification set than the route actually supports.
-    expected = len(YEARS) * len(QUARTERS)
-    partial = {i: o for i, o in outcomes.items() if 0 < o["ok"] < expected}
-    if partial:
-        raise SystemExit(f"partial fetch, counts would be wrong: {partial}")
-    if outcomes["113310"]["ok"] != expected:
-        raise SystemExit(f"113310 is the denominator and must be complete: {outcomes['113310']}")
+    fetch_verdict(outcomes, len(YEARS) * len(QUARTERS))
 
     stacked = {i: pl.concat(f, how="vertical_relaxed") for i, f in frames.items() if f}
     child = state_rows(stacked["113310"], "113310")
