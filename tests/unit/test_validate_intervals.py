@@ -8,6 +8,16 @@ def test_the_ensemble_is_the_point_shifted_by_every_residual():
     assert sorted(ens.tolist()) == [90.0, 100.0, 110.0]
 
 
+def test_the_ensemble_subtracts_each_residual_because_truth_is_estimate_minus_residual():
+    """`D-112`: a residual is `estimate - truth`, so the truth it predicts is `point - residual`.
+
+    The pool is ONE-SIDED on purpose. The symmetric pool above sorts to the same ensemble under
+    either sign, so it could not see the shipped `point + residual`.
+    """
+    ens = residual_ensemble(np.array([5.0, 20.0]), point=125.0)
+    assert sorted(ens.tolist()) == [105.0, 120.0]
+
+
 def test_a_wider_level_gives_a_wider_interval():
     ens = residual_ensemble(np.linspace(-50, 50, 201), point=100.0)
     lo50, hi50 = empirical_interval(ens, 0.50)
