@@ -11,7 +11,7 @@ written and is not amended.** Both stratum gates now read
 per-division 90% coverage over the nine Census divisions — and §13.6's state-share absolute error
 is emitted. The three `PromotionConfig` keys are recorded inert per key rather than read (R-S5G-3,
 `D-109`); no evaluator is built before the stage that produces the candidate. §13.10's gate remains
-applied over NINE of the thirteen regimes (`D-071`). The shipped artifact matches: `runs/f03023ac9f3a/validation_metrics.parquet` was regenerated under this schema on 2026-09-11 (6,929 rows, 2,129 stratified), and its `validation_scoreboard.parquet` came back byte-identical at (270, 13) — see `specs/findings/stage-5-log.md`.
+applied over NINE of the thirteen regimes (`D-071`). The shipped artifact matches: `runs/f03023ac9f3a/validation_metrics.parquet` was regenerated under this schema on 2026-09-11 (6,932 rows, 2,132 stratified, at `542ed37`), and its `validation_scoreboard.parquet` came back byte-identical at (270, 13) — see `specs/findings/stage-5-log.md`.
 
 **R-S5G-5's measurement refuted §1.2 below, and R-S5G-8 is therefore NOT closed here.** §1.2
 predicted that a disclosed `1133` / `11331` / total-ownership parent would be an EXACT

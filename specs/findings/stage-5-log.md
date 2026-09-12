@@ -116,3 +116,25 @@ grow a single row. §13.10's promotion comparand is unchanged.
 **Provenance caveat.** The new `validation_manifest.json` records
 `code_commit = c5bb7ca…-dirty`. The dirt was one untracked file,
 `scripts/audit/render_parent_margins.py`, outside `src/`; no package code differed from `c5bb7ca`.
+
+## 2026-09-12 — regenerated again under the review's `n_scored` fix
+
+**Command:** `uv run logging-estimates validate --config config.yaml` at `542ed37`, whose manifest
+records a CLEAN `code_commit` (no `-dirty`). The four validation files were backed up first and
+compared by join on the eight-field key (the six old fields plus `stratum_kind`/`stratum_value`).
+
+| artifact | at `c5bb7ca-dirty` (entry above) | at `542ed37` |
+|---|---|---|
+| `validation_scoreboard.parquet` | (270, 13) | **byte-identical** |
+| `validation_scores.parquet` | — | **byte-identical** |
+| `validation_metrics.parquet` | (6,929, 21) | (6,932, 21): 4,800 `overall` + 2,132 `census_division` |
+
+**0 rows lost, 3 added, one column moved.** The 3 added rows are null `coverage_0.90` rows for
+divisions whose masked cells never reached a leave-one-out ensemble — the whole-branch review found
+the coverage family omitting divisions the WAPE family emitted. The column that moved is `n_scored`,
+on **717 of the 782** division coverage rows: those rows had inherited the estimator-wide scored
+count, and `n_scored > denominator` held on 717 of them before and on **0** after.
+
+**This supersedes the counts in the entry above.** Its 6,929 / 2,129 were the defect's shape — the
+right rows with a wrong column — not a correct artifact. The byte-identical scoreboard is again the
+check that matters: §13.10's promotion comparand did not move across either regeneration.
