@@ -162,3 +162,44 @@ of 37.
 untrustworthy for exactly the estimators a gate exists to catch. WAPE and the (270, 13) scoreboard are
 unaffected. Recorded as a Stage 5 precondition in the roadmap block rather than fixed in plan 14,
 because the fix changes Stage 4's shipped probabilistic numbers.
+
+## 2026-09-12 — `D-112` fixed: the residual ensemble subtracts the residual
+
+**Fixed in** `19fbdec` (`fix/d112-residual-sign`). `intervals.residual_ensemble` returns `point - residual`;
+the pool in `probabilistic_metrics` stays `estimate - truth`, so the orientation has one owner. The failing
+tests were written first from `truth = estimate - residual` and observed red on the old sign: a one-sided
+helper pool, a constant +25 bias (coverage 0.0 on the old sign, 1.0 corrected, at every level) and a
+hand-derived zero-clip count (0 old, 3 corrected). **Every probabilistic value in the artifacts the entries
+above describe was computed on the old sign;** those entries quote none apart from `D-112`'s own, whose
+golden predictions are confirmed below.
+
+**Golden** `2bec94b0…` → `a544559f…`, by join on the eight-field key: 0 key-only rows, and only `value`
+moved, on 279 of 1,490 rows, all `probabilistic`; the fixture run's scores and scoreboard are
+byte-identical. `coverage_0.90` moved in 37 of 43 interval-bearing groups and the hand-derived oracle went
+33 → 31 of 37, both as `D-112` predicted; it also moved in 40 of 72 division rows.
+
+**`runs/f03023ac9f3a`** re-run at `19fbdec` (clean tree, 12 min 08 s), its artifacts backed up first:
+
+| artifact | before (`542ed37`) | after (`19fbdec`) |
+|---|---|---|
+| `validation_scores.parquet` | `4d9912fb…` | byte-identical |
+| `validation_scoreboard.parquet` | `d4e1187b…`, (270, 13) | byte-identical |
+| `validation_metrics.parquet` | `9f6b6a75…` | `049ecbec…` |
+
+Apart from `code_commit` and the metrics digest in the table, the manifest is unchanged. By join on the same key: 6,932 rows and 2,132
+stratified on both sides, 0 key-only rows, and only `value` moved — on 1,488 of the 2,072 `probabilistic`
+rows and on no other family. Overall `coverage_0.90` moved in 154 of 170 interval-bearing groups (rose 132,
+fell 22) and in 455 of 782 division rows; `crps` in all 170; `n_clipped_at_zero` in 103;
+`mean_interval_width_0.90` beyond 1e-9 in 104, every one where the zero clip binds on either side (elsewhere
+at most 7.4e-13). Coverage stays monotone in level in all 170 groups.
+
+**What Stage 5's coverage gate will see.** The corrected intervals still UNDER-cover. Over the 170 groups,
+overall 90% coverage moved from mean 0.35 to 0.76 and median 0.25 to 0.80, and its maximum is now exactly
+0.90, so no group over-covers. Counted exactly — coverage is hits over `calibration_sample_size`, a rational
+— 51 groups sit within `nominal_coverage_tolerance` (0.05) of nominal, 44 of them on the boundary at 17/20,
+against 25 under the old sign (14 at 17/20, one at 19/20); strictly inside the band it is 7 against 10, and
+119 groups sit more than 0.05 below nominal (145 before). **A float comparison miscounts this:**
+`abs(0.85 - 0.9)` is `0.05000000000000004`, so `abs(c - 0.9) <= 0.05` drops all 44 boundary groups and
+reports 7 (recorded against `D-109`, which owns the unbuilt gate). The seven interval-bearing estimators'
+means land between 0.75 and 0.77, where the old sign spread them from 0.16 to 0.68. The intervals are cross-sectional leave-one-out rather than §10.7's
+rolling ones (`R-S5P-7`), which this fix does not change.

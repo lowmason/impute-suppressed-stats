@@ -189,10 +189,17 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
   `probabilistic_metrics` emits division coverage only for an interval family with at least two
   scored cells (null where a division's cells never reached an ensemble). A gate reading both must
   OUTER-join them on the division.
-  **`D-112`'s residual-sign defect is in the whole `probabilistic` family** — the ensemble
-  adds `estimate - truth` to the estimate instead of subtracting it. It moves coverage, CRPS and
-  `n_clipped_at_zero`, and `mean_interval_width_0.90` only where the zero clip binds. Do not gate on
-  any of them until it lands. WAPE is unaffected. The `national_size` arm is not stratified (`state_fips = "US"`).
+  **The ensemble's residual SIGN has one owner, `intervals.residual_ensemble`, and was wrong until
+  `D-112` (fixed 2026-09-12, `19fbdec`).** A scoring residual is `estimate - truth` — not the
+  anchor's adding-up `residual` that `harness._anchor_residuals` reads — so the ensemble is `estimate -
+  residual`; it used to ADD the pool, doubling a bias instead of removing it. A symmetric pool used
+  whole sorts to the same ensemble under either sign, and after leave-one-out one can still tally the
+  same by chance (`_scores()` does), so an oracle meant to pin the sign needs an expectation that
+  provably differs between signs — most simply a one-sided pool written from `truth = estimate -
+  residual` (`test_validate_metrics_probabilistic.py::_one_sided`). Any probabilistic
+  figure written before `19fbdec` is superseded — coverage, CRPS, `n_clipped_at_zero`, and
+  `mean_interval_width_0.90` where the zero clip binds — and `runs/f03023ac9f3a` was re-run under the
+  fix. WAPE was unaffected. The `national_size` arm is not stratified (`state_fips = "US"`).
 - `intervals` offers CRPS and refuses log score on purpose: an empirical ensemble gives -inf
   whenever the truth falls outside its range. §13.7 permits either.
 
@@ -202,7 +209,7 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
 uv run pytest tests/unit/test_validate_scoreboard.py tests/unit/test_validate_intervals.py \
   tests/unit/test_validate_metrics_point.py tests/unit/test_validate_metrics_probabilistic.py \
   tests/unit/test_validate_metrics_bounds.py tests/unit/test_validate_metrics_constraint.py
-  # 59 passed (measured 2026-09-12 after plan 14's review fixes; was 40 over the five modules before it) — no data/ needed
+  # 62 passed (measured 2026-09-12 at `19fbdec`, +3 for D-112's sign tests; 59 after plan 14's review fixes, 40 over the five modules before plan 14) — no data/ needed
 uv run pytest tests/integration/test_validation_golden.py   # 7 passed, 11s — in-git fixtures
 uv run logging-estimates validate --config config.yaml [--estimators id,id]
 ```

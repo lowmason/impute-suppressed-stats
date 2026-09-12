@@ -141,9 +141,11 @@ def test_a_hand_derived_row_reproduces_the_golden_interval(fixture_run):
     without calling `probabilistic_metrics`. It is also what proves R-S5P-7 moved a label only: it
     passes unchanged on both sides of the rename.
 
-    It does NOT catch the residual SIGN. It copies the code's `estimate + (estimate - truth)`
-    construction, so it moves WITH `D-112`'s defect rather than against it; correcting the sign
-    changes this group's `covered` from 33 to 31 of 37 (derived in `D-112`).
+    It DOES catch the residual SIGN, since `D-112`. The ensemble is written from `truth = estimate -
+    residual` rather than copied from the code, and this group's residuals (`estimate - truth`) are
+    one-sided enough to discriminate: 23 of 37 positive, so the shipped `estimate + residual` covered
+    33 and the corrected form covers 31 (measured 2026-09-12). Until `D-112` this oracle copied the
+    shipped expression and moved WITH the defect.
     """
     regime, estimator = "whole_seasonal_blocks", "cbp_intensity"
     group = fixture_run.scores.filter(
@@ -155,7 +157,8 @@ def test_a_hand_derived_row_reproduces_the_golden_interval(fixture_run):
     assert pool.size == 37
     covered, widths = 0, []
     for position, row in enumerate(group.iter_rows(named=True)):
-        ensemble = np.maximum(np.delete(pool, position) + float(row["estimate"]), 0.0)
+        # truth = estimate - residual, over every OTHER cell's residual.
+        ensemble = np.maximum(float(row["estimate"]) - np.delete(pool, position), 0.0)
         lo, hi = np.quantile(ensemble, 0.05), np.quantile(ensemble, 0.95)
         covered += int(lo <= row["truth"] <= hi)
         widths.append(hi - lo)
@@ -172,6 +175,6 @@ def test_a_hand_derived_row_reproduces_the_golden_interval(fixture_run):
     def _value(name: str) -> float:
         return golden.filter(pl.col("metric_name") == name)["value"].item()
 
-    assert covered == 33
+    assert covered == 31
     assert _value("coverage_0.90") == pytest.approx(covered / pool.size)
     assert _value("mean_interval_width_0.90") == pytest.approx(float(np.mean(widths)))

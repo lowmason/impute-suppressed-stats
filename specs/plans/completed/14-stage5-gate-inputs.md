@@ -10,6 +10,9 @@
 > findings, 2 critic gaps) and two verification passes led to commits `542ed37`, `5c484c0`,
 > `96fdda5` and the fix commit that precedes retirement; they also surfaced `D-112`, a PRE-EXISTING
 > Stage 4 residual-sign defect in §13.7's ensemble, filed rather than fixed.
+> *Resolution after retirement (2026-09-12): `D-112` was fixed in `19fbdec`. The golden this plan froze at
+> `2bec94b0…` is superseded by `a544559f…`, and the hand-derived oracle's `covered == 33` by `covered == 31`;
+> the coverage caveat recorded at retirement no longer binds.*
 
 **Goal:** Make §13.10's two "major stratum" gates evaluable from a shipped artifact, emit §13.6's missing state-share metric, and measure — rather than assume — whether any §9.3 margin identifies a suppressed state cell, so Stage 5 is planned against a gate that reads something and an identification set that was counted.
 

@@ -1,14 +1,16 @@
-"""§13.7 coverage by Census division — the half of R-S5G-1 the golden alone used to pin.
+"""§13.7 coverage by Census division (R-S5G-1), and the residual SIGN of its ensemble (`D-112`).
 
 Every expectation is derived with numpy from the fixture's own residuals, never through
 `probabilistic_metrics` or its helpers: an expectation computed by the code under test is derived
-from the bug it should catch. The ensemble arithmetic mirrors the hand-derived oracle in
-`tests/integration/test_validation_golden.py`.
+from the bug it should catch. A residual is `estimate - truth`, so the truth a pooled residual
+predicts is `estimate - residual`; the oracles are written from that identity, not from the code's
+expression, and mirror the hand-derived one in `tests/integration/test_validation_golden.py`.
 
-What this module does NOT pin is the residual SIGN. Its oracle adds `estimate - truth` to the estimate
-exactly as the code does, and its residuals are symmetric, so it cannot tell the shipped sign from the
-corrected one -- and the shipped sign is wrong (`D-112`). It pins the division bucketing, the bases
-each row carries, and which divisions are emitted.
+The division tests do NOT pin the sign, and cannot: on `_scores()` the same cells hit under either
+sign (measured 2026-09-12: c1 and c2 in pacific, neither c3 nor new_england's c4), so only the interval
+endpoints move. That is how an oracle copying the shipped `estimate + residual` passed from Stage 4 to
+plan 14. The sign is pinned by the one-sided pools at the end of this module (`_one_sided`), whose
+expectations follow from the identity with no quantile to interpolate.
 """
 
 from __future__ import annotations
@@ -49,7 +51,8 @@ def _oracle(scores: pl.DataFrame) -> dict[str, tuple[int, int]]:
     pool = (scored["estimate"] - scored["truth"]).to_numpy()
     out: dict[str, list[int]] = {}
     for position, row in enumerate(scored.iter_rows(named=True)):
-        ensemble = np.maximum(np.delete(pool, position) + row["estimate"], 0.0)
+        # truth = estimate - residual, over every OTHER cell's residual.
+        ensemble = np.maximum(row["estimate"] - np.delete(pool, position), 0.0)
         lo, hi = np.quantile(ensemble, 0.05), np.quantile(ensemble, 0.95)
         tally = out.setdefault(DIVISION[row["state_fips"]], [0, 0])
         tally[0] += 1
@@ -144,3 +147,62 @@ def test_an_interval_family_with_fewer_than_two_scored_cells_emits_no_division_r
     out = probabilistic_metrics(one, regime="r", seed=1, arm="state_total")
     assert out.height == 1
     assert out["stratum_kind"].item() == "overall"
+
+
+def _one_sided(truth: list[float], residual: list[float]) -> pl.DataFrame:
+    """Scored cells built FROM their residuals, so each cell's truth is known without the code."""
+    return pl.DataFrame(
+        {
+            "estimator_id": [ESTIMATOR] * len(truth),
+            "cell_id": [f"b{i}" for i in range(len(truth))],
+            "state_fips": ["06", "41", "53", "23"][: len(truth)],
+            "truth": truth,
+            "estimate": [t + r for t, r in zip(truth, residual, strict=True)],
+            "decline_kind": [None] * len(truth),
+        },
+        schema_overrides={"estimate": pl.Float64, "decline_kind": pl.String},
+    )
+
+
+def test_a_constant_bias_is_removed_so_every_interval_holds_the_truth_exactly():
+    """`D-112`'s pin, derived from `truth = estimate - residual` rather than from the code.
+
+    Every cell over-estimates by exactly 25, so every OTHER cell's residual is 25 and
+    `estimate_i - 25` IS `truth_i`: each leave-one-out ensemble is a point mass on its own truth.
+    Every interval at every level covers, at width zero, with CRPS zero. The shipped
+    `estimate + residual` put that point mass at `truth + 50` -- coverage 0.00 and CRPS 50.
+    """
+    out = probabilistic_metrics(
+        _one_sided([100.0, 200.0, 150.0, 120.0], [25.0] * 4),
+        regime="r",
+        seed=1,
+        arm="state_total",
+    )
+    coverage = out.filter(pl.col("metric_name").str.starts_with("coverage_"))
+    # Four levels overall, plus 90% for pacific (06, 41, 53) and new_england (23).
+    assert coverage.height == 6
+    assert coverage["value"].to_list() == [1.0] * 6
+    overall = {
+        r["metric_name"]: r["value"]
+        for r in out.filter(pl.col("stratum_kind") == "overall").iter_rows(named=True)
+    }
+    assert overall["mean_interval_width_0.90"] == 0.0
+    assert overall["crps"] == pytest.approx(0.0, abs=1e-9)
+    assert overall["n_clipped_at_zero"] == 0.0
+
+
+def test_the_zero_clip_counts_what_the_truth_identity_makes_negative():
+    """`n_clipped_at_zero` moves with the sign too, so it is pinned the same way, with no quantile.
+
+    Residuals (`estimate - truth`) are 2, 50, 60 and 70, so the estimates are 3, 250, 360 and 470.
+    The first cell's ensemble is `3 - 50`, `3 - 60`, `3 - 70`: three negatives. Every other cell's
+    estimate exceeds each residual it is paired with (its smallest member is 250 - 70, 360 - 70 or
+    470 - 60), so nothing else clips. The shipped sign added the residuals and clipped none.
+    """
+    out = probabilistic_metrics(
+        _one_sided([1.0, 200.0, 300.0, 400.0], [2.0, 50.0, 60.0, 70.0]),
+        regime="r",
+        seed=1,
+        arm="state_total",
+    )
+    assert out.filter(pl.col("metric_name") == "n_clipped_at_zero")["value"].item() == 3.0

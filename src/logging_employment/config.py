@@ -293,9 +293,9 @@ class PromotionConfig(_Strict):
     - `maximum_major_stratum_wape_degradation` and `nominal_coverage_tolerance` have their INPUT as
       of R-S5G-1. `validate/metrics.py` now emits a per-census-division WAPE and a per-division
       90% coverage into `validation_metrics.parquet`, so both gates are evaluable from a shipped
-      artifact. Evaluable is not yet correct: the coverage values
-      `nominal_coverage_tolerance` would gate on carry a residual-sign defect (`D-112`) and must not
-      gate until it is fixed. What is missing is the CANDIDATE to evaluate: §13.10 compares a model against the
+      artifact. The coverage values `nominal_coverage_tolerance` would gate on carried a
+      residual-sign defect until `D-112` (fixed 2026-09-12, `19fbdec`); one written before that fix
+      must be regenerated before any gate reads it. What is missing is the CANDIDATE to evaluate: §13.10 compares a model against the
       preferred transparent baseline and Stage 5 produces the model.
     - `minimum_wape_improvement` is missing both. Its comparison needs a second scoreboard, and
       `validation_scoreboard.parquet` exists in one copy -- the baseline one.
