@@ -1,10 +1,12 @@
 # §9.3 parent-industry and ownership margins on D1 — measured
 
 **Measured:** 2026-09-11T16:24:31+00:00 (R-S5G-5, plan 14 Task 2). **Derived from
-`data/raw/audit/qcew_parent_margins/summary.json`, not retyped.**
+`data/raw/audit/qcew_parent_margins/summary.json`, not retyped** — by `scripts/audit/render_parent_margins.py`, which is committed because the
+summary it reads is gitignored.
 
 ```bash
 cd scripts/audit && set -a && source ../../.env && set +a && uv run --no-project qcew_parent_margins.py
+uv run --no-project render_parent_margins.py   # rewrites this file from the stored summary; no network
 ```
 
 ## What was fetched

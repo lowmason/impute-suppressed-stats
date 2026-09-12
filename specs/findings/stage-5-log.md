@@ -82,3 +82,36 @@ also makes `D-093`'s MILP gap reachable for the first time: `_needs_milp` skips 
 `1133` is 1:1 — so a quarter with all three disclosed is an *exact* reconstruction. `1131` and
 `1132` are outside R-S5G-5's named scope and were not fetched. `specs/stage5-parent-margin.md`
 owns that measurement.
+
+## 2026-09-11 — `runs/f03023ac9f3a` validation artifacts regenerated under the stratum schema
+
+**Command:** `uv run logging-estimates validate --config config.yaml` (11 min wall clock), after
+plan 14 Task 5 appended `stratum_kind` / `stratum_value` to `VALIDATION_METRIC_SCHEMA`. The run id
+did not move — `run_id` hashes config and inputs, not source — so the same directory was
+overwritten. The prior four validation files were backed up first and compared by join, not by
+position.
+
+| artifact | before | after |
+|---|---|---|
+| `validation_scoreboard.parquet` | (270, 13) | **byte-identical** |
+| `validation_scores.parquet` | — | **byte-identical** |
+| `validation_metrics.parquet` | (4,530, 19) | (6,929, 21): 4,800 `overall` + 2,129 `census_division` |
+
+On the 4,530 pre-existing rows, joined on the six-field key with `nulls_equal=True`: 0 unmatched on
+either side, and exactly one column moved.
+
+**The column that moved was stale, not regressed.** `interval_source` read
+`rolling_residual_ensemble` on 1,190 rows before and `leave_one_out_residual_ensemble` on the same
+1,190 after. That rename is `e17b1f0` (plan 13, R-S5P-7, 2026-09-10). **The §13.10 comparand's
+metrics file had therefore been stale with respect to the code since plan 13**, carrying the label
+R-S5P-7 exists to retire, and nothing noticed — the standing hazard of a run id that ignores
+source. The `null` count rose 3,240 -> 3,510, i.e. +270, exactly the new
+`state_share_absolute_error` rows, which carry no interval.
+
+**Why the scoreboard matters most.** Its byte-identity is Task 5's fan-out guard holding on D1
+rather than on the fixture: 2,129 stratified rows entered the metrics frame and the board did not
+grow a single row. §13.10's promotion comparand is unchanged.
+
+**Provenance caveat.** The new `validation_manifest.json` records
+`code_commit = c5bb7ca…-dirty`. The dirt was one untracked file,
+`scripts/audit/render_parent_margins.py`, outside `src/`; no package code differed from `c5bb7ca`.
