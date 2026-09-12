@@ -2044,9 +2044,12 @@ the event that makes it reachable rather than a date.
 - [ ] `D-109` **`PromotionConfig`'s three keys are recorded inert rather than read.** R-S5G-3 ruled
       2026-09-11 that no §13.10 evaluator is built before Stage 5 exists: `minimum_wape_improvement`
       needs a second `validation_scoreboard.parquet` and there is one,
-      and `maximum_major_stratum_wape_degradation` / `nominal_coverage_tolerance` have their input as of R-S5G-1 (though the coverage VALUES carry `D-112`'s
-      sign defect) but no candidate to evaluate. All three fold into `runs.run_id` via
+      and `maximum_major_stratum_wape_degradation` / `nominal_coverage_tolerance` have their input as of R-S5G-1 (the coverage VALUES carried `D-112`'s
+      sign defect until `19fbdec`, 2026-09-12) but no candidate to evaluate. All three fold into `runs.run_id` via
       `resolved_dict`, so this is `D-064`'s shape with a recorded reason rather than silence.
+      When the coverage gate is built, compare EXACTLY: coverage is hits / `calibration_sample_size`, and
+      on `runs/f03023ac9f3a` at `19fbdec` 44 of 170 interval-bearing groups sit at exactly 0.85, which a
+      float `abs(c - 0.9) <= 0.05` excludes (it counts 7 within tolerance; exactly, 51).
       Size: quick-fix. Done when: Stage 5's promotion record reads all three —
       `tests/unit/test_config_validation_block.py::test_the_promotion_keys_are_still_unread_and_the_docstring_still_says_so`
       reddens on that day and names the keys that moved.
@@ -2086,8 +2089,17 @@ the event that makes it reachable rather than a date.
       on this.**
       Size: plan. Done when: `specs/stage5-parent-margin.md` §4's six conditions hold.
 
-- [ ] `D-112` **§13.7's leave-one-out ensemble shifts each point estimate by the residual with the
-      WRONG sign, so coverage, width and CRPS are wrong for any biased estimator.**
+- [x] `D-112` **§13.7's leave-one-out ensemble shifts each point estimate by the residual with the
+      WRONG sign, so coverage, width and CRPS are wrong for any biased estimator.** -> FIXED 2026-09-12
+      in `19fbdec`: `validate/intervals.py::residual_ensemble` returns `point - residual` and the pool
+      stays `estimate - truth`. All four Done-when clauses hold. A one-sided unit pool derived from `truth
+      = estimate - residual`, plus a constant-bias and a zero-clip pin, was observed red on the old sign.
+      The golden was regenerated `2bec94b0…` -> `a544559f…` with the delta characterized by join (279 of
+      1,490 rows, all `probabilistic`; 37 of 43 groups; oracle 33 -> 31 of 37, as predicted below).
+      `runs/f03023ac9f3a` was re-run at `19fbdec`: `validation_scores` and the scoreboard byte-identical,
+      `value` moved on 1,488 `probabilistic` rows and no other. Corrected, the interval baselines still
+      under-cover (overall 90% median 0.80 over 170 groups). See `specs/findings/stage-5-log.md`. Original
+      text follows unedited.
       `validate/metrics.py::probabilistic_metrics` pools `estimate - truth`, and
       `validate/intervals.py::residual_ensemble` ADDS the pool to the point estimate, so cell i's
       ensemble is `estimate_i + (estimate_j - truth_j)`. The predictive distribution of `truth_i` is

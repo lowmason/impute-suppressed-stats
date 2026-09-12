@@ -17,6 +17,10 @@ first regenerated 2026-09-11, before the review's `n_scored` fix), and its `vali
 (`D-112`, found 2026-09-12) under-covers biased estimators — down to 0.00 when the bias dominates the residual
 spread — so the coverage gate — overall
 and per division — MUST NOT be applied until `D-112` lands. WAPE is unaffected.
+*→ Resolved 2026-09-12, after retirement: `D-112` landed in `19fbdec` (`residual_ensemble` subtracts the pool), so
+the coverage gate no longer waits on it. `runs/f03023ac9f3a` was re-run at `19fbdec`: `validation_metrics.parquet`
+kept its 6,932 rows (2,132 stratified) and moved `value` on 1,488, all `probabilistic`; `validation_scores` and the
+(270, 13) scoreboard came back byte-identical. The paragraph above is left as written.*
 
 **R-S5G-5's measurement refuted §1.2 below, and R-S5G-8 is therefore NOT closed here.** §1.2
 predicted that a disclosed `1133` / `11331` / total-ownership parent would be an EXACT

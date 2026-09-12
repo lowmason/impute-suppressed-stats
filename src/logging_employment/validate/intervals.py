@@ -26,13 +26,14 @@ import numpy as np
 def residual_ensemble(residuals: np.ndarray, point: float) -> np.ndarray:
     """The truths the point estimate implies, one per pooled residual: `point - residual`.
 
-    A residual is `estimate - truth`, the one orientation this package uses (`point_metrics`' WAPE
-    error is the same difference), so the truth it predicts is `estimate - residual`. §10.7 states no
+    A scoring residual is `estimate - truth`, the difference `point_metrics`' WAPE error also takes
+    (the anchor's adding-up `residual` in `harness.py` is a different quantity), so the truth it
+    predicts is `estimate - residual`. §10.7 states no
     sign, and from Stage 4 until `D-112` this ADDED the pool, which doubles an estimator's bias
     instead of removing it: on a synthetic method biased +25%, 90% coverage was 0.00 added and 0.85
     subtracted. The sign lives here rather than in `probabilistic_metrics`' pool so the orientation
-    has one owner. A symmetric pool cannot tell the two apart, which is why
-    `test_validate_intervals.py` pins this with a one-sided one.
+    has one owner. A symmetric pool passed whole sorts to the same ensemble under either sign, which
+    is why `test_validate_intervals.py` pins this with a one-sided one.
 
     The residual pool MUST exclude the target's own cell: a residual computed on the cell being
     scored is the withheld truth in another form (§13.4 bullet 1).

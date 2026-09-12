@@ -6,10 +6,10 @@ from the bug it should catch. A residual is `estimate - truth`, so the truth a p
 predicts is `estimate - residual`; the oracles are written from that identity, not from the code's
 expression, and mirror the hand-derived one in `tests/integration/test_validation_golden.py`.
 
-The division tests do NOT pin the sign, and cannot: on `_scores()` the tallies come out equal under
-either sign (measured 2026-09-12: pacific 2 of 3, new_england 0 of 1 both ways, though WHICH cells hit
-differs). That is how an oracle copying the shipped `estimate + residual` passed from Stage 4 to plan
-14. The sign is pinned by the one-sided pools at the end of this module (`_one_sided`), whose
+The division tests do NOT pin the sign, and cannot: on `_scores()` the same cells hit under either
+sign (measured 2026-09-12: c1 and c2 in pacific, neither c3 nor new_england's c4), so only the interval
+endpoints move. That is how an oracle copying the shipped `estimate + residual` passed from Stage 4 to
+plan 14. The sign is pinned by the one-sided pools at the end of this module (`_one_sided`), whose
 expectations follow from the identity with no quantile to interpolate.
 """
 
