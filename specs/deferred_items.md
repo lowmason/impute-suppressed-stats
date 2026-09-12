@@ -2052,7 +2052,8 @@ the event that makes it reachable rather than a date.
       float `abs(c - 0.9) <= 0.05` excludes (it counts 7 within tolerance; exactly, 51).
       Size: quick-fix. Done when: Stage 5's promotion record reads all three —
       `tests/unit/test_config_validation_block.py::test_the_promotion_keys_are_still_unread_and_the_docstring_still_says_so`
-      reddens on that day and names the keys that moved.
+      reddens on that day and names the keys that moved — AND the coverage gate compares exactly, pinned by
+      a test in which a coverage of exactly 17/20 against nominal 0.90 and tolerance 0.05 counts as within.
 
 - [ ] `D-110` **No MEASURED §9.3 margin gives `exact_reconstruction_flag` a live instance -- but one
       named path was not measured.** R-S5G-5 measured `113`, `1133`, `11331` and total ownership at
