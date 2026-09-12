@@ -41,6 +41,13 @@ CENSUS_DIVISIONS: dict[str, tuple[str, ...]] = {
     "pacific": ("02", "06", "15", "41", "53"),
 }
 
+# The same partition, inverted once at import rather than per metric row (R-S5G-1). Derived from
+# CENSUS_DIVISIONS rather than typed out: a second literal is a second partition the moment one of
+# them is edited, and R-S5G-1 forbids a second partition.
+DIVISION_OF: dict[str, str] = {
+    fips: division for division, members in CENSUS_DIVISIONS.items() for fips in members
+}
+
 
 # WHY a regime produces no `MaskTarget`, declared per regime rather than inferred from
 # `select is None`. That test conflates three unrelated situations — a regime that uses a different

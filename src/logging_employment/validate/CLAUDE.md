@@ -119,10 +119,13 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
   `preliminary_to_final_vintage` is `cannot_run_on_d1` (no second snapshot in any staged table) and
   *raises* from `select_targets`.
 - Do not read a green run as full §13 coverage. `metrics.py`'s emitters produce exactly
-  `_POINT_NAMES`, three bound metrics, four coverage levels + width + CRPS + clip count, and three
-  constraint metrics — so §13.5's infeasible-component rate and LP-vs-MILP tightening, §13.6's
-  state-share / size-share / rank metrics, §13.7's calibration by state size, region, gap duration
-  and propensity, and §13.9's sensitivity and ablation are **not** covered by this module.
+  `_POINT_NAMES` (six, including §13.6's `state_share_absolute_error` since plan 14), three bound
+  metrics, four coverage levels + width + CRPS + clip count, and three constraint metrics, plus —
+  on the `state_total` arm only — a per-Census-division `wape` and `coverage_0.90` (R-S5G-1). So
+  §13.5's infeasible-component rate and LP-vs-MILP tightening, §13.6's size-share / rank metrics,
+  §13.7's calibration by state size, gap duration, propensity and distance from the nearest
+  CBP anchor year (region IS covered, for 90% coverage only), §13.8's residual norms and row-sum and
+  class-margin violations, and §13.9's sensitivity and ablation are **not** covered by this module.
 
 ## Invariants a fresh agent gets wrong
 
@@ -173,6 +176,23 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
   `tests/unit/test_validate_cbp_gap.py` pins it across three processes. Any figure measured from
   that selector BEFORE the sort is unreproducible and must be re-measured, not quoted — the
   docstring's own max-|delta| number was replaced for exactly that reason.
+- **The stratum pair is part of the metric key, and the board reads only `overall`.**
+  `validation_metrics` rows carry `stratum_kind` / `stratum_value` — `overall`/`all` or
+  `census_division`/<division> — never null. `wape` and `coverage_0.90` repeat once per division
+  under otherwise identical keys, so a sort or join on the six old key fields is not total, and a
+  filter on `metric_name == "wape"` alone fans out. `scoreboard.build_scoreboard` filters
+  `stratum_kind == "overall"`; §13.10's stratum gates read the division rows from
+  `validation_metrics`, never from the board. Each division row carries ITS division's
+  `denominator` and `n_scored`, and a division COVERAGE row also its `calibration_sample_size` (WAPE
+  rows carry none); the leave-one-out calibration POOL stays estimator-wide. The two families do NOT
+  always share strata: `point_metrics` emits division WAPE for every estimator, while
+  `probabilistic_metrics` emits division coverage only for an interval family with at least two
+  scored cells (null where a division's cells never reached an ensemble). A gate reading both must
+  OUTER-join them on the division.
+  **`D-112`'s residual-sign defect is in the whole `probabilistic` family** — the ensemble
+  adds `estimate - truth` to the estimate instead of subtracting it. It moves coverage, CRPS and
+  `n_clipped_at_zero`, and `mean_interval_width_0.90` only where the zero clip binds. Do not gate on
+  any of them until it lands. WAPE is unaffected. The `national_size` arm is not stratified (`state_fips = "US"`).
 - `intervals` offers CRPS and refuses log score on purpose: an empirical ensemble gives -inf
   whenever the truth falls outside its range. §13.7 permits either.
 
@@ -180,8 +200,9 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
 
 ```bash
 uv run pytest tests/unit/test_validate_scoreboard.py tests/unit/test_validate_intervals.py \
-  tests/unit/test_validate_metrics_point.py tests/unit/test_validate_metrics_bounds.py \
-  tests/unit/test_validate_metrics_constraint.py        # 40 passed, 0.2s — no data/ needed
+  tests/unit/test_validate_metrics_point.py tests/unit/test_validate_metrics_probabilistic.py \
+  tests/unit/test_validate_metrics_bounds.py tests/unit/test_validate_metrics_constraint.py
+  # 59 passed (measured 2026-09-12 after plan 14's review fixes; was 40 over the five modules before it) — no data/ needed
 uv run pytest tests/integration/test_validation_golden.py   # 7 passed, 11s — in-git fixtures
 uv run logging-estimates validate --config config.yaml [--estimators id,id]
 ```

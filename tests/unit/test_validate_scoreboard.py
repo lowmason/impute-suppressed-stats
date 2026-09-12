@@ -29,19 +29,35 @@ def _scores():
         {
             "estimator_id": ["cbp_intensity"] * 2 + ["harvest_proportional"] * 2,
             "cell_id": ["c1", "c2"] * 2,
+            # TWO divisions (pacific, new_england) with DIFFERENT errors: pacific 10/100 = 0.1,
+            # new_england |150-200|/200 = 0.25, overall 60/300 = 0.2. With one division a board
+            # that picked division rows would pass; with two, the value and denominator checks catch it.
+            "state_fips": ["06", "23"] * 2,
+            "reference_month": ["2019-03", "2019-03"] * 2,
             "truth": truth * 2,
-            "estimate": [110.0, 180.0, None, None],
+            "estimate": [110.0, 150.0, None, None],
             "decline_kind": [None, None, "by_design", "by_design"],
             "weight_basis": ["own_estimator", "establishment_fallback", "none", "none"],
         }
     )
 
 
+def _national():
+    """R-S5G-4's denominator. One month, so every scored cell shares it."""
+    return pl.DataFrame({"reference_month": ["2019-03"], "national_employment": [1000.0]})
+
+
 def _metrics():
     scores = _scores()
     return pl.concat(
         [
-            point_metrics(scores, regime="small_cell_biased", seed=1024, arm="state_total"),
+            point_metrics(
+                scores,
+                regime="small_cell_biased",
+                seed=1024,
+                arm="state_total",
+                national_totals=_national(),
+            ),
             decline_and_basis_report(
                 scores, regime="small_cell_biased", seed=1024, arm="state_total"
             ),
@@ -101,6 +117,8 @@ def _seed_metrics(
     rows: dict[str, list[object]] = {
         "estimator_id": [],
         "cell_id": [],
+        "state_fips": [],
+        "reference_month": [],
         "truth": [],
         "estimate": [],
         "decline_kind": [],
@@ -110,6 +128,8 @@ def _seed_metrics(
         for index in range(n_cells):
             rows["estimator_id"].append(estimator_id)
             rows["cell_id"].append(f"c{index}")
+            rows["state_fips"].append("06")
+            rows["reference_month"].append("2019-03")
             rows["truth"].append(100.0)
             rows["estimate"].append(estimate)
             rows["decline_kind"].append(None if estimate is not None else "by_design")
@@ -117,7 +137,9 @@ def _seed_metrics(
     scores = pl.DataFrame(rows, schema_overrides={"estimate": pl.Float64})
     return pl.concat(
         [
-            point_metrics(scores, regime=regime, seed=seed, arm="state_total"),
+            point_metrics(
+                scores, regime=regime, seed=seed, arm="state_total", national_totals=_national()
+            ),
             decline_and_basis_report(scores, regime=regime, seed=seed, arm="state_total"),
         ],
         how="diagonal",
@@ -475,3 +497,46 @@ def test_regimes_sitting_on_different_arms_do_not_contaminate_each_other():
     assert preferred_baseline(board, regime="small_cell_biased") == "cbp_intensity"
     assert preferred_baseline(board, regime="long_consecutive_runs") == "cbp_intensity"
     assert preferred_baseline(board, regime="rolling_origin") is None
+
+
+def test_the_board_keeps_one_row_per_group_when_the_metrics_carry_strata():
+    """R-S5G-1's fan-out guard: the board's grain must not follow the partition.
+
+    `build_scoreboard` selects `metric_family == 'point' & metric_name == 'wape'`. Per-division
+    WAPE rows match both clauses, so without the `stratum_kind == 'overall'` filter the left join
+    to `basis` returns a row per division per group and the board silently multiplies --
+    `validate_frame` compares names and dtypes and cannot see a row count. §13.10's comparand is a
+    (270, 13) board; a fan-out there corrupts the number Stage 5 is promoted against.
+    """
+    metrics = _metrics()
+    stratified = metrics.filter(pl.col("stratum_kind") == "census_division")
+    assert stratified.height > 0, "fixture must actually carry stratified rows"
+    assert stratified["stratum_value"].n_unique() >= 2, (
+        "fixture must span two divisions, or a division-selecting filter passes too"
+    )
+    board = build_scoreboard(metrics)
+    overall = metrics.filter(
+        (pl.col("metric_family") == "point")
+        & (pl.col("metric_name") == "wape")
+        & (pl.col("stratum_kind") == "overall")
+    ).select(
+        "regime",
+        "seed",
+        "estimator_id",
+        pl.col("value").alias("wape_overall"),
+        pl.col("denominator").alias("denominator_overall"),
+    )
+    joined = board.join(overall, on=["regime", "seed", "estimator_id"], how="left")
+    # The board's VALUES are the overall row's, not a division's: a dedupe that kept a division row
+    # passes the height check below and fails here.
+    assert joined.filter(~pl.col("wape").eq_missing(pl.col("wape_overall"))).height == 0
+    assert (joined["denominator"] == joined["denominator_overall"]).all()
+    assert (
+        board.height
+        == metrics.filter(
+            (pl.col("metric_family") == "point")
+            & (pl.col("metric_name") == "wape")
+            & (pl.col("stratum_kind") == "overall")
+        ).height
+    )
+    assert board.select("regime", "seed", "estimator_id").n_unique() == board.height

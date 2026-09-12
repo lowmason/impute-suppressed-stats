@@ -229,8 +229,8 @@ DECLINE_KINDS: tuple[str, ...] = ("by_design", "data_gap", "reconciliation_failu
 def assert_declared_provenance(frame: pl.DataFrame) -> None:
     """Refuse a provenance value outside its declared tuple.
 
-    The five tuples this checks (`RECONCILIATION_STATUSES`, `WEIGHT_BASES`, `ANCHOR_BASES`,
-    `DECLINE_KINDS`, `SUPPRESSION_TYPES`) are the closed sets a baseline row's provenance may draw from, but
+    The six tuples this checks (`RECONCILIATION_STATUSES`, `WEIGHT_BASES`, `ANCHOR_BASES`,
+    `DECLINE_KINDS`, `SUPPRESSION_TYPES`, `STRATUM_KINDS`) are the closed sets a baseline row's provenance may draw from, but
     `BASELINE_RESULT_SCHEMA` checks dtypes only -- `pl.String` accepts any string. `weight_basis`
     is the live exposure: `run_baselines` copies it from an estimator's own `outcome.basis`, so a
     third-party estimator's typo reached `baseline_results.parquet` and passed every test. Nulls
@@ -242,6 +242,12 @@ def assert_declared_provenance(frame: pl.DataFrame) -> None:
         ("anchor_basis", ANCHOR_BASES),
         ("decline_kind", DECLINE_KINDS),
         ("suppression_type", SUPPRESSION_TYPES),
+        # R-S5G-1. Added with a CALLER: `validate/harness.py` runs this over the assembled metrics
+        # frame, and `tests/unit/test_contracts_validation.py` refuses an undeclared value.
+        # `INTERVAL_SOURCES` is the cautionary case: its own comment in this module records it as
+        # enforced by nothing at runtime, and a second declared-but-unenforced set is what this
+        # avoids.
+        ("stratum_kind", STRATUM_KINDS),
     ):
         if column not in frame.columns:
             continue
@@ -443,6 +449,15 @@ REGIME_SWITCHES: dict[str, str] = {
 
 MASK_ARMS: tuple[str, ...] = ("state_total", "national_size")
 
+# §13.10's "major stratum", as a closed set (R-S5G-1). `overall` is a VALUE, never a null: an
+# unstratified row carrying a null `stratum_kind` is precisely the `mask_arm` defect this package
+# already paid for once -- `validate_frame` compares names and dtypes, `dict[str, pl.DataType]` has
+# no nullability slot, and 70 null-armed rows persisted through a gate they were already subject to.
+# The partition is `validate/regimes.py::CENSUS_DIVISIONS` and NOT a second one: that module's own
+# comment requires §13.6's state-share strata, §13.7's calibration-by-region and Stage 5's §17.5
+# region effects to partition on the SAME thing, and this is that thing.
+STRATUM_KINDS: tuple[str, ...] = ("overall", "census_division")
+
 # What produced a probabilistic row's interval, named for what the code computes. Until R-S5P-7
 # this value was named for a ROLLING window that `validate/metrics.py` has never computed: it
 # builds each ensemble from `np.delete(residual_pool, position)` — every OTHER scored residual in
@@ -450,9 +465,10 @@ MASK_ARMS: tuple[str, ...] = ("state_total", "national_size")
 # window. (The superseded string is spelled out in the test named below, so a reader who greps for
 # it lands on the reason; it is deliberately not repeated in `src/`.)
 # §13.10's coverage gate reads these intervals and cannot tell a time-ordered interval from this
-# one, so the name is the only thing carrying the distinction. Unlike WEIGHT_BASES and its four
-# siblings above, this tuple is enforced by nothing at runtime — `assert_declared_provenance` does
-# not cover `interval_source` — so `tests/integration/test_validation_golden.py` is its only check.
+# one, so the name is the only thing carrying the distinction. Unlike WEIGHT_BASES and its five
+# siblings above (STRATUM_KINDS joined them in R-S5G-1), this tuple is enforced by nothing at
+# runtime — `assert_declared_provenance` does not cover `interval_source` — so
+# `tests/integration/test_validation_golden.py` is its only check.
 # Renaming the value here does not build the rolling version; that is Stage 5's, per
 # `specs/completed/stage5-preconditions.md` §4.
 INTERVAL_SOURCES: tuple[str, ...] = ("leave_one_out_residual_ensemble", "none")
@@ -506,8 +522,11 @@ VALIDATION_SCORE_SCHEMA: dict[str, pl.DataType] = {
     "constraint_set_hash": pl.String,
 }
 
-# One row per (regime, seed, estimator, metric_family): the §13.5-13.8 aggregates, each carrying
-# its own denominator.
+# One row per (regime, seed, mask_arm, estimator, metric_family, metric_name, stratum_kind,
+# stratum_value): the §13.5-13.8 aggregates, each carrying the denominator of the set it was
+# computed over -- a stratified row's is its stratum's, not the estimator's (R-S5G-1). The
+# six-field key without the stratum pair is NOT total: `wape` and `coverage_0.90` repeat per
+# division.
 VALIDATION_METRIC_SCHEMA: dict[str, pl.DataType] = {
     "regime": pl.String,
     "seed": pl.Int64,
@@ -530,6 +549,13 @@ VALIDATION_METRIC_SCHEMA: dict[str, pl.DataType] = {
     "calibration_sample_size": pl.Int64,
     "bound_cells_finite_upper": pl.Int64,
     "constraint_rows_scored": pl.Int64,
+    # APPENDED, not inserted (R-S5G-1). No artifact records this schema's fingerprint today --
+    # `cli.py` fingerprints the constraint and baseline tables, not this one -- and `validate_frame`
+    # ignores column order, so the position buys nothing today. Appending keeps the DECLARATION's
+    # existing pairs in place for a fingerprint added later; the persisted file's column order is set
+    # by the emitters and the writer, not by this literal.
+    "stratum_kind": pl.String,
+    "stratum_value": pl.String,
 }
 
 # One row per (regime, seed, estimator): §13.10's comparand, with the provenance that makes it
@@ -604,6 +630,10 @@ VALIDATION_REQUIRED_NON_NULL: dict[str, tuple[str, ...]] = {
         "denominator",
         "denominator_basis",
         "n_scored",
+        # Non-null BY CONSTRUCTION: every emitter writes the `overall`/`all` sentinel pair onto
+        # rows it does not stratify, so there is no path that leaves either null.
+        "stratum_kind",
+        "stratum_value",
     ),
     "validation_scoreboard": (
         "regime",

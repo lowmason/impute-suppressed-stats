@@ -43,6 +43,7 @@ from .metrics import (
     bound_metrics,
     constraint_metrics,
     decline_and_basis_report,
+    national_monthly_totals,
     point_metrics,
     probabilistic_metrics,
 )
@@ -167,7 +168,18 @@ def run_pseudo_suppression(
             # scope by, so this is the only place the guarantee can be made. See the function.
             assert_scored_cells_are_primary_like(scored)
             all_scores.append(scored)
-            all_metrics.append(point_metrics(scored, regime=name, seed=seed, arm=arm))
+            all_metrics.append(
+                point_metrics(
+                    scored,
+                    regime=name,
+                    seed=seed,
+                    arm=arm,
+                    # From the MASKED frame: a denominator taken from `data` would have to be
+                    # argued leak-free, and this one has already passed
+                    # `assert_no_retained_truth` three lines above.
+                    national_totals=national_monthly_totals(masked.qcew_monthly),
+                )
+            )
             all_metrics.append(bound_metrics(scored, regime=name, seed=seed, arm=arm))
             all_metrics.append(decline_and_basis_report(scored, regime=name, seed=seed, arm=arm))
             all_metrics.append(probabilistic_metrics(scored, regime=name, seed=seed, arm=arm))
@@ -210,6 +222,10 @@ def run_pseudo_suppression(
         # thirty-five (0, 0) frames is (0, 0), and the shaped branch is skipped. The emptiness
         # that matters is the RESULT's, not the accumulator's.
         metrics = pl.DataFrame(schema=VALIDATION_METRIC_SCHEMA)
+    # The metrics frame gets the same closed-set gate the scores frame has had (R-S5G-1).
+    # Declaring `STRATUM_KINDS` without a caller would repeat `INTERVAL_SOURCES`, which its own
+    # comment in `contracts.py` records as enforced by nothing at runtime.
+    assert_declared_provenance(metrics)
     board = build_scoreboard(metrics)
     return ValidationResult(scores, metrics, board, manifest)
 

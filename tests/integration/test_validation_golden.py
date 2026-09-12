@@ -58,7 +58,20 @@ def test_the_metrics_match_the_golden(fixture_run):
     golden = pl.read_parquet(GOLDEN)
     produced = fixture_run.metrics
     assert produced.columns == golden.columns
-    key = ["regime", "seed", "mask_arm", "estimator_id", "metric_family", "metric_name"]
+    # R-S5G-1 made the six-field key NON-TOTAL: `wape` and `coverage_0.90` now appear once as
+    # `overall` and once per census division under otherwise identical values, so a sort on the old
+    # key leaves those rows tied and `equals` compares whatever order each side happened to
+    # produce. The stratum pair is what restores the total order.
+    key = [
+        "regime",
+        "seed",
+        "mask_arm",
+        "estimator_id",
+        "metric_family",
+        "metric_name",
+        "stratum_kind",
+        "stratum_value",
+    ]
     assert produced.sort(key).equals(golden.sort(key))
 
 
@@ -104,8 +117,8 @@ def test_the_interval_source_names_leave_one_out_rather_than_rolling(fixture_run
     pool is every OTHER scored residual in the same (regime, seed, arm, estimator) group, with no
     time ordering and no window. Nothing rolls. The old value `rolling_residual_ensemble` promised
     §13.10's coverage gate a time-ordered interval that the code never computed, and the gate
-    cannot tell the difference: `interval_source` is outside `assert_declared_provenance`'s five
-    columns, so `INTERVAL_SOURCES` is checked by nothing at runtime and this test IS the check.
+    cannot tell the difference: `interval_source` is outside `assert_declared_provenance`'s six
+    closed-set checks, so `INTERVAL_SOURCES` is checked by nothing at runtime and this test IS the check.
 
     Scope is the label. A time-ordered rolling interval is explicitly NOT built here
     (`specs/completed/stage5-preconditions.md` §4).
@@ -127,6 +140,10 @@ def test_a_hand_derived_row_reproduces_the_golden_interval(fixture_run):
     (`whole_seasonal_blocks` x `cbp_intensity`, 37 scored cells) from the SCORES — which are data —
     without calling `probabilistic_metrics`. It is also what proves R-S5P-7 moved a label only: it
     passes unchanged on both sides of the rename.
+
+    It does NOT catch the residual SIGN. It copies the code's `estimate + (estimate - truth)`
+    construction, so it moves WITH `D-112`'s defect rather than against it; correcting the sign
+    changes this group's `covered` from 33 to 31 of 37 (derived in `D-112`).
     """
     regime, estimator = "whole_seasonal_blocks", "cbp_intensity"
     group = fixture_run.scores.filter(
@@ -146,6 +163,10 @@ def test_a_hand_derived_row_reproduces_the_golden_interval(fixture_run):
         (pl.col("regime") == regime)
         & (pl.col("estimator_id") == estimator)
         & (pl.col("metric_family") == "probabilistic")
+        # The oracle re-derives coverage over the WHOLE group's leave-one-out pool, which is the
+        # overall row. A per-division row shares this row's `metric_name` and would make `_value`
+        # ambiguous (R-S5G-1).
+        & (pl.col("stratum_kind") == "overall")
     )
 
     def _value(name: str) -> float:

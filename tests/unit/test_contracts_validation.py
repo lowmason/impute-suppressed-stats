@@ -78,6 +78,10 @@ def test_a_null_in_a_required_column_is_refused():
             "denominator": [1.0, 1.0],
             "denominator_basis": ["masked_cell_rows", "masked_cell_rows"],
             "n_scored": [1, 1],
+            # Present so the ABSENT-column branch cannot fire first and mask the null branch this
+            # test is about (R-S5G-1 added both to `VALIDATION_REQUIRED_NON_NULL`).
+            "stratum_kind": ["overall", "overall"],
+            "stratum_value": ["all", "all"],
         }
     )
     with pytest.raises(ConceptViolationError, match="regime"):
@@ -115,3 +119,20 @@ def test_a_required_column_missing_entirely_is_refused():
         contracts.assert_required_columns_present(
             pl.DataFrame({"unrelated": [1]}), "validation_metrics"
         )
+
+
+def test_a_stratum_kind_outside_the_declared_set_is_refused():
+    """removing `("stratum_kind", STRATUM_KINDS)` from the provenance loop must redden this.
+
+    `validate/harness.py` runs the gate over the assembled metrics frame; without a refusal test
+    the entry could be deleted with the suite green, which is `INTERVAL_SOURCES`' situation.
+    """
+    frame = pl.DataFrame({"stratum_kind": ["overall", "by_state"]})
+    with pytest.raises(ConceptViolationError, match="stratum_kind"):
+        contracts.assert_declared_provenance(frame)
+
+
+def test_every_declared_stratum_kind_passes():
+    contracts.assert_declared_provenance(
+        pl.DataFrame({"stratum_kind": list(contracts.STRATUM_KINDS)})
+    )

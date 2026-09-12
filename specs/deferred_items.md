@@ -84,7 +84,9 @@ gate: Stage 0 audited no BEA source and produced nothing that bears on the
       `> Deviation` note at Task 5 Step 6.
       **Confirmed by measurement 2026-09-05 at the Stage 2 gate, still open.** The engine
       reports all 1,227 suppressed state-month cells as `bound_status = 'unbounded'` with a
-      null `selected_upper`; nonnegativity is the only public fact that touches one. The item
+      null `selected_upper`; nonnegativity is the only public fact the engine consumes that touches one (qualified
+      2026-09-12: a disclosed private `113` parent bounds 756 of the 1,227 above, measured 2026-09-11
+      and not yet a constraint row -- `D-111`). The item
       is no longer an inference from Stage 0's verdict, and Stage 3's anchor must also cope
       with a null upper endpoint rather than two finite ones.
       **→ retired 2026-09-05: Stage 3 named the anchor — `reconcile/anchor.py` stamps
@@ -1587,7 +1589,7 @@ that was skipped — work the close itself uncovered.
 
 - [ ] `D-082` **`assert_declared_provenance` does not check `mask_arm` against `MASK_ARMS`.**
       `contracts.MASK_ARMS` is the declared pair `('state_total', 'national_size')`, and
-      `contracts.assert_declared_provenance` loops over five provenance columns without including
+      `contracts.assert_declared_provenance` loops over six provenance columns (`STRATUM_KINDS` joined them in plan 14) without including
       `mask_arm` — so an invented arm string reaches `validation_scores` and `validation_metrics`
       without the fail-closed refusal every other closed set gets. Plan 12 made this reachable
       rather than theoretical: `mask_arm` is now PRODUCED on the scores frame from
@@ -1637,14 +1639,18 @@ names but no existing item owns; the Stage 4 `Exit:` line cites them.
       recoverable" and that a truth outside the deterministic bounds "fails the run as a
       constraint-data bug (§13.5)". Neither happens. `is_exactly_recoverable`
       (`validate/recover.py:67`) and `mask_and_solve_size` (`:80`) have no caller anywhere in
-      `src/`; `validate/harness.py` raises only `ConceptViolationError` (`:76`, `:296`), never on
+      `src/`; `validate/harness.py` raises only `ConceptViolationError` (in `run_pseudo_suppression` and `_mask_arm`), never on
       recoverability or on a bound violation. What ships instead is measurement:
-      `validate/metrics.py:45,52` emit `truth_in_bound_rate` and `exact_recovery_rate` as metric
+      `validate/metrics.py::bound_metrics` emits `truth_in_bound_rate` and `exact_recovery_rate` as metric
       rows, both present in `runs/f03023ac9f3a/validation_metrics.parquet`. The only executable
       witnesses are `tests/integration/test_validate_exact_recovery.py`, which calls
       `mask_and_solve_size` directly and skips unless a March with zero suppressed classes exists.
       This is not a wrong number on D1: every state cell is `unbounded` with a null
       `selected_upper`, so the bounds rule cannot fire on the state-total arm at all.
+      *(Qualified 2026-09-12: once `D-111` lands, 756 state cells carry a finite upper, and
+      `specs/stage5-parent-margin.md` R-PM-3 owns BOTH rules on the state-total arm -- §13.2 step 6 for
+      the parent case and §13.5's out-of-bounds rule. This item keeps the size-class arm, and its
+      Done-when applies to that arm.)*
       Target: Stage 6 — the first stage with a size-class estimator and state x size cells, which
       is where both rules can first bind. Size: plan.
       Done when: a mask whose target stays exactly recoverable is rejected (or separately
@@ -1682,7 +1688,7 @@ work the plan's changes either created, confirmed, or deliberately scoped out.
 - [ ] `D-087` **INV-002's per-cell half is enforced on the production path only, not on the
       validation harness.** Plan 13 Task 4 (R-S5P-3) wired `bounds` into `run_baselines` and made
       `solve-bounds` a precondition of `run-baselines` in `cli.py`, so every released estimate is
-      now checked against its §9 interval. `validate/harness.py:161` deliberately keeps passing
+      now checked against its §9 interval. `validate/harness.py::run_pseudo_suppression` deliberately keeps passing
       nothing, and `run_baselines`' own docstring records why: `deterministic_bounds.parquet`
       carries the published value for a cell the pseudo-suppression mask hides, so its intervals
       were solved from a system containing the truth the harness scores against, and clipping to
@@ -1691,10 +1697,9 @@ work the plan's changes either created, confirmed, or deliberately scoped out.
       with nothing noticing, which is exactly the condition INV-002 exists to refuse.
       **CORRECTED 2026-09-10, before any work started: this item's original premise was false.**
       It said closing this "needs bounds re-solved under the mask, which is a Stage 6 job, not a
-      parameter change". The re-solve already exists: `validate/harness.py:160` calls
+      parameter change". The re-solve already exists: `validate/harness.py::run_pseudo_suppression` calls
       `recover.mask_and_solve`, which rebuilds the constraint system from the MASKED frame and
-      solves it, returning `MaskedSystem.bounds` — one line before the `run_baselines` call on
-      :161. So masked, non-leaking bounds are already in hand at the call site, and wiring them in
+      solves it, returning `MaskedSystem.bounds` — one line before the `run_baselines` call that follows it. So masked, non-leaking bounds are already in hand at the call site, and wiring them in
       is a small change, not a stage.
       What is actually unresolved is what an out-of-interval estimate should MEAN here.
       `assert_within_bounds` RAISES (it does not clip — it never modifies a value), and raising
@@ -1761,14 +1766,21 @@ work the plan's changes either created, confirmed, or deliberately scoped out.
 `d6591b6` and audited the Stage 1-4 deliverables blind against the spec. Everything below is live
 at that commit, sits in a ticked stage's own deliverable, and was owned by nothing when filed.
 `D-091` and `D-092` are the two the re-measurement ranked as Stage 5 preconditions; they are
-carried by `specs/stage5-gate-inputs.md` and are listed here so that spec has something to close.
+carried by `specs/completed/stage5-gate-inputs.md` and are listed here so that spec has something to close.
 
 The rest are backlog by measurement, not by triage convenience: for nearly every one the fact is
 confirmed and the consequence is unreachable on D1. Where that is so, the `Revisit if:` line names
 the event that makes it reachable rather than a date.
 
-- [ ] `D-091` **§13.10's two "major stratum" gates have no data source, and all three
-      `PromotionConfig` keys are read by nothing.** `validate/metrics.py` emits 18 metric names and
+- [x] `D-091` **§13.10's two "major stratum" gates have no data source, and all three
+      `PromotionConfig` keys are read by nothing.** -> done in plan 14 (R-S5G-1..3).
+      `validate/metrics.py` now emits a per-census-division WAPE and a per-division 90% coverage
+      into `validation_metrics.parquet` (`stratum_kind`/`stratum_value`, closed set
+      `contracts.STRATUM_KINDS`, enforced by `assert_declared_provenance` from
+      `validate/harness.py`), so both gates read a shipped artifact; R-S5G-2 ruled **Option A** and
+      §13.10 stands unamended. The three keys are recorded inert per key with a tripwire test
+      (`D-109`) rather than read, because §13.10's candidate is Stage 5's own output.
+      Original text follows unedited. `validate/metrics.py` emits 18 metric names and
       none is stratified; `grep -rn 'stratum\|strat' src/logging_employment/validate/
       src/logging_employment/config.py` returns three hits, two of them comments and the third the
       config declaration. `minimum_wape_improvement`,
@@ -1777,12 +1789,21 @@ the event that makes it reachable rather than a date.
       `PromotionConfig`'s docstring calls them "§13.10's gates". Stage 4's `Produces` claimed the
       §13.5-13.8 families; `specs/completed/stage5-preconditions.md` §2 and §6 declined to inherit
       it, which is how it came to be owned by a retired document.
-      Size: plan. Done when: `specs/stage5-gate-inputs.md` R-S5G-1..3 ship — a per-stratum WAPE and
+      Size: plan. Done when: `specs/completed/stage5-gate-inputs.md` R-S5G-1..3 ship — a per-stratum WAPE and
       90% coverage are computable, or §13.10 is amended and the three keys are read or recorded
       inert beside `D-064`'s four.
 
-- [ ] `D-092` **§9.3's parent-industry, ownership and region margins were never fetched, declined
-      or measured, and the engine bounds no state cell.** Measured: `deterministic_bounds.parquet`
+- [x] `D-092` **§9.3's parent-industry, ownership and region margins were never fetched, declined
+      or measured, and the engine bounds no state cell.** -> MEASURED in plan 14 (R-S5G-5..8).
+      **The exact-reconstruction premise below is FALSIFIED and the conclusion is a BOUND, not an
+      exact case:** `1133` and `11331` are disclosed on 0 of the 409 suppressed state-quarters (a
+      1:1 chain is suppressed together), `own_code 0` does not exist at state x 6-digit, and no
+      disclosed `113` parent on a suppressed quarter is a `'-'` true zero -- so `exact` is 0 by measurement
+      -- through the measured margins; the `113 - 1131 - 1132` path was not measured (`D-110`). `113` is disclosed on **252 of 409** (756 months), bounding `113310` above.
+      Recorded in the Stage 5 roadmap `Consumes`, `specs/findings/qcew-parent-margins.md` and
+      `specs/findings/stage-5-log.md`; the bound is routed to `specs/stage5-parent-margin.md`
+      (`D-111`) rather than absorbed. Ticked on the MEASUREMENT (R-S5G-5..7); R-S5G-8's consequence is
+      NOT closed here and is carried by `D-110` and `D-111`. Original text follows unedited. Measured: `deterministic_bounds.parquet`
       is 1,227 `unbounded` with `selected_upper` null on all 1,227, 3,534 `observed`, 14
       `partially_identified` (national size classes only). Independently re-derived from raw bytes:
       `agglvl 58`, `own 5`, excluding `area_fips 72000` gives 1,572 quarter-rows of which 409 carry
@@ -1792,7 +1813,7 @@ the event that makes it reachable rather than a date.
       a live `REQ-027` §14.4 case rather than a modelling improvement. The roadmap's settle-before
       trigger exists but sits in the **Stage 6** block while **Stage 5** already consumes
       `deterministic_bounds`.
-      Size: plan. Done when: `specs/stage5-gate-inputs.md` R-S5G-5..8 ship — the four state slices
+      Size: plan. Done when: `specs/completed/stage5-gate-inputs.md` R-S5G-5..8 ship — the four state slices
       are fetched and counted, the ruling is recorded where a stage will read it, and the trigger is
       re-pointed at Stage 5.
 
@@ -1806,9 +1827,14 @@ the event that makes it reachable rather than a date.
       coefficients only, 11 of 400. At employment magnitudes near 41,667 the gap is ~4 employees.
       `grep -rni 'mip_rel_gap|mip_abs_gap'` over `src/ tests/ specs/ docs/` returns zero hits, so
       this is an unexamined default rather than a recorded decision.
-      Size: quick-fix. Revisit if: any state cell gets a finite bound -- MILP ran on 0 of 4,775 rows
-      on D1 (`milp_lower`/`milp_upper` null everywhere) because `_needs_milp` skips a cell whose
-      `upper` is None, so this cannot fire until `D-092` changes that.
+      Size: quick-fix. Revisit if: an integer cell's LP interval is finite AND narrower than
+      `use_milp_when_lp_interval_width_below` (25) -- the two gates `_needs_milp` applies after
+      `enforce_integrality`. MILP ran on 0 of 4,775 rows on D1 (`milp_lower`/`milp_upper` null
+      everywhere): the 1,227 state cells fail the first gate and the 14 finite national cells fail
+      the second (widths 130-894). **`D-092` measured a bound 2026-09-11**: a disclosed `113` parent
+      bounds 756 of the 1,227 suppressed cells above, so this fires for the subset under the width
+      threshold once `D-111` (`specs/stage5-parent-margin.md` R-PM-6) builds that bound into the
+      system -- `specs/findings/qcew-parent-margins.md` derives how many that is.
 
 - [ ] `D-094` **Harmonized `snapshot_id` is the raw file's filename stem, so the §7.2 join key
       resolves to nothing.** `build.py` passes `snapshot_id=path.stem` at all three parser calls
@@ -2012,3 +2038,80 @@ the event that makes it reachable rather than a date.
       (the §12.5 arm is reached only from tests), so no shipped number is affected. Note `D-041`
       owns the neighbouring dead `general_method` guard and Stage 6's `Consumes` owns the missing
       bounds parameter; this is the third, separate defect in the same function.
+
+## 14-stage5-gate-inputs — 2026-09-11
+
+- [ ] `D-109` **`PromotionConfig`'s three keys are recorded inert rather than read.** R-S5G-3 ruled
+      2026-09-11 that no §13.10 evaluator is built before Stage 5 exists: `minimum_wape_improvement`
+      needs a second `validation_scoreboard.parquet` and there is one,
+      and `maximum_major_stratum_wape_degradation` / `nominal_coverage_tolerance` have their input as of R-S5G-1 (though the coverage VALUES carry `D-112`'s
+      sign defect) but no candidate to evaluate. All three fold into `runs.run_id` via
+      `resolved_dict`, so this is `D-064`'s shape with a recorded reason rather than silence.
+      Size: quick-fix. Done when: Stage 5's promotion record reads all three —
+      `tests/unit/test_config_validation_block.py::test_the_promotion_keys_are_still_unread_and_the_docstring_still_says_so`
+      reddens on that day and names the keys that moved.
+
+- [ ] `D-110` **No MEASURED §9.3 margin gives `exact_reconstruction_flag` a live instance -- but one
+      named path was not measured.** R-S5G-5 measured `113`, `1133`, `11331` and total ownership at
+      `113310` across all 32 D1 quarters. None exactly reconstructs a suppressed private
+      state-quarter: `1133` and `11331` are disclosed on **0 of 409** (a 1:1 chain is suppressed
+      together, which is what makes it publishable), `own_code 0` does not exist at state x 6-digit,
+      and **0** of the 3 `'-'` true-zero `113` rows falls on a suppressed quarter. **Not measured:**
+      `113 - 1131 - 1132 = 1133` is exact wherever all three are disclosed, and it can apply only on
+      the 252 quarters where `113` is (and only where `1131` and `1132` are too) -- so on those
+      quarters `REQ-027`'s status is UNKNOWN, not absent, and R-S5G-8's "before any release path can reach those cells" still binds. Measuring
+      it is `specs/stage5-parent-margin.md` R-PM-5. Pattern: `specs/findings/qcew-parent-margins.md`.
+      Size: quick-fix. Revisit if: R-PM-5 finds `113`, `1131` and `1132` jointly disclosed on a
+      suppressed quarter, or a QCEW revision publishes a parent where the child is `N`. Re-running
+      `scripts/audit/qcew_parent_margins.py` OVERWRITES the stored extracts it would be compared
+      against (`_common.record_extract` rewrites in place), so first check them against the extract
+      digest `specs/findings/qcew-parent-margins.md` pins, or copy
+      `data/raw/audit/qcew_parent_margins/` aside.
+
+- [ ] `D-111` **A disclosed `113` parent bounds 252 of the 409 suppressed state-quarters above, and
+      nothing consumes it.** Measured 2026-09-11 (R-S5G-5): 756 of the 1,227 suppressed monthly
+      cells have a finite upper bound available from a published accounting fact, and the shipped
+      `deterministic_bounds.parquet` carries `+inf` on all of them. It is not vacuous on the
+      published distribution: where `113310` and `113` are both disclosed, `113310 / 113` has median
+      0.916 over 3,069 month-observations -- a description of disclosed pairs, not of the suppressed
+      cells the bound applies to (`specs/stage5-parent-margin.md` R-PM-8). Routed there (R-PM-1..8):
+      registry rows, new cell kinds and a `size_margin_rows`-shaped builder, a §13.2 step-4 rule for
+      when `validate/recover.py` keeps the parent visible (it is public on 252 of 409 real
+      suppressions, so hiding it always scores methods under harder identification than production -- today
+      that moves §13.5's bound metrics and `validation_scores`' `selected_*` columns, not WAPE,
+      coverage or the scoreboard, since baselines never read masked bounds (`D-087`); step 6 labels
+      any exact case), the
+      unmeasured `1131`/`1132` sibling path, MILP only where the new LP width falls under §9.6's
+      threshold, and whether Stage 4's comparand is re-run. **Stage 5's roadmap `Consumes` blocks
+      on this.**
+      Size: plan. Done when: `specs/stage5-parent-margin.md` §4's six conditions hold.
+
+- [ ] `D-112` **§13.7's leave-one-out ensemble shifts each point estimate by the residual with the
+      WRONG sign, so coverage, width and CRPS are wrong for any biased estimator.**
+      `validate/metrics.py::probabilistic_metrics` pools `estimate - truth`, and
+      `validate/intervals.py::residual_ensemble` ADDS the pool to the point estimate, so cell i's
+      ensemble is `estimate_i + (estimate_j - truth_j)`. The predictive distribution of `truth_i` is
+      `estimate_i - (estimate_j - truth_j)`: the shipped form doubles a bias instead of removing it.
+      Measured 2026-09-12 with the shipped `intervals` helpers on a synthetic method (n = 40,
+      `numpy.random.default_rng(0)`, truth ~ U(80, 120), estimate = 1.25 x truth + N(0, 3)): 90%
+      coverage **0.00** as shipped, **0.85** with the sign corrected. A bias that dominates the
+      residual spread collapses coverage; a smaller one biases it downward. On an unbiased method the
+      two agree to sampling noise (0.90 vs 0.85). Present since `8939026` (2026-09-07, Stage 4); §10.7 states no sign convention.
+      Blast radius: every `probabilistic` row -- `coverage_*`, `mean_interval_width_0.90` (through the
+      zero clip), `crps`, `n_clipped_at_zero` -- overall AND the per-division `coverage_0.90` rows plan
+      14 added for §13.10's gate. NOT WAPE, so `validation_scoreboard.parquet` and
+      `preferred_baseline` are untouched. Both oracles COPY the code's `estimate + (estimate - truth)` expression, so they move with the
+      defect rather than against it:
+      `tests/integration/test_validation_golden.py::test_a_hand_derived_row_reproduces_the_golden_interval`
+      (`covered == 33`) and `tests/unit/test_validate_metrics_probabilistic.py`. **Expect a large golden
+      delta, not a cosmetic one:** the golden fixture's residuals are NOT symmetric (62.2% of the
+      oracle group's 37 are positive), and the corrected sign changes `coverage_0.90` in 37 of its 43
+      interval-bearing groups, the oracle's own from 33 to 31 of 37 -- derived 2026-09-12 by running
+      `HEAD`'s code on the committed fixture with the sign flipped in memory. Found by plan 14's
+      review-verification pass and NOT fixed there, because it changes Stage 4's shipped
+      probabilistic numbers. **§13.10's coverage gate MUST NOT be applied until this lands.**
+      Size: quick-fix. Done when: the pool is `truth - estimate` (or `residual_ensemble` subtracts); a
+      unit test with a one-sided residual pool derives its expectation from `truth = estimate -
+      residual` rather than from the code's expression, and fails on the old sign; the golden and its
+      hand-derived oracle are regenerated with the delta characterized by join; and
+      `runs/f03023ac9f3a` is re-run.
