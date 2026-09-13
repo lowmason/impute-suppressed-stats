@@ -1,14 +1,14 @@
 # §9.3 parent-industry and ownership margins on D1 — measured
 
-**Measured:** 2026-09-11T16:24:31+00:00 (R-S5G-5, plan 14 Task 2). **Derived from
+**Measured:** 2026-09-13T13:52:07+00:00 (R-S5G-5, plan 14 Task 2). **Derived from
 `data/raw/audit/qcew_parent_margins/summary.json`, not retyped** — by
 `scripts/audit/render_parent_margins.py`, which is committed because the summary it reads is
 gitignored, and which refuses to render if a conclusion its `summary_premises` or `extract_premises`
 guards stops matching the data. The witness pair and Stage 0's agglvl inventory below are quoted
 references, not measurements of this run.
 
-**Extracts read:** 128, each verified against the sha256 the summary recorded, pinned
-together by digest `e620bb5ead34003d5f4324dc8fe16a7fa3738c62124c4de5b0bf56baf282477b` over their sorted `(sha256, path)` pairs.
+**Extracts read:** 192, each verified against the sha256 the summary recorded, pinned
+together by digest `79e6fa6fb3c71442fd06e4cb4f2eb40619bdf7b1f7fe734548ab8d27e365c1f0` over their sorted `(sha256, path)` pairs.
 `_common.record_extract` rewrites a slice in place, so **compare against this digest, or copy the
 directory aside, before re-running the audit.**
 
@@ -19,10 +19,10 @@ uv run --no-project render_parent_margins.py   # rewrites this file from the sto
 
 ## What was fetched
 
-128 slices of `https://data.bls.gov/cew/data/api/{year}/{qtr}/industry/{industry}.csv` —
-industries `113`, `1133`, `11331`, `113310` across 2017-Q1..2024-Q4
+192 slices of `https://data.bls.gov/cew/data/api/{year}/{qtr}/industry/{industry}.csv` —
+industries `113`, `1131`, `1132`, `1133`, `11331`, `113310` across 2017-Q1..2024-Q4
 (8 years x 4 quarters). Every one answered 200 with a parsable CSV:
-`not_found` and `unparseable` are 0 for all four industries, so no count below is short a quarter.
+`not_found` and `unparseable` are 0 for all 6 industries, so no count below is short a quarter.
 
 **Region margins were not fetched and need not be.** QCEW publishes no region level; Stage 0's
 measured agglvl inventory for `113310` is 18 National / 48 MSA / 58 State / 78 County. A
@@ -81,8 +81,8 @@ subtraction route is closed from both ends.
 | **identified at all** | **252** | **756** |
 
 **61.6%** of the suppressed state-quarters carry a finite upper bound from a disclosed `113`
-parent. None carries an exact reconstruction through a MEASURED margin — see *What this does not
-measure*.
+parent. None carries an exact reconstruction through a MEASURED margin — see *The sibling path
+(R-PM-5)*.
 
 ### Why `exact` is 0 by measurement, not by construction
 
@@ -123,10 +123,23 @@ are below it, touching **43** of the 252 bounded quarters. The rest become
 finite but stay LP-only, so `D-093`'s MILP gap binds on that subset, not on all 756. (This
 assumes the parent row is the only restriction added; another margin could narrow widths further.)
 
-## What this does not measure
+## The sibling path (R-PM-5)
 
 `113 - 1131 - 1132 = 1133`, and the chain below `1133` is 1:1 — so a quarter with `113`, `1131`
-and `1132` all disclosed is an **exact** reconstruction of `113310`. `1131` and `1132` are outside
-R-S5G-5's named scope and were not fetched. On the 252
-quarters where `113` is disclosed, REQ-027's status is therefore **unknown**, not absent (`D-110`),
-and `specs/stage5-parent-margin.md` R-PM-5 owns measuring it.
+and `1132` all published is an **exact** reconstruction of `113310`. Both siblings were walked with
+the industries above and judged by the same ladder.
+
+| sibling | agglvl | private state-quarters | published | published where `113` bounds a suppressed `113310` |
+|---|---|---|---|---|
+| `1131` | 56 | 1224 | 631 | 7 |
+| `1132` | 56 | 1108 | 582 | 10 |
+
+On the 252 suppressed quarters where `113` is
+published, all three are published on **0**, and on
+**0** when a state-quarter with no sibling row
+at all is read as zero establishments — an inference, reported beside the strict count rather than
+folded into the ladder. **The sibling path reconstructs no suppressed quarter**, so `REQ-027` /
+§14.4 has no live instance through any margin measured here, and `specs/stage5-parent-margin.md`
+R-PM-4 does not bind (`D-110`). One sibling is published on
+**17** of those quarters, which tightens the bound to
+`113 - sibling` without closing it; no constraint row builds that tighter bound.

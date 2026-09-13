@@ -203,3 +203,19 @@ against 25 under the old sign (14 at 17/20, one at 19/20); strictly inside the b
 reports 7 (recorded against `D-109`, which owns the unbuilt gate). The seven interval-bearing estimators'
 means land between 0.75 and 0.77, where the old sign spread them from 0.16 to 0.68. The intervals are cross-sectional leave-one-out rather than §10.7's
 rolling ones (`R-S5P-7`), which this fix does not change.
+
+## 2026-09-13 — R-PM-5 measured: the sibling path reconstructs nothing, so R-PM-4 does not bind
+
+`scripts/audit/qcew_parent_margins.py` now walks `1131` and `1132` with the other four industries and
+judges them with the same ladder (plan 15 Task 1); `specs/findings/qcew-parent-margins.md` is the
+rendering. On the 252 suppressed private `113310` state-quarters a published `113` bounds, all of
+`113`, `1131` and `1132` are published on **0**, and on
+**0** when a missing sibling row is read as zero
+establishments. The ladder's tally is exact 0, upper bound 252, none
+157.
+
+**Ruling on R-PM-4:** no measured margin, whether parent, ownership or sibling, reconstructs a suppressed
+state-quarter, so `exact_reconstruction_flag` keeps no live instance and the parent margin enters the
+constraint system as a bound only. `D-110` closes on this measurement. One sibling is published on
+17 of the bounded quarters, which would tighten the bound to
+`113 - sibling`; no row builds it, and plan 15's completion files that as its own item.
