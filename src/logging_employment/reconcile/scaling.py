@@ -82,10 +82,14 @@ def scale_into_bounds(
     tolerance: float,
     max_iterations: int,
 ) -> dict[str, float]:
-    """Solve for lambda by bisection, or fail per §12.3's strict predicate.
+    """Bisect for lambda to a double's resolution, or fail per §12.3's strict predicate.
 
     The domain check precedes the empty-missing-set shortcut, matching `allocate`: checking second
     would let a populated weight vector pass silently against an empty missing set.
+
+    `tolerance` widens the feasibility checks and accepts the result; it does not stop the search.
+    A result more than `tolerance` from the residual -- the iteration cap cut the search short --
+    raises rather than returning.
     """
     check_domain(weights, anchor)
     cells = anchor.missing_cells
@@ -128,17 +132,36 @@ def scale_into_bounds(
             f"{anchor.reference_month}: no bracket reaches residual {anchor.residual}"
         )
 
+    # Bisect to a double's resolution, not to `tolerance`. `tolerance` is an ACCEPTANCE criterion:
+    # `cli.py::reconcile_command` re-applies it to the persisted estimates, re-summed in another
+    # order, so stopping as soon as the sum came within it handed that gate a drift at its edge
+    # (9.93e-10 against 1e-9 on plan 15's D1 re-run). The bracket keeps `clipped_sum(lo)` below the
+    # residual and `clipped_sum(hi)` at or above it, and the loop ends when no double lies strictly
+    # between the two -- at most 52 halvings over 400 seeded D1-sized months -- so the closer end is
+    # as near the residual as any lambda gets.
     for _ in range(max_iterations):
         mid = 0.5 * (lo + hi)
-        total = clipped_sum(mid, weights, bounds, cells)
-        if abs(total - anchor.residual) <= tolerance:
+        if not lo < mid < hi:
             break
+        total = clipped_sum(mid, weights, bounds, cells)
         if total < anchor.residual:
             lo = mid
-        else:
+        elif total > anchor.residual:
             hi = mid
-    lam = 0.5 * (lo + hi)
-    return {
+        else:
+            lo = hi = mid
+            break
+    below = anchor.residual - clipped_sum(lo, weights, bounds, cells)
+    above = clipped_sum(hi, weights, bounds, cells) - anchor.residual
+    lam = lo if below <= above else hi
+    allocated = {
         cell: min(max(lam * weights.values[cell], bounds.lower[cell]), bounds.upper_of(cell))
         for cell in cells
     }
+    drift = abs(sum(allocated.values()) - anchor.residual)
+    if drift > tolerance:
+        raise InfeasibleResidualError(
+            f"{anchor.reference_month}: {max_iterations} bisection iterations left the allocation "
+            f"{drift} from residual {anchor.residual}; §12.3 forbids approximating this away"
+        )
+    return allocated

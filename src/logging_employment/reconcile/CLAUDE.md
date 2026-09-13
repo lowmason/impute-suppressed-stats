@@ -82,6 +82,11 @@ The load-bearing points:
 - **§12.3's strict predicate is compared against `tolerance`, not in exact float arithmetic**
   (`scaling.py::scale_into_bounds`,83`). Equality is feasible — every cell exactly on its bound must succeed — and
   seven lower bounds of 0.1 sum to 0.7000000000000001.
+- **In `scale_into_bounds`, `tolerance` accepts the result; it does not stop the search.** Bisection
+  runs until no double lies inside the bracket, and a result more than `tolerance` from the residual
+  (the iteration cap cut the search short) raises `InfeasibleResidualError`. Stopping at `tolerance`
+  handed `reconcile`'s gate, which re-applies the same 1e-9 to the persisted estimates, a D1 drift of
+  9.93e-10 (plan 15's final review).
 - **`kl_project` breaks on step size, not on violation, and never raises.** It returns
   `(x, violation)`; a caller needing convergence checks the second element. Re-verified against its
   own docstring example — seed `[1,1]`, margin `[[1,1]]`, target `[10]`, `upper=[1,1]` gives
