@@ -13,13 +13,16 @@ from pathlib import Path
 import polars as pl
 import pytest
 
+from logging_employment.baselines.runner import REGISTRY, run_baselines, state_total_bounds
 from logging_employment.config import load_config
 from logging_employment.contracts import HarmonizedData
 from logging_employment.errors import ConstraintDataError, LeakageError
+from logging_employment.validate import harness
 from logging_employment.validate.harness import reject_exactly_recoverable
 from logging_employment.validate.leakage import assert_no_retained_truth
 from logging_employment.validate.mask import MaskTarget, apply_mask
 from logging_employment.validate.recover import assert_truth_within_bounds, mask_and_solve
+from logging_employment.validate.regimes import REGIME_SPECS
 
 REPO = Path(__file__).resolve().parents[2]
 MONTH = "2024-03"
@@ -213,3 +216,65 @@ def test_rejected_cells_leave_the_scored_rows_and_are_counted():
         scored, pl.DataFrame(schema={"state_fips": pl.String, "reference_month": pl.String})
     )
     assert untouched.equals(scored) and none == 0
+
+
+def _proportional():
+    """The one estimator these layers can feed: it reads nothing but the month's establishments."""
+    return [e for e in REGISTRY if e.estimator_id == "establishment_proportional"]
+
+
+def test_the_exact_recovery_rate_counts_the_targets_step_6_rejects(
+    make_monthly, make_size, monkeypatch
+):
+    """§13.5 measures what §13.2 step 6 then rejects, so it is computed before the rejection.
+
+    '01''s visible parent is published at 0 beside other establishments, pinning '01' to exactly 0;
+    '06''s parent leaves it `[0, 300]`. Of the two masked cells one is exactly recoverable, so every
+    replicate's rate is 1/2 and '01' leaves the scored rows. Read off the kept rows, the rate was 0
+    whenever the rejection worked.
+
+    The leakage tripwire is switched off here, and only here, because on the state arm it refuses
+    every target this test needs. A suppressed state cell's lower bound is 0, so exact recovery
+    means a zero truth; `mask._hide` writes the literal `"0"` a real `N` row publishes into
+    `employment_raw`, and `assert_no_retained_truth` compares by value. Filed as a deferred item.
+    """
+    targets = [_target("01"), _target("06")]
+    only = {"small_cell_biased": REGIME_SPECS["small_cell_biased"]}
+    monkeypatch.setattr(harness, "REGIME_SPECS", only)
+    monkeypatch.setattr(harness, "select_targets", lambda *args, **kwargs: targets)
+    monkeypatch.setattr(harness, "assert_no_retained_truth", lambda *args, **kwargs: None)
+    config = load_config(REPO / "config.yaml")
+    replicates = len(config.validation.pseudo_suppression_seeds)
+
+    result = harness.run_pseudo_suppression(
+        _layer(make_monthly, make_size, value_01=0, parent_01=0), _proportional(), config
+    )
+
+    rates = result.metrics.filter(pl.col("metric_name") == "exact_recovery_rate")["value"]
+    assert rates.len() == replicates
+    assert set(rates.to_list()) == {0.5}
+    assert set(result.scores["state_fips"].to_list()) == {"06"}
+    entry = result.manifest["regimes"]["small_cell_biased"]
+    assert entry["rejected_exactly_recoverable"] == replicates
+
+
+def test_a_visible_parent_that_binds_rescales_the_estimate_masked_under_it(make_monthly, make_size):
+    """D-087's composite path without `data/`: masked bounds, a binding bound, a rescaled estimate.
+
+    '01' and '06' are masked under visible parents of 120 and 300, and the month's residual is
+    400 - 50 = 350. Split in proportion to their establishments, 10 and 15, '01' would get 140;
+    under its masked bound §12.3 scales it back to 120 and hands the remainder to '06'.
+    """
+    data = _layer(make_monthly, make_size, parent_01=120)
+    targets = [_target("01"), _target("06")]
+    config = load_config(REPO / "config.yaml")
+    masked, _ = apply_mask(data, targets)
+    system = mask_and_solve(data, targets, config)
+
+    def estimates(**kwargs: object) -> dict[str, float]:
+        results, _ = run_baselines(masked, config, estimators=_proportional(), **kwargs)
+        return dict(results.select("state_fips", "estimate").iter_rows())
+
+    assert estimates() == pytest.approx({"01": 140.0, "06": 210.0})
+    bounded = estimates(bounds=state_total_bounds(system.bounds))
+    assert bounded == pytest.approx({"01": 120.0, "06": 230.0})

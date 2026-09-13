@@ -298,20 +298,36 @@ def test_exactly_four_regimes_carry_a_changed_reason(fixture_run):
 
 
 def test_the_harness_hands_the_baselines_the_masked_bounds_it_solved(monkeypatch):
-    """D-087: every scoring call to `run_baselines` carries bounds, never `None`.
+    """D-087: every scoring call to `run_baselines` carries the MASKED system's bounds.
 
-    A bound-blind harness would score estimates production rescales before release. This fixture
-    layer carries no parent margin, so no bound binds here and no score moves; the wiring is what is
-    pinned.
+    A bound-blind harness would score estimates production rescales before release, and bounds
+    solved from the unmasked layer would leak the answer: there every pseudo-masked cell is still
+    observed, pinned to its published value. This fixture layer carries no parent margin, so each
+    cell the mask hid must reach `run_baselines` unbounded above.
     """
-    seen: list[object] = []
+    seen: list[tuple[HarmonizedData, object]] = []
     real = harness.run_baselines
 
     def spy(data, config, **kwargs):
-        seen.append(kwargs.get("bounds"))
+        seen.append((data, kwargs.get("bounds")))
         return real(data, config, **kwargs)
 
     monkeypatch.setattr(harness, "run_baselines", spy)
-    run_pseudo_suppression(HarmonizedData.load(FIXTURE), REGISTRY[:1], _fixture_config())
+    layer = HarmonizedData.load(FIXTURE)
+    run_pseudo_suppression(layer, REGISTRY[:1], _fixture_config())
     assert seen
-    assert all(isinstance(bounds, Bounds) and bounds.lower for bounds in seen)
+
+    state = pl.col("area_type") == "state"
+    key = ["state_fips", "reference_month"]
+    visible = layer.qcew_monthly.filter(state & (pl.col("observation_status") != "suppressed"))
+    hidden_cells = 0
+    for masked, bounds in seen:
+        assert isinstance(bounds, Bounds) and bounds.lower
+        hidden = masked.qcew_monthly.filter(
+            state & (pl.col("observation_status") == "suppressed")
+        ).join(visible.select(key), on=key, how="semi")
+        for fips, month in hidden.select(key).iter_rows():
+            [cell] = [c for c in bounds.lower if c.startswith(f"state_total|{fips}|{month}|")]
+            assert bounds.upper[cell] is None
+            hidden_cells += 1
+    assert hidden_cells

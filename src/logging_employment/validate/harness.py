@@ -167,12 +167,10 @@ def run_pseudo_suppression(
             results, _audit = run_baselines(
                 masked, config, estimators=estimators, bounds=state_total_bounds(system.bounds)
             )
-            scored, rejected = reject_exactly_recoverable(
-                _join_truth(
-                    results, truth, system, targets, regime=name, seed=seed, replicate=replicate
-                ),
-                system.recoverable,
+            joined = _join_truth(
+                results, truth, system, targets, regime=name, seed=seed, replicate=replicate
             )
+            scored, rejected = reject_exactly_recoverable(joined, system.recoverable)
             entry["rejected_exactly_recoverable"] = (
                 int(entry["rejected_exactly_recoverable"]) + rejected
             )
@@ -193,7 +191,11 @@ def run_pseudo_suppression(
                     national_totals=national_monthly_totals(masked.qcew_monthly),
                 )
             )
-            all_metrics.append(bound_metrics(scored, regime=name, seed=seed, arm=arm))
+            # §13.5 from the rows BEFORE step 6: `exact_recovery_rate` counts the very targets
+            # `reject_exactly_recoverable` removes, so read off `scored` it was 0 whenever the
+            # rejection worked (plan 15's final review). Point and probabilistic metrics score
+            # estimates, and stay on `scored`.
+            all_metrics.append(bound_metrics(joined, regime=name, seed=seed, arm=arm))
             all_metrics.append(decline_and_basis_report(scored, regime=name, seed=seed, arm=arm))
             all_metrics.append(probabilistic_metrics(scored, regime=name, seed=seed, arm=arm))
             all_metrics.append(
