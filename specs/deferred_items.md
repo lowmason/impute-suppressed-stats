@@ -455,6 +455,10 @@ Nothing was descoped. The three items below are the ones the stage deliberately 
       means carrying `release_vintage` onto `target_cell` — a §7.7 amendment — and feeding it to
       `vintage_status` alongside `naics_vintage`.
       Size: design. Revisit if: a builder couples two periods (a Stage 6 model constraint, or any across-period margin) -- it is unreachable without one. Closing it carries `release_vintage` onto `target_cell`, a §7.7 amendment.
+      *(Plan 15, 2026-09-13: the enumeration above is no longer complete. `parent_margin_rows` is a
+      second multi-cell builder, and its rows stay within one state-month (a suppressed `state_total` cell
+      and its own `state_parent` cell), so the one-month conclusion holds. Each row does fuse two sources,
+      `qcew_monthly` and `qcew_state_parent`, whose release vintages nothing compares: `D-117`.)*
 
 - [ ] `D-032` **`classify_bound_status` labels an integer interval containing no integer
       `partially_identified`.** `constraints/bounds.py` applies §9.6's `ceil(L) == floor(U)` rule;
@@ -1430,6 +1434,10 @@ access. Live roadmap stages remain out of scope per this file's header rule.
       item below, which now inherits a decided
       question rather than an open one — on the scoring arm the flag names something the harness
       must refuse, not something it should start doing.
+      *(Qualified 2026-09-13, plan 15: since `D-111`, 756 state cells share a component with their private
+      `113` parent, so a masked state total whose parent stays visible is `[0, 113]` rather than
+      `unbounded`. It is still the same interval with and without partners, which is what this ruling
+      rests on.)*
 - [x] `D-076` **Appendix A's `include_*` switches gate no regime selection.**
       → done in plan 12 (2026-09-09). The mapping was DECIDED, not guessed at: the seven flags are
       three different kinds of thing, declared in `contracts.VALIDATION_SWITCH_KINDS` and
@@ -1663,6 +1671,11 @@ names but no existing item owns; the Stage 4 `Exit:` line cites them.
       Done when: a mask whose target stays exactly recoverable is rejected (or separately
       labelled) by the harness rather than by a test, and a pseudo-hidden truth outside
       `deterministic_bounds` fails the run with a named error.
+      *(Plan 15, 2026-09-13: the state-total arm is discharged. `validate/recover.py::mask_and_solve`
+      raises `ConstraintDataError` when a pseudo-hidden state truth lies outside its masked bounds
+      (§13.5), and `validate/harness.py::reject_exactly_recoverable` drops an exactly recoverable state
+      target from scoring (§13.2 step 6), both on every masked solve; `D-118` records why step 6 cannot
+      yet fire end to end there. The size-class arm and its Done-when remain.)*
 
 - [x] `D-086` **Two of the four non-scoring regimes are owned by nothing.**
       Nine of the thirteen §13.3 regimes score in the D1 acceptance run (measured from
@@ -1692,7 +1705,7 @@ names but no existing item owns; the Stage 4 `Exit:` line cites them.
 Raised during plan 13's execution. All nine tasks shipped; nothing was descoped. These four are
 work the plan's changes either created, confirmed, or deliberately scoped out.
 
-- [ ] `D-087` **INV-002's per-cell half is enforced on the production path only, not on the
+- [x] `D-087` **INV-002's per-cell half is enforced on the production path only, not on the
       validation harness.** Plan 13 Task 4 (R-S5P-3) wired `bounds` into `run_baselines` and made
       `solve-bounds` a precondition of `run-baselines` in `cli.py`, so every released estimate is
       now checked against its §9 interval. `validate/harness.py::run_pseudo_suppression` deliberately keeps passing
@@ -1720,6 +1733,13 @@ work the plan's changes either created, confirmed, or deliberately scoped out.
       Size: design. Done when: a ruling records what an out-of-interval harness estimate does, and
       `run_baselines` is called with `MaskedSystem.bounds` (never the run directory's) if the
       ruling says to check at all.
+      → done in plan 15 (2026-09-13), ruled by Decision 6: `bc0498a` passes
+      `state_total_bounds(MaskedSystem.bounds)` to `run_baselines` from `validate/harness.py`, never the
+      run directory's bounds, and the runner scales into them by §12.3 exactly as production does
+      (`51b1777`), so an out-of-interval estimate cannot reach a scored row; a residual that cannot fit
+      raises instead of scoring. Pinned by
+      `tests/integration/test_stage4_acceptance.py::test_the_harness_hands_the_baselines_the_masked_bounds_it_solved`,
+      which `a9659b6` made refuse bounds solved from the unmasked layer (mutation-checked).
 
 - [x] `D-088` **Five test modules still spell out their own `STAGED` + skipif inline.** Plan 13
       Task 2 (R-S5P-2) put `STAGED` and `requires_staged` in `tests/conftest.py` and applied them
@@ -1827,7 +1847,7 @@ the event that makes it reachable rather than a date.
       are fetched and counted, the ruling is recorded where a stage will read it, and the trigger is
       re-pointed at Stage 5.
 
-- [ ] `D-093` **MILP bounds are accepted at HiGHS's default `mip_rel_gap = 1e-4`, so a recorded
+- [x] `D-093` **MILP bounds are accepted at HiGHS's default `mip_rel_gap = 1e-4`, so a recorded
       `selected_lower`/`selected_upper` need not be §9.1's exact optimum.** `constraints/bounds.py
       ::_model` sets `output_flag` and the three feasibility tolerances and nothing else, leaving
       `mip_rel_gap` at 1e-4 and `mip_abs_gap` at 1e-6. §9.1 defines L_j/U_j as exact min/max over
@@ -1845,6 +1865,11 @@ the event that makes it reachable rather than a date.
       bounds 756 of the 1,227 suppressed cells above, so this fires for the subset under the width
       threshold once `D-111` (`specs/stage5-parent-margin.md` R-PM-6) builds that bound into the
       system -- `specs/findings/qcew-parent-margins.md` derives how many that is.
+      → done in plan 15 (2026-09-13): `79471c8` sets `mip_rel_gap` to 0 in
+      `constraints/bounds.py::configured_highs`, which builds every solver (`mip_abs_gap` keeps 1e-6,
+      below an integer objective's unit step), and pins a four-column model whose default-gap minimum
+      sat two employees above the true one in `tests/unit/test_constraint_bounds.py`. On
+      `runs/4cf47a918dd8` MILP ran on 107 rows and moved an LP endpoint on 0.
 
 - [ ] `D-094` **Harmonized `snapshot_id` is the raw file's filename stem, so the §7.2 join key
       resolves to nothing.** `build.py` passes `snapshot_id=path.stem` at all three parser calls
@@ -2084,7 +2109,7 @@ the event that makes it reachable rather than a date.
       reddens on that day and names the keys that moved — AND the coverage gate compares exactly, pinned by
       a test in which a coverage of exactly 17/20 against nominal 0.90 and tolerance 0.05 counts as within.
 
-- [ ] `D-110` **No MEASURED §9.3 margin gives `exact_reconstruction_flag` a live instance -- but one
+- [x] `D-110` **No MEASURED §9.3 margin gives `exact_reconstruction_flag` a live instance -- but one
       named path was not measured.** R-S5G-5 measured `113`, `1133`, `11331` and total ownership at
       `113310` across all 32 D1 quarters. None exactly reconstructs a suppressed private
       state-quarter: `1133` and `11331` are disclosed on **0 of 409** (a 1:1 chain is suppressed
@@ -2100,8 +2125,14 @@ the event that makes it reachable rather than a date.
       against (`_common.record_extract` rewrites in place), so first check them against the extract
       digest `specs/findings/qcew-parent-margins.md` pins, or copy
       `data/raw/audit/qcew_parent_margins/` aside.
+      → done in plan 15 (2026-09-13): `bea8721` and `ddca9e2` measured R-PM-5 with the same script and
+      ladder. `113`, `1131` and `1132` are jointly published on 0 of the 252 bounded suppressed quarters
+      (0 again when a missing sibling row is read as zero), so `REQ-027` has no live instance through any
+      measured margin and R-PM-4 does not bind; `exact_reconstruction_flag` is 0 on `runs/4cf47a918dd8`.
+      The Revisit-if's revision arm now watches through `D-115`: no row builds the sibling path, so only a
+      re-run of the audit script would see both siblings published over a suppressed child.
 
-- [ ] `D-111` **A disclosed `113` parent bounds 252 of the 409 suppressed state-quarters above, and
+- [x] `D-111` **A disclosed `113` parent bounds 252 of the 409 suppressed state-quarters above, and
       nothing consumes it.** Measured 2026-09-11 (R-S5G-5): 756 of the 1,227 suppressed monthly
       cells have a finite upper bound available from a published accounting fact, and the shipped
       `deterministic_bounds.parquet` carries `+inf` on all of them. It is not vacuous on the
@@ -2118,6 +2149,16 @@ the event that makes it reachable rather than a date.
       threshold, and whether Stage 4's comparand is re-run. **Stage 5's roadmap `Consumes` blocks
       on this.**
       Size: plan. Done when: `specs/stage5-parent-margin.md` §4's six conditions hold.
+      → done in plan 15 (2026-09-13), `bea8721`..`0e473e9`: all six of
+      `specs/completed/stage5-parent-margin.md` §4's conditions hold. (1) `runs/4cf47a918dd8` carries a
+      finite `selected_upper` on 756 suppressed state cells, the finding's count. (2)
+      `validate/mask.py::parents_to_hide` decides the parent's visibility and
+      `validate/harness.py::reject_exactly_recoverable` rejects what the masked system still pins, each
+      with a test that fails without it; end to end on the state arm step 6 cannot fire yet, because the
+      leakage tripwire refuses the zero truths exact recovery there implies (`D-118`). (3) `solver_status`
+      is `optimal` on all 756, MILP at zero gap (`D-093`). (4) R-PM-5 measured and R-PM-4 ruled
+      (`D-110`). (5) and (6): `8bf57e5` lifts the roadmap clause and updates the notes the grep found,
+      and `0e473e9` the ones the final review found the branch had falsified without editing.
 
 - [x] `D-112` **§13.7's leave-one-out ensemble shifts each point estimate by the residual with the
       WRONG sign, so coverage, width and CRPS are wrong for any biased estimator.** -> FIXED 2026-09-12
@@ -2179,7 +2220,7 @@ deliberately left open.
       Size: plan. Revisit if: `share_exponentially_weighted` becomes `preferred_baseline` in any
       regime (re-measured 2026-09-12 on `runs/f03023ac9f3a`: preferred in none of the nine, which
       name `share_last_observed` in 3 and `cbp_intensity` in 6), or §10.3 gains a decay form.
-- [ ] `D-114` **CBP's `naics_vintage` stamp is QCEW's rule, so `cbp_state_size`'s 2022 and 2023
+- [x] `D-114` **CBP's `naics_vintage` stamp is QCEW's rule, so `cbp_state_size`'s 2022 and 2023
       rows read "NAICS 2022" against CBP's own "2017 NAICS code" label.** Split from `D-098` on
       2026-09-12, when that item's docstring half was fixed and the stamp was documented at
       `build.py::build_harmonized` as deliberately QCEW-derived. The stamp is
@@ -2196,3 +2237,76 @@ deliberately left open.
       Size: quick-fix. Done when: the CBP stamp in `build.py` and `fetching.py` derives from the
       stored predicate, `cbp_state_size.parquet` is rebuilt, and the Stage 4 acceptance pin moves in
       the same change that re-runs the comparand.
+      → done in plan 15 (2026-09-13): `c2bb553` derives the stamp in `build.py` and `fetching.py` from the
+      stored predicate through `ingest/cbp.py::vintage_for_predicate`, which refuses a predicate naming no
+      year (with `SchemaMismatchError` since `78ae889`); `fdcd6ee` rebuilt `cbp_state_size.parquet` (every
+      row `NAICS 2017`) and moved the Stage 4 acceptance pin to `4cf47a918dd8`, and `4b22fbb` re-ran the
+      comparand under that id.
+
+## 15-stage5-parent-margin — 2026-09-13
+
+Raised during plan 15's execution and its final review. All ten tasks shipped. `D-115` and `D-116`
+are paths the plan measured and deliberately did not build; `D-117` to `D-119` come from the final
+review and from fixing it.
+
+- [ ] `D-115` **A published sibling tightens the parent bound on 17 quarters, and no row builds it.**
+      `specs/findings/qcew-parent-margins.md` (R-PM-5) finds exactly one of `1131` and `1132` published on
+      17 of the 252 suppressed state-quarters where `113` bounds `113310` (`1131` on 7, `1132` on 10).
+      There `113310 <= 113 - sibling` holds and is tighter than the `parent_margin` row plan 15 builds
+      (`constraints/rows.py::parent_margin_rows`). Neither sibling series is staged: the audit script
+      walked them at agglvl 56, the pipeline does not fetch them. Building it takes the sibling fetch, a
+      staged home for the rows, a cell kind and row builder, the compatibility gate, and the mask rule
+      extended to the sibling (§13.2 step 3: complementary cells must not let parent-minus-siblings
+      recover the target). Both siblings published would be EXACT (`REQ-027`), measured on 0 quarters,
+      which is why plan 15 did not need the path.
+      Size: plan. Revisit if: a QCEW revision publishes both siblings over a suppressed child, or Stage 5's
+      §13.10 comparison needs tighter state bounds than the parent alone gives.
+- [ ] `D-116` **§13.2 step 1's "parent share" predictor is still declined, though its input is now staged.**
+      `validate/propensity.py`'s module docstring records it as left out by decision. The private `113`
+      state series it divides by is `qcew_state_parent` since plan 15, and an ESTABLISHMENT-count share
+      needs nothing more, because establishment counts are published where employment is suppressed (an
+      employment share would contain the hidden target, §13.4). Plan 15 left it out because a new
+      predictor re-draws every regime's mask, and it re-ran the §13.10 comparand on the masks as they
+      stood (`runs/4cf47a918dd8`). Adding it moves `validation_scores`, the scoreboard and
+      `tests/fixtures/validation/validation_metrics_golden.parquet`.
+      Size: plan. Revisit if: the Stage 5 comparand is re-run for another reason (the predictor then costs
+      no extra re-run), or §13.2's propensity model is revisited.
+- [ ] `D-117` **A parent-margin row fuses two sources, and nothing compares their release or publication vintage.**
+      `constraints/rows.py::parent_margin_rows` couples a suppressed `qcew_monthly` state cell with its
+      `qcew_state_parent` parent, and `constraints/compat.py::assert_parent_margin_compatible` checks
+      ownership, NAICS vintage, establishment order and published-employment order, not vintage. The
+      published-pair order check cannot see a revision that keeps the order. An equality check on
+      `release_vintage` or `release_status` would pass by construction today: the first is the filename
+      stem on both sides and the second a config literal (`ingest/CLAUDE.md`, `D-094`, `D-101`).
+      Measured on D1 on 2026-09-13: `release_vintage` agrees on 4,716 of 4,716 state-month pairs; every
+      `qcew_parent` slice's Last-Modified predates the `qcew` fetch of 2026-09-05; the `qcew` rows'
+      `source_publication_date` is empty because they were fetched before `D-100`'s fix. Raised by plan
+      15's final review.
+      Size: plan. Revisit if: `qcew` is re-fetched with `D-100`'s publication dates, when the gate can
+      compare the two sources' dates per quarter, or either source is re-fetched without the other.
+- [ ] `D-118` **The leakage tripwire refuses every zero truth, so §13.2 step 6 cannot fire on the state arm.**
+      `validate/mask.py::_hide` writes the literal `"0"` a real `N` row publishes into `employment_raw`
+      and `wages_raw`, and `validate/leakage.py::assert_no_retained_truth` compares every column outside
+      `_PUBLIC_UNDER_SUPPRESSION` to the withheld value as a string. A target whose truth is 0 therefore
+      raises `LeakageError` and halts the whole `validate` run, and eligibility (`state & observed &
+      qtrly_establishments > 0`) admits a published zero. On the state arm a suppressed cell's lower bound
+      is 0 and its only coupling row is its `parent_margin`, so exact recovery means an upper bound of 0,
+      a zero truth. Plan 15's step-6 rejection (`harness.reject_exactly_recoverable`) is therefore
+      unreachable end to end: the tripwire fires first. Latent on D1, where 0 of 3,462 targets were zero
+      (`D-107`). Found while fixing plan 15's final review, whose witness
+      `tests/unit/test_validate_parent_mask.py::test_the_exact_recovery_rate_counts_the_targets_step_6_rejects`
+      switches the tripwire off to reach step 6.
+      Size: design. Done when: a zero-truth target either passes the tripwire (the placeholder `"0"`
+      exempted where a real suppression publishes it) or is excluded by the selectors with the reason
+      recorded, and a harness-level test reaches step 6 without disabling the guard.
+- [ ] `D-119` **Plain `ValueError` refusals remain on paths plan 15 made reachable.**
+      `reconcile/integerize.py::integerize` raises `ValueError` on three infeasibility conditions (a floor
+      above its cap, a base above the total, an unplaced remainder). Under finite bounds these are newly
+      reachable from `baselines/runner.py`'s integer release. `ingest/cbp.py::discover_naics_predicate`
+      still raises one beside the `SchemaMismatchError` the review gave `vintage_for_predicate`. The house
+      rule is a named `errors.py` error carrying the offending value (root `CLAUDE.md`), and
+      `ingest/CLAUDE.md`'s fail-closed table still lists four `ValueError`s. Raised by plan 15's final
+      review (Minor).
+      Size: quick-fix. Done when: those refusals raise named errors (`InfeasibleResidualError` for
+      `integerize`, `SchemaMismatchError` for `discover_naics_predicate`), and their tests and the table
+      say so.
