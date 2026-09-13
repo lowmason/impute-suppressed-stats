@@ -259,23 +259,22 @@ def build_harmonized(
                 "no source establishes, whatever the config's fail_on_unknown flag permits a "
                 "report to say (SRC-CBP-003)"
             )
+        predicate = predicate_from_stored_metadata(
+            raw_root / "cbp", year, manifest_path=manifest_path
+        )
         cbp_frames.append(
             cbp.parse_cbp_state_size(
                 json.loads(path.read_text()),
                 snapshot_id=path.stem,
                 reference_year=year,
-                predicate=predicate_from_stored_metadata(
-                    raw_root / "cbp", year, manifest_path=manifest_path
-                ),
-                # DELIBERATELY QCEW-DERIVED, AND WRONG FOR 2022 AND 2023 (D-098). `vintage_for_year`
-                # is BLS's rule for QCEW. CBP's stored metadata serves `NAICS2017`, labelled "2017
-                # NAICS code", for every window year, so the 2022 and 2023 rows read "NAICS 2022"
-                # against CBP's own label. Kept for two reasons: nothing reads CBP's `naics_vintage`
-                # (every CBP consumer keys on `reference_year`), and correcting it rewrites
-                # `cbp_state_size.parquet`, which re-ids every run and fails the Stage 4 acceptance
-                # pin to `runs/f03023ac9f3a`. `D-114` moves the correction into the next deliberate
-                # rebuild of the staged layer.
-                naics_vintage=vintage_for_year(year),
+                predicate=predicate,
+                # READ OFF CBP'S OWN METADATA (D-114), not `vintage_for_year`, which is BLS's rule
+                # for QCEW. The stored metadata serves `NAICS2017`, labelled "2017 NAICS code", for
+                # every window year, so that rule stamped the 2022 and 2023 rows with a vintage
+                # their own source contradicts. Nothing reads the column -- every CBP consumer keys
+                # on `reference_year` -- which is why the correction waited for a rebuild that
+                # re-ids the run anyway (plan 15).
+                naics_vintage=cbp.vintage_for_predicate(predicate),
                 regime=regime,
             )
         )

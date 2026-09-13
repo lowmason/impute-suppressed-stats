@@ -356,3 +356,12 @@ def test_the_run_manifest_names_which_metadata_copy_the_build_reads(
         _cfg(), raw_root=frozen_raw, out_root=tmp_path / "j", manifest_path=manifest
     )
     assert set(hashes) == {"qcew_monthly", "qcew_national_size", "cbp_state_size", "bridge"}
+
+
+def test_cbp_rows_carry_the_vintage_their_own_metadata_serves(
+    frozen_raw: Path, tmp_path: Path
+) -> None:
+    """D-114: the 2023 response is coded in NAICS 2017 by its own metadata, not NAICS 2022."""
+    build_harmonized(_cfg(), raw_root=frozen_raw, out_root=tmp_path)
+    stamped = pl.read_parquet(tmp_path / "cbp_state_size.parquet")["naics_vintage"].unique()
+    assert stamped.to_list() == ["NAICS 2017"]

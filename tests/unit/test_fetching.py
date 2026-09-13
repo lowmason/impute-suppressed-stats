@@ -585,3 +585,14 @@ def test_every_fetchable_source_has_a_registry_row() -> None:
     """§7.1: a source the pipeline can fetch is a source the registry describes."""
     registry = load_registry(REPO / "src" / "logging_employment" / "registry" / "sources.yaml")
     assert set(KNOWN_SOURCES) <= {row.source_id for row in registry}
+
+
+def test_both_cbp_snapshot_rows_record_the_vintage_the_metadata_serves(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-114: the metadata row and the data row both stamp the vintage CBP's predicate names."""
+    _mock_transport(monkeypatch, _dated_handler(None))
+    monkeypatch.setenv("CENSUS_API_KEY", "SECRET-CENSUS-KEY")
+    rows = _fetch_one_period("cbp", tmp_path)
+    assert len(rows) == 2
+    assert {row["naics_vintage"] for row in rows} == {"NAICS 2017"}

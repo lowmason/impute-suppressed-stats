@@ -236,6 +236,10 @@ def fetch_source(
                 # `build.predicate_from_stored_metadata` reads that row. No schema of its own
                 # exists, so it is recorded against the table and parser it feeds.
                 stored_variables = store.put("cbp", variables, cbp.metadata_filename(year))
+                predicate = cbp.discover_naics_predicate(json.loads(variables.content))
+                # Both CBP rows record the vintage CBP's own predicate names (D-114), for the reason
+                # `build.build_harmonized` gives at its stamp; QCEW's year rule does not apply here.
+                vintage = cbp.vintage_for_predicate(predicate)
                 rows.append(
                     snapshot_row(
                         source_id="cbp",
@@ -244,14 +248,13 @@ def fetch_source(
                         reference_start=f"{year}-03",
                         reference_end=f"{year}-03",
                         release_status="final",
-                        naics_vintage=vintage_for_year(year),
+                        naics_vintage=vintage,
                         schema_fingerprint=schema_fingerprint(CBP_STATE_SIZE_SCHEMA),
                         parser_version=cbp.PARSER_VERSION,
                         source_publication_date=variables.last_modified,
                         secrets=secrets,
                     )
                 )
-                predicate = cbp.discover_naics_predicate(json.loads(variables.content))
                 query = cbp.build_query(year, predicate, cfg.project.industry_code_used)
                 fetched = fetcher.get(cbp.CBP_URL.format(year=year), params={**query, "key": key})
                 if not _usable(fetched, source_id="cbp", year=year, reference=f"{year} data"):
@@ -265,7 +268,7 @@ def fetch_source(
                         reference_start=f"{year}-03",
                         reference_end=f"{year}-03",
                         release_status="final",
-                        naics_vintage=vintage_for_year(year),
+                        naics_vintage=vintage,
                         schema_fingerprint=schema_fingerprint(CBP_STATE_SIZE_SCHEMA),
                         parser_version=cbp.PARSER_VERSION,
                         source_publication_date=fetched.last_modified,
