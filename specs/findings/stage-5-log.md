@@ -219,3 +219,50 @@ state-quarter, so `exact_reconstruction_flag` keeps no live instance and the par
 constraint system as a bound only. `D-110` closes on this measurement. One sibling is published on
 17 of the bounded quarters, which would tighten the bound to
 `113 - sibling`; no row builds it, and plan 15's completion files that as its own item.
+
+## 2026-09-13 — R-PM-7: the comparand re-run against the bounded identification set
+
+`runs/4cf47a918dd8` (plan 15 Task 9) against `runs/f03023ac9f3a`, compared by join on each table's key,
+never by position. R-PM-7's answer is that the comparand IS re-run: Task 4 re-ids every run, and both
+the production runner and the harness now read bounds (Decisions 3 and 6), so every estimate a bound
+binds on moves. The rows below are that movement, derived. `runs/f03023ac9f3a` stays on disk as Stage 4's
+acceptance run; Stage 5's §13.10 promotion compares against `runs/4cf47a918dd8`.
+
+| `baseline_results` | value |
+|---|---|
+| rows old / new | 12270 / 12270 |
+| key-only rows old / new | 0 / 0 |
+| estimates moved beyond 1e-09 | 10870 |
+| estimator-months with a moved estimate | 850 |
+| estimates now exactly at a finite upper bound | 3391 |
+
+Moved estimates by estimator: `cbp_intensity` 1054, `constrained_regression` 1227, `equal_residual` 1227, `establishment_proportional` 1227, `share_break_adjusted` 1227, `share_exponentially_weighted` 1227, `share_last_observed` 1227, `share_rolling_median` 1227, `share_same_month_prior_year` 1227.
+
+| `validation_scores` | value |
+|---|---|
+| rows old / new | 12530 / 12530 |
+| key-only rows old / new | 0 / 0 |
+| scored rows with a finite `selected_upper`, old / new | 0 / 9690 |
+| estimates moved beyond 1e-09 | 5917 |
+
+| `validation_scoreboard` | value |
+|---|---|
+| rows old / new | 270 / 270 |
+| key-only rows old / new | 0 / 0 |
+| WAPE moved beyond 1e-09 | 224 |
+| WAPE change, min / median / max | -0.6543 / -0.0969 / 8.0117 |
+
+| regime | preferred baseline, old | new |
+|---|---|---|
+| `clustered_states_within_month` | `share_last_observed` | `share_last_observed` |
+| `concentration_proxy` | `share_last_observed` | `constrained_regression` |
+| `long_consecutive_runs` | `cbp_intensity` | `cbp_intensity` |
+| `naics_transition` | `cbp_intensity` | `cbp_intensity` |
+| `regional_blocks` | `share_last_observed` | `share_same_month_prior_year` |
+| `small_cell_biased` | `cbp_intensity` | `share_last_observed` |
+| `structural_break` | `cbp_intensity` | `share_exponentially_weighted` |
+| `whole_seasonal_blocks` | `cbp_intensity` | `cbp_intensity` |
+| `whole_state_year_blocks` | `cbp_intensity` | `cbp_intensity` |
+
+`validation_metrics`: 6932 / 6932 rows, key-only 0 / 0; `value` moved on 3662: `deterministic_bounds` 250, `point` 2392, `probabilistic` 1020.
+Exactly recoverable targets rejected from scoring (§13.2 step 6): 0. `validation_manifest.json` records `code_commit` `bc0498aa1f96e6ec765ae9d1eefabf5fdd98b169`.
