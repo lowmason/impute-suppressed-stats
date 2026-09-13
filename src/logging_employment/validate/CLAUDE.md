@@ -155,6 +155,14 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
   month's whole residual reports violation where there is none — `harness.py` has the numbers.
 - **Null, never 0.0, for an empty row set** in every emitter — a zero error over zero rows reads as
   perfect accuracy. Same rule for `mean_feasible_width` on unbounded cells.
+- **Reduce through `_exact_sum` / `_exact_mean`, never `Series.sum()` / `.mean()`** (2026-09-13).
+  Polars returns a derived Series like `(estimate - truth).abs()` in one chunk per thread and rounds
+  each chunk's sum separately, so `validation_metrics` used to move in the last ulp with
+  `POLARS_MAX_THREADS` (56 of 1,490 golden rows at 4 threads). `math.fsum` makes the point metrics
+  and `mean_feasible_width` a function of the values alone: the re-pinned golden is byte-identical
+  at 1, 4 and 14 threads. rmse's root is `math.sqrt`, not `** 0.5` (libm `pow`). What stays
+  PLATFORM-bound is CRPS (`np.dot`) and everything downstream of `constrained_regression` (BLAS,
+  LAPACK, libm) — which is why the golden compares floats through `tests/golden_compare.py`.
 - **§13.5 numbers on `state_total` are vacuous by construction.** Every masked state cell is
   `unbounded` with a null `selected_upper`, so `truth_in_bound_rate == 1.0` means "[0, +inf)
   contains the truth". `bound_cells_finite_upper` rides on every row to separate the two.

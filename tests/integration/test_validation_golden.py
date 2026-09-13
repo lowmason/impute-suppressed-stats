@@ -21,6 +21,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 import pytest
+from tests.golden_compare import assert_matches_golden
 
 from logging_employment.baselines.runner import REGISTRY
 from logging_employment.config import Config, load_config
@@ -54,7 +55,15 @@ def fixture_run():
 
 
 def test_the_metrics_match_the_golden(fixture_run):
-    """§17.4 row 7: the harness generates pseudo-suppression metrics, and they do not drift."""
+    """§17.4 row 7: the harness generates pseudo-suppression metrics, and they do not drift.
+
+    Compared through `tests/golden_compare.py`, not `.equals`: every non-float column exactly, and
+    `value`/`denominator` within rel 1e-12 / abs 1e-9. Two things used to make an exact comparison
+    fail for reasons unrelated to any change. The POINT reductions depended on the polars thread
+    count; that is fixed at the source (`metrics._exact_sum`), and this golden was re-pinned when it
+    landed. CRPS (`np.dot`) and `constrained_regression`'s estimates (BLAS, LAPACK, libm) depend on
+    the PLATFORM, which no rewrite here removes. The comparator's docstring has the measurements.
+    """
     golden = pl.read_parquet(GOLDEN)
     produced = fixture_run.metrics
     assert produced.columns == golden.columns
@@ -72,7 +81,7 @@ def test_the_metrics_match_the_golden(fixture_run):
         "stratum_kind",
         "stratum_value",
     ]
-    assert produced.sort(key).equals(golden.sort(key))
+    assert_matches_golden(produced.sort(key), golden.sort(key))
 
 
 def test_the_golden_matches_the_declared_schema():
