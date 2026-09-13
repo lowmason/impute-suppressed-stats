@@ -8,6 +8,7 @@ from pathlib import Path
 
 import polars as pl
 import pytest
+from tests.conftest import STAGED, requires_staged
 
 from logging_employment import contracts
 from logging_employment.baselines.runner import REGISTRY
@@ -23,7 +24,6 @@ from logging_employment.validate.harness import run_pseudo_suppression
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURE = REPO / "tests" / "fixtures" / "baselines"
-STAGED = REPO / "data" / "staged"
 
 
 def _fixture_config() -> Config:
@@ -71,10 +71,7 @@ def test_only_the_truncating_regime_records_origins(fixture_run):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(
-    not (STAGED / "qcew_monthly.parquet").exists(),
-    reason="data/staged is gitignored; the seven D1 origins need the rebuilt tables",
-)
+@requires_staged
 def test_the_guard_is_binding_on_the_d1_panel():
     """The fixture makes the guard vacuous, so the binding case is witnessed separately.
 
@@ -216,10 +213,7 @@ def test_an_empty_run_reads_as_nothing_scored_rather_than_a_schema_failure():
     assert len(result.manifest["regimes"]) == 13
 
 
-@pytest.mark.skipif(
-    not (STAGED / "qcew_monthly.parquet").exists(),
-    reason="data/staged is gitignored; the run id is a function of the input digests",
-)
+@requires_staged
 def test_the_shipped_config_still_resolves_to_the_stage_4_acceptance_run():
     """V1: the sharpest single check that no config field was added or removed.
 

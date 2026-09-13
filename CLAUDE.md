@@ -129,11 +129,12 @@ synthetic masks. Outputs land in `runs/<run_id>/` beside one JSON manifest per c
   `validate/` tests calling `HarmonizedData.load(Path("data/staged"))` with no skip guard.
   `tests/conftest.py` now owns `STAGED` (**absolute**, so the old cwd-relative requirement to run
   pytest from the repo root is gone) and `requires_staged`, a skipif keyed on
-  `qcew_monthly.parquet` existing. Six modules take a module-level `pytestmark`; three MIXED
-  modules take per-test decorators, because a blanket mark there would convert five tests that
-  pass in a bare checkout into skips while still reporting "0 failed". **If you add a data-bound
-  test, guard it and re-check by arithmetic — skipped must rise by exactly the number you added
-  and passed must not fall.** Five modules still carry their own inline guard (`D-088`).
+  `qcew_monthly.parquet` existing, and it is the suite's only copy of that predicate since `D-088`
+  folded in the last five inline guards (2026-09-12). Ten modules take a module-level `pytestmark`;
+  four MIXED modules take per-test decorators, because a blanket mark there would convert tests
+  that pass in a bare checkout into skips while still reporting "0 failed". **If you add a
+  data-bound test, guard it and re-check by arithmetic — skipped must rise by exactly the number
+  you added and passed must not fall.**
 - **`ruff` is the only formatter, and its SCOPE is the gotcha.** Black was dropped 2026-09-09
   (plan 12's Task 0): the two disagreed on eight files — ruff >=0.9 rewrites `assert (x), msg`
   into `assert x, (msg)` and black leaves it — and `pyproject.toml` declared both, so "is the tree

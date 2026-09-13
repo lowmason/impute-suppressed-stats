@@ -42,6 +42,7 @@ from pathlib import Path
 
 import polars as pl
 import pytest
+from tests.conftest import STAGED, requires_staged
 
 from logging_employment import contracts
 from logging_employment.config import Config, load_config
@@ -50,15 +51,8 @@ from logging_employment.contracts import HarmonizedData
 from logging_employment.disclosure.flags import build_flags
 
 REPO = Path(__file__).resolve().parents[2]
-STAGED = REPO / "data" / "staged"
 
-pytestmark = [
-    pytest.mark.slow,
-    pytest.mark.skipif(
-        not (STAGED / "qcew_monthly.parquet").exists(),
-        reason="data/staged/ is gitignored; run `build-harmonized` first",
-    ),
-]
+pytestmark = [pytest.mark.slow, requires_staged]
 
 # The family prefix `cells.cell_id` stamps on the front of every identifier. Used in place of a
 # `starts_with("state_total|")` string so that one expression is the file's single notion of "which

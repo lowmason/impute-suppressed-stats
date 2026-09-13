@@ -10,8 +10,8 @@ replace the documented command, only widen how the suite can be run.
 It also owns `requires_staged`, the shared staged-data guard. `data/staged/` is gitignored and
 rebuilt from ~564 MB of frozen source bytes, so a bare checkout has none of it, and the nine
 `validate/` modules that read those tables used to FAIL there rather than skip. The guard
-keys on a FILE EXISTING -- `qcew_monthly.parquet`, the same probe `tests/integration/test_d1_*.py`
-already spell out inline -- and not on an env var: an env var records what someone remembered to
+keys on a FILE EXISTING -- `qcew_monthly.parquet`, the probe `tests/integration/test_d1_*.py`
+used to spell out inline -- and not on an env var: an env var records what someone remembered to
 export, while the file records whether `build-harmonized` has actually run, which is the condition
 these tests actually depend on. `STAGED` is absolute, derived from this file, because the modules
 it replaces passed `Path("data/staged")` and so silently required pytest to be invoked from the
@@ -40,10 +40,7 @@ if str(_AUDIT_SCRIPTS) not in sys.path:
 STAGED = Path(__file__).resolve().parents[1] / "data" / "staged"
 
 # Import this in a test module (`from tests.conftest import STAGED, requires_staged`) rather than
-# repeating the skipif. It is not yet the suite's ONLY copy: `test_d1_acceptance.py`,
-# `test_d1_baselines.py`, `test_d1_validation.py`, `test_validate_cli.py` and
-# `test_stage4_acceptance.py` still spell out their own `STAGED` + skipif inline, and folding
-# those into this one is a separate change.
+# repeating the skipif.
 requires_staged = pytest.mark.skipif(
     not (STAGED / "qcew_monthly.parquet").exists(),
     reason="data/staged is gitignored; run `build-harmonized` first",

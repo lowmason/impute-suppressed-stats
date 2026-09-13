@@ -23,23 +23,17 @@ from pathlib import Path
 import polars as pl
 import pytest
 import yaml
+from tests.conftest import requires_staged
 from typer.testing import CliRunner
 
 from logging_employment.cli import app
 
 REPO = Path(__file__).resolve().parents[2]
-STAGED = REPO / "data" / "staged"
 
 # One is interval-ineligible and one is not, so a single pass crosses both metric branches.
 SUBSET = "establishment_proportional,share_last_observed"
 
-pytestmark = [
-    pytest.mark.slow,
-    pytest.mark.skipif(
-        not (STAGED / "qcew_monthly.parquet").exists(),
-        reason="data/staged is gitignored; the validate CLI needs the rebuilt tables",
-    ),
-]
+pytestmark = [pytest.mark.slow, requires_staged]
 
 
 @pytest.fixture(scope="module")
