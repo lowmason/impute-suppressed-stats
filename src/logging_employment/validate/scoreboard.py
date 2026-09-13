@@ -111,6 +111,13 @@ def _best(scoreboard: pl.DataFrame, *, regime: str, eligible: frozenset[str] | N
     harness refuses everywhere else. Only `point_metrics` emits `point`/`wape`, so an arm reaches
     this frame only by having been scored, and a second one is the ambiguity, not a false alarm.
     """
+    # ONE REGIME AT A TIME, and a future cross-regime pool must weigh what that hides (D-106).
+    # Measured 2026-09-12 on `runs/f03023ac9f3a`: `whole_seasonal_blocks` supplies 8,690 of the
+    # 12,530 `validation_scores` rows (69%) and 2,500 of the 5,932 that carry an estimate (42%).
+    # No other regime supplies more than 600 rows or 540 estimates. The scoreboard's `denominator`
+    # sums to the first count and `n_scored` to the second. A WAPE pooled across regimes would
+    # therefore mostly be one mask design's number, the objection the arm refusal below makes to
+    # pooling two arms.
     regime_rows = scoreboard.filter(pl.col("regime") == regime)
     arms = sorted(str(arm) for arm in regime_rows["mask_arm"].unique().to_list())
     if len(arms) > 1:
