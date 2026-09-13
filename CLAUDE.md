@@ -24,7 +24,7 @@ uv run interrogate src           # docstring gate, fail-under = 100
 
 logging-estimates validate-config --config config.yaml   # these two run in a bare checkout,
 logging-estimates registry verify --config config.yaml   # no data/ needed
-logging-estimates fetch --source qcew --config config.yaml   # or qcew_size / cbp; network +
+logging-estimates fetch --source qcew --config config.yaml   # or qcew_parent / qcew_size / cbp; network +
                                                              # CENSUS_API_KEY from ./.env
 # then, in order:
 build-harmonized → build-constraints → solve-bounds → run-baselines → reconcile → validate
@@ -48,7 +48,7 @@ declared — its help text even says "excluded from the default run" — but no 
 ## Architecture
 
 `fetch` puts raw bytes in a content-addressed immutable store; every later stage reads only the
-four harmonized Parquet tables (`contracts.HarmonizedData`), never an endpoint. `build-constraints`
+five harmonized Parquet tables (`contracts.HarmonizedData`), never an endpoint. `build-constraints`
 turns those into a cell/row/coefficient system, `solve-bounds` bounds each component,
 `run-baselines` produces weights that `reconcile/` turns into estimates, `validate` re-runs it under
 synthetic masks. Outputs land in `runs/<run_id>/` beside one JSON manifest per command.

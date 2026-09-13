@@ -1,9 +1,10 @@
 """§13.5-13.8's metric families, each carrying the denominator it was computed over.
 
-Read the vacuity note before trusting a §13.5 number. On the `state_total` arm every masked cell is
-`unbounded` with `selected_upper = null`, so a truth-in-bound rate of 1.0 means "[0, +inf) contains
-the truth", not "the bounds were informative". `bound_cells_finite_upper` is what separates the
-two, and it is on every row for that reason.
+Read the vacuity note before trusting a §13.5 number. On the `state_total` arm a masked cell is
+bounded above only where its private `113` parent stays public under the mask (plan 15); every other
+masked cell is `unbounded` with `selected_upper = null`, where a truth-in-bound rate of 1.0 means
+"[0, +inf) contains the truth", not "the bounds were informative". `bound_cells_finite_upper` is
+what separates the two, and it is on every row for that reason.
 """
 
 from __future__ import annotations

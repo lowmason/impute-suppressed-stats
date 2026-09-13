@@ -29,7 +29,8 @@ def _open_bounds(cells: tuple[str, ...]) -> Bounds:
 
 
 def test_with_open_bounds_scaling_reduces_to_the_proportional_split() -> None:
-    """1,227 of 1,241 D1 cells have this shape, so this is the production path."""
+    """Open bounds are still a production shape: every suppressed state cell with no published
+    private `113` parent has them (plan 15)."""
     cells = ("01", "02", "04")
     out = scale_into_bounds(
         _anchor(100.0),
