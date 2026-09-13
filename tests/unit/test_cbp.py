@@ -280,3 +280,16 @@ def test_the_live_response_carries_the_per_cell_noise_flag() -> None:
     flags = {row[header.index("EMP_N_F")] for row in LIVE[1:]}
     assert flags == {"G", "H", "J"}
     assert {row[header.index("EMP_N")] for row in LIVE[1:]} == {"0"}
+
+
+def test_the_vintage_is_the_one_the_stored_metadata_serves() -> None:
+    """D-114: CBP's 2023 metadata serves `NAICS2017`, labelled "2017 NAICS code", so its rows are
+    NAICS 2017 rows, whatever BLS's rule for QCEW says about 2023."""
+    variables = json.loads((FIX / "variables_2023.json").read_text())
+    assert cbp.vintage_for_predicate(cbp.discover_naics_predicate(variables)) == "NAICS 2017"
+
+
+@pytest.mark.parametrize("predicate", ["NAICS", "NAICS17", "NAICS2017_LABEL", "SIC1987"])
+def test_a_predicate_that_names_no_vintage_is_refused(predicate: str) -> None:
+    with pytest.raises(SchemaMismatchError, match="names no NAICS vintage"):
+        cbp.vintage_for_predicate(predicate)

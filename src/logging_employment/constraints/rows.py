@@ -43,6 +43,7 @@ from ..errors import ConceptViolationError, HardConstraintClassError, Incompatib
 from .cells import (
     KIND_NATIONAL_SIZE,
     KIND_NATIONAL_TOTAL,
+    KIND_STATE_PARENT,
     KIND_STATE_TOTAL,
     NATIONAL_STATE_FIPS,
 )
@@ -450,6 +451,65 @@ def size_support_rows(cells_frame: pl.DataFrame, size_rows: pl.DataFrame) -> lis
                 ),
                 vintage_compatibility_status="compatible",
                 **_scope(by_cell[identifier]),
+            )
+        )
+    return drafts
+
+
+def parent_margin_rows(cells_frame: pl.DataFrame) -> list[ConstraintDraft]:
+    """`child - parent <= 0` for every published private `113` parent over a suppressed child.
+
+    §9.3's parent-total constraint (`specs/completed/stage5-parent-margin.md` R-PM-2). Forestry and Logging
+    `113` is `1131 + 1132 + 1133`, and `1133 -> 11331 -> 113310` is single-child, so with both
+    siblings nonnegative `113310 <= 113` in the same state, month and ownership. Written with the
+    parent as a CELL pinned by its own fixing row, rather than as `child <= <number>`, for the
+    reason `size_margin_rows` gives: a number lifted into a right-hand side is a value no INV-001
+    row pins and no audit can trace.
+
+    A `published_value` restriction, not an `assumed_threshold`: both cells are published QCEW
+    facts and the hierarchy is NAICS's own. It couples exactly one `state_total` cell to one
+    `state_parent` cell of the same state-month, so `assert_no_national_employment_margin` --
+    SRC-QCEW-006's guard against state sums -- admits it and still refuses everything it refused.
+    """
+    children = {
+        (cell["state_fips"], cell["reference_month"]): cell
+        for cell in cells_frame.filter(
+            pl.col("cell_id").str.starts_with(f"{KIND_STATE_TOTAL}|")
+        ).iter_rows(named=True)
+    }
+    drafts: list[ConstraintDraft] = []
+    for parent in cells_frame.filter(
+        pl.col("cell_id").str.starts_with(f"{KIND_STATE_PARENT}|")
+    ).iter_rows(named=True):
+        child = children.get((parent["state_fips"], parent["reference_month"]))
+        if child is None or child["observation_status"] != "suppressed":
+            raise ConceptViolationError(
+                f"{parent['cell_id']} has no suppressed state_total cell in its state-month; "
+                "`cells.state_parent_cells` emits a parent only over one, so this is a builder defect"
+            )
+        drafts.append(
+            constraint(
+                constraint_id=f"parent_margin|{child['cell_id']}",
+                constraint_class="public_accounting_fact",
+                relation="le",
+                coefficients=((str(child["cell_id"]), 1.0), (str(parent["cell_id"]), -1.0)),
+                rhs_lower=None,
+                rhs_upper=0.0,
+                is_hard=True,
+                evidence_kind="published_value",
+                source_snapshot_ids=",".join(
+                    sorted({str(child["source_snapshot_id"]), str(parent["source_snapshot_id"])})
+                ),
+                provenance_text=(
+                    f"published private 113 employment {parent['observed_value']} bounds 113310 "
+                    f"above in {parent['state_fips']} {parent['reference_month']}: 113 = 1131 + "
+                    "1132 + 1133, 1133 -> 11331 -> 113310 is single-child, and both siblings are "
+                    "nonnegative"
+                ),
+                vintage_compatibility_status=vintage_status(
+                    [str(child["naics_vintage"]), str(parent["naics_vintage"])]
+                ),
+                **_scope(child),
             )
         )
     return drafts

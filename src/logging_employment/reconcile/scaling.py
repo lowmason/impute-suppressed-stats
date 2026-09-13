@@ -8,12 +8,12 @@ the clipped sum is a non-decreasing piecewise-linear function of lambda with fla
 every cell is clipped, and Newton or a secant method stalls on exactly those flats.
 `test_the_clipped_sum_is_monotone_in_lambda` pins the property the choice rests on.
 
-WHY NULL UPPERS ARE INFINITE. On the D1 window `selected_upper` is null on 1,227 of 1,241 unknown
-cells, because `SRC-QCEW-006` came back `decline` and no other public fact has been made a
-constraint row. (One exists: a disclosed private `113` parent bounds 756 of the 1,227 above, measured
-2026-09-11 and routed to `specs/stage5-parent-margin.md`; until it lands every such upper is null.)
-`None` maps to `math.inf`, which makes the clip's upper arm a no-op and the
-`sum U < R_t` half of §12.3's predicate vacuous. Coercing null to a large finite number instead
+WHY NULL UPPERS ARE INFINITE. A null `selected_upper` means no public fact bounds the cell above.
+On D1 that is true of every suppressed state cell without a published private `113` parent: plan
+15 made that parent a constraint row, and `SRC-QCEW-006` came back `decline`, so nothing else bounds
+a state cell. `None` maps to `math.inf`, which makes the clip's upper arm a no-op for such a cell,
+and every D1 month's missing set holds at least one, so the `sum U < R_t` half of §12.3's predicate
+cannot fire there. Coercing null to a large finite number instead
 would invent the "arbitrary top-class cap" §9.3 forbids by name, and would silently change results
 whenever the chosen number happened to bind.
 """
@@ -35,6 +35,30 @@ class Bounds:
 
     lower: dict[str, float]
     upper: dict[str, float | None]
+
+    def __post_init__(self) -> None:
+        """Refuse a cell whose lower bound sits above its upper bound (D-096).
+
+        Refused HERE, once, rather than at each consumer. Both clipping sites in this module,
+        `clipped_sum` and the value `scale_into_bounds` returns, compute `min(max(v, lower), upper)`,
+        which settles an inverted pair in the cap's favour and returns a value below the lower
+        bound the caller declared. §12.3's feasibility predicate reads SUMS, so an inversion passes
+        it whenever the sums stay feasible. `integerize` already refuses this shape by name; this is
+        the same refusal one layer earlier. Equality is not an inversion: a cell pinned to a single
+        value is legitimate, and the strict `>` admits it.
+        """
+        inverted = sorted(
+            cell
+            for cell, low in self.lower.items()
+            if self.upper.get(cell) is not None and low > self.upper[cell]
+        )
+        if inverted:
+            cell = inverted[0]
+            raise ValueError(
+                f"cell {cell!r} has lower bound {self.lower[cell]} above its upper bound "
+                f"{self.upper[cell]} ({len(inverted)} inverted cell(s) in all); clamping to the cap "
+                "would silently return a value below the lower bound the caller declared"
+            )
 
     def upper_of(self, cell: str) -> float:
         """The upper bound as a float, with `None` read as positive infinity."""
@@ -58,10 +82,14 @@ def scale_into_bounds(
     tolerance: float,
     max_iterations: int,
 ) -> dict[str, float]:
-    """Solve for lambda by bisection, or fail per §12.3's strict predicate.
+    """Bisect for lambda to a double's resolution, or fail per §12.3's strict predicate.
 
     The domain check precedes the empty-missing-set shortcut, matching `allocate`: checking second
     would let a populated weight vector pass silently against an empty missing set.
+
+    `tolerance` widens the feasibility checks and accepts the result; it does not stop the search.
+    A result more than `tolerance` from the residual -- the iteration cap cut the search short --
+    raises rather than returning.
     """
     check_domain(weights, anchor)
     cells = anchor.missing_cells
@@ -104,17 +132,36 @@ def scale_into_bounds(
             f"{anchor.reference_month}: no bracket reaches residual {anchor.residual}"
         )
 
+    # Bisect to a double's resolution, not to `tolerance`. `tolerance` is an ACCEPTANCE criterion:
+    # `cli.py::reconcile_command` re-applies it to the persisted estimates, re-summed in another
+    # order, so stopping as soon as the sum came within it handed that gate a drift at its edge
+    # (9.93e-10 against 1e-9 on plan 15's D1 re-run). The bracket keeps `clipped_sum(lo)` below the
+    # residual and `clipped_sum(hi)` at or above it, and the loop ends when no double lies strictly
+    # between the two -- at most 52 halvings over 400 seeded D1-sized months -- so the closer end is
+    # as near the residual as any lambda gets.
     for _ in range(max_iterations):
         mid = 0.5 * (lo + hi)
-        total = clipped_sum(mid, weights, bounds, cells)
-        if abs(total - anchor.residual) <= tolerance:
+        if not lo < mid < hi:
             break
+        total = clipped_sum(mid, weights, bounds, cells)
         if total < anchor.residual:
             lo = mid
-        else:
+        elif total > anchor.residual:
             hi = mid
-    lam = 0.5 * (lo + hi)
-    return {
+        else:
+            lo = hi = mid
+            break
+    below = anchor.residual - clipped_sum(lo, weights, bounds, cells)
+    above = clipped_sum(hi, weights, bounds, cells) - anchor.residual
+    lam = lo if below <= above else hi
+    allocated = {
         cell: min(max(lam * weights.values[cell], bounds.lower[cell]), bounds.upper_of(cell))
         for cell in cells
     }
+    drift = abs(sum(allocated.values()) - anchor.residual)
+    if drift > tolerance:
+        raise InfeasibleResidualError(
+            f"{anchor.reference_month}: {max_iterations} bisection iterations left the allocation "
+            f"{drift} from residual {anchor.residual}; §12.3 forbids approximating this away"
+        )
+    return allocated

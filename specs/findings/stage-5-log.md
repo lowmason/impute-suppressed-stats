@@ -83,7 +83,7 @@ the LP width to fall below 25, so `D-093`'s gap binds only on the narrow subset 
 
 **Not measured, and named rather than assumed.** `113 - 1131 - 1132 = 1133`, and the chain below
 `1133` is 1:1 — so a quarter with all three disclosed is an *exact* reconstruction. `1131` and
-`1132` are outside R-S5G-5's named scope and were not fetched. `specs/stage5-parent-margin.md`
+`1132` are outside R-S5G-5's named scope and were not fetched. `specs/completed/stage5-parent-margin.md`
 owns that measurement.
 
 ## 2026-09-11 — `runs/f03023ac9f3a` validation artifacts regenerated under the stratum schema
@@ -203,3 +203,112 @@ against 25 under the old sign (14 at 17/20, one at 19/20); strictly inside the b
 reports 7 (recorded against `D-109`, which owns the unbuilt gate). The seven interval-bearing estimators'
 means land between 0.75 and 0.77, where the old sign spread them from 0.16 to 0.68. The intervals are cross-sectional leave-one-out rather than §10.7's
 rolling ones (`R-S5P-7`), which this fix does not change.
+
+## 2026-09-13 — R-PM-5 measured: the sibling path reconstructs nothing, so R-PM-4 does not bind
+
+`scripts/audit/qcew_parent_margins.py` now walks `1131` and `1132` with the other four industries and
+judges them with the same ladder (plan 15 Task 1); `specs/findings/qcew-parent-margins.md` is the
+rendering. On the 252 suppressed private `113310` state-quarters a published `113` bounds, all of
+`113`, `1131` and `1132` are published on **0**, and on
+**0** when a missing sibling row is read as zero
+establishments. The ladder's tally is exact 0, upper bound 252, none
+157.
+
+**Ruling on R-PM-4:** no measured margin, whether parent, ownership or sibling, reconstructs a suppressed
+state-quarter, so `exact_reconstruction_flag` keeps no live instance and the parent margin enters the
+constraint system as a bound only. `D-110` closes on this measurement. One sibling is published on
+17 of the bounded quarters, which would tighten the bound to
+`113 - sibling`; no row builds it, and plan 15's completion files that as its own item.
+
+## 2026-09-13 — R-PM-7: the comparand re-run against the bounded identification set
+
+`runs/4cf47a918dd8` (plan 15 Task 9) against `runs/f03023ac9f3a`, compared by join on each table's key,
+never by position. R-PM-7's answer is that the comparand IS re-run: Task 4 re-ids every run, and both
+the production runner and the harness now read bounds (Decisions 3 and 6), so every estimate a bound
+binds on moves. The rows below are that movement, derived. `runs/f03023ac9f3a` stays on disk as Stage 4's
+acceptance run; Stage 5's §13.10 promotion compares against `runs/4cf47a918dd8`.
+
+| `baseline_results` | value |
+|---|---|
+| rows old / new | 12270 / 12270 |
+| key-only rows old / new | 0 / 0 |
+| estimates moved beyond 1e-09 | 10870 |
+| estimator-months with a moved estimate | 850 |
+| estimates now exactly at a finite upper bound | 3391 |
+
+Moved estimates by estimator: `cbp_intensity` 1054, `constrained_regression` 1227, `equal_residual` 1227, `establishment_proportional` 1227, `share_break_adjusted` 1227, `share_exponentially_weighted` 1227, `share_last_observed` 1227, `share_rolling_median` 1227, `share_same_month_prior_year` 1227.
+
+| `validation_scores` | value |
+|---|---|
+| rows old / new | 12530 / 12530 |
+| key-only rows old / new | 0 / 0 |
+| scored rows with a finite `selected_upper`, old / new | 0 / 9690 |
+| estimates moved beyond 1e-09 | 5917 |
+
+| `validation_scoreboard` | value |
+|---|---|
+| rows old / new | 270 / 270 |
+| key-only rows old / new | 0 / 0 |
+| WAPE moved beyond 1e-09 | 224 |
+| WAPE change, min / median / max | -0.6543 / -0.0969 / 8.0117 |
+
+| regime | preferred baseline, old | new |
+|---|---|---|
+| `clustered_states_within_month` | `share_last_observed` | `share_last_observed` |
+| `concentration_proxy` | `share_last_observed` | `constrained_regression` |
+| `long_consecutive_runs` | `cbp_intensity` | `cbp_intensity` |
+| `naics_transition` | `cbp_intensity` | `cbp_intensity` |
+| `regional_blocks` | `share_last_observed` | `share_same_month_prior_year` |
+| `small_cell_biased` | `cbp_intensity` | `share_last_observed` |
+| `structural_break` | `cbp_intensity` | `share_exponentially_weighted` |
+| `whole_seasonal_blocks` | `cbp_intensity` | `cbp_intensity` |
+| `whole_state_year_blocks` | `cbp_intensity` | `cbp_intensity` |
+
+`validation_metrics`: 6932 / 6932 rows, key-only 0 / 0; `value` moved on 3662: `deterministic_bounds` 250, `point` 2392, `probabilistic` 1020.
+Exactly recoverable targets rejected from scoring (§13.2 step 6): 0. `validation_manifest.json` records `code_commit` `0e473e9dcadf645f8acb5e63ff6e2323d87b7615`.
+
+### Added by plan 15's final review (derived from the run directories)
+
+The tables above were re-measured after the review's fixes; `validation_manifest.json` records `code_commit` `0e473e9dcadf645f8acb5e63ff6e2323d87b7615`.
+
+| `disclosure_flags` | `runs/f03023ac9f3a` | `runs/4cf47a918dd8` |
+|---|---|---|
+| `narrow_feasible_interval_flag`, by cell kind | `national_size` 1 | `national_size` 1, `state_total` 23 |
+| `exact_reconstruction_flag` | 0 | 0 |
+
+The new narrow flags are parent-bounded state cells with `selected_upper` between 2 and 10. A `[0, U]` interval's relative width is 2, so only the absolute arm fires (`narrow_interval_absolute_width: 10`), and `narrow_interval_action: manual_review` routes each to §9.8 review.
+
+**What the WAPE movement is.** Over the 5932 scored rows with an estimate in both runs, the absolute error summed 2,180,827 before and 1,315,134 after, a net 537,515 employees of estimate moved INTO scored targets, and 0 estimates exceed a finite cap. By regime (a scoreboard row counts as worse or better when its WAPE moves by more than 0.05):
+
+| regime | worse | better | median change | max change |
+|---|---|---|---|---|
+| `clustered_states_within_month` | 0 | 11 | -0.0300 | +0.0067 |
+| `concentration_proxy` | 0 | 26 | -0.1473 | -0.0301 |
+| `long_consecutive_runs` | 19 | 2 | +0.2669 | +0.8864 |
+| `naics_transition` | 0 | 23 | -0.1017 | -0.0093 |
+| `regional_blocks` | 0 | 14 | -0.0808 | +0.0372 |
+| `small_cell_biased` | 0 | 21 | -0.1160 | +0.0041 |
+| `structural_break` | 0 | 22 | -0.0892 | -0.0097 |
+| `whole_seasonal_blocks` | 0 | 6 | -0.1858 | -0.0058 |
+| `whole_state_year_blocks` | 3 | 20 | -0.1399 | +8.0117 |
+
+The largest rise, +8.0117 on `whole_state_year_blocks` seed 4096 `equal_residual`, is 12 scored targets with a summed truth of 62, 0 of them with a finite upper bound and 12 above their truth, receiving +496.7 employees of estimate. Clamping an estimate to a valid bound cannot raise the absolute error summed over every suppressed cell of a month -- a capped cell loses exactly the mass the others gain, and stays at or above its truth -- but the harness scores only masked targets. A capped REAL suppression's improvement is unscored, while the mass it sheds lands on scored ones.
+
+**§13.10 caveat.** A masked target's score now depends on which bounds bind on the other cells of its month, so masked-target WAPE is not comparable across runs with different identification sets: read `runs/f03023ac9f3a` and `runs/4cf47a918dd8` as different comparands, not as one comparand improved.
+
+**What the review's fixes moved** (the pre-review run at `code_commit` `bc0498aa1f96e6ec765ae9d1eefabf5fdd98b169`, kept aside, against this one):
+
+| quantity | pre-review / final |
+|---|---|
+| reconcile `max_residual_drift` | 9.932e-10 / 4.547e-13 (Stage 4's comparand: 4.547e-13) |
+| `baseline_results` key-only rows | 0 / 0 |
+| `baseline_results` estimates moved beyond 1e-09, largest change | 0, 7.637e-10 |
+| `validation_scores` estimates moved beyond 1e-09, largest change | 0, 9.068e-10 |
+| `validation_scoreboard` WAPE, largest change | 5.906e-12 |
+| `validation_metrics` `value` moved beyond 1e-09, by family | `probabilistic` 1 |
+
+## 2026-09-13 — superseded Stage 5 roadmap reading (stage-block rule 1)
+
+Plan 15 Task 10 replaced this span of the Stage 5 block, which treated `D-111` as pending:
+
+> **The §9.3 margins are a precondition of THIS stage, not Stage 6's.** Every one of the 1,227 suppressed state cells is `[0, +inf)` in the SHIPPED `deterministic_bounds` — `selected_upper` null on all 1,227 — because no parent-industry or ownership margin has ever entered the constraint system. This stage consumes `deterministic_bounds`, so the question is settled before it, by `specs/completed/stage5-gate-inputs.md` R-S5G-5. **MEASURED 2026-09-11: a margin EXISTS and the shipped identification set is therefore incomplete.** Of the 409 suppressed private state-quarters, **252 (61.6%, 756 of the 1,227 months) carry a disclosed private `113` parent**, which bounds `113310` above by nonnegativity of `1131` and `1132`; **0 are exactly reconstructed** — `1133` and `11331` are disclosed on 0 of 409 because the single-child chain is suppressed together, `own_code 0` does not exist at state x 6-digit (a measured absence, not an unfetched one), and no disclosed `113` parent on a suppressed quarter is a `'-'` true zero. No MEASURED margin therefore gives REQ-027/§14.4 a live instance (`D-110`) — but the `113 - 1131 - 1132` path was not measured, so on the 252 bounded quarters exactness is unknown rather than absent. The BOUND is not absorbed here: it needs a `registry/sources.yaml` row per new slice, new cell kinds and a `rows.size_margin_rows`-style parent-margin builder in `constraints/`, a §13.2 step-4 rule in `validate/recover.py` for when the parent stays visible under the synthetic pattern (it is public on 252 of 409 real suppressions, so hiding it always would score methods under harder identification than production — today that moves §13.5's bound metrics and `validation_scores`' `selected_*` columns, not WAPE, coverage or the scoreboard, since baselines never read masked bounds (`D-087`); step 6 labels any exact case), and it makes `D-093`'s MILP gap reachable for the bounded cells whose LP width falls below §9.6's threshold of 25 — `_needs_milp` needs a finite `upper` AND that width, which is why MILP has run on 0 of 4,775 rows. Routed to `specs/stage5-parent-margin.md`; **Stage 5 MUST NOT consume `deterministic_bounds` as identification-complete until that spec lands.** See `specs/findings/qcew-parent-margins.md`; `specs/findings/stage-5-log.md` carries the history.

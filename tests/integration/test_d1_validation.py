@@ -13,6 +13,7 @@ from pathlib import Path
 
 import polars as pl
 import pytest
+from tests.conftest import requires_staged
 
 from logging_employment.baselines.runner import REGISTRY
 from logging_employment.config import Config, load_config
@@ -24,15 +25,8 @@ from logging_employment.contracts import (
 from logging_employment.validate.harness import run_pseudo_suppression
 
 REPO = Path(__file__).resolve().parents[2]
-STAGED = REPO / "data" / "staged"
 
-pytestmark = [
-    pytest.mark.slow,
-    pytest.mark.skipif(
-        not (STAGED / "qcew_monthly.parquet").exists(),
-        reason="data/staged is gitignored; the D1 validation run needs the rebuilt tables",
-    ),
-]
+pytestmark = [pytest.mark.slow, requires_staged]
 
 
 def _one_seed(cfg: Config) -> Config:

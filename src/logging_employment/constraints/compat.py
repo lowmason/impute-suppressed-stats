@@ -166,8 +166,98 @@ def assert_size_margin_compatible(
     }
 
 
+def assert_parent_margin_compatible(monthly: pl.DataFrame, parent: pl.DataFrame) -> dict[str, int]:
+    """Halt unless every private `113` state row can bound its `113310` child (§5.5, R-PM-2).
+
+    Checked over EVERY state-month the two tables share, not only the suppressed ones a row is built
+    for, because the published pairs are where the premise is testable. Three conditions: the pair
+    shares ownership and NAICS vintage (INV-007); the parent holds at least as many establishments
+    as the child (the NAICS hierarchy, public even where employment is suppressed); and where both
+    employment values are published the parent is not below the child. The last is what the row
+    asserts, and a pair violating it would otherwise surface as an infeasible component with a far
+    less specific message. Measured 2026-09-12 on the audit extracts: 0 of 3,078 published
+    month-value pairs put the child above the parent.
+    """
+    child = monthly.filter(pl.col("area_type") == "state").select(
+        "state_fips",
+        "reference_month",
+        "ownership_code",
+        "naics_vintage",
+        pl.col("qtrly_establishments").alias("child_establishments"),
+        pl.col("employment_value").alias("child_employment"),
+        pl.col("observation_status").alias("child_status"),
+    )
+    pairs = (
+        parent.filter(pl.col("area_type") == "state")
+        .select(
+            "state_fips",
+            "reference_month",
+            pl.col("ownership_code").alias("parent_ownership"),
+            pl.col("naics_vintage").alias("parent_vintage"),
+            pl.col("qtrly_establishments").alias("parent_establishments"),
+            pl.col("employment_value").alias("parent_employment"),
+            pl.col("observation_status").alias("parent_status"),
+        )
+        .join(child, on=["state_fips", "reference_month"], how="inner")
+    )
+
+    misaligned = pairs.filter(
+        pl.col("parent_ownership").ne_missing(pl.col("ownership_code"))
+        | pl.col("parent_vintage").ne_missing(pl.col("naics_vintage"))
+    )
+    if misaligned.height:
+        first = misaligned.row(0, named=True)
+        raise IncompatibleMarginError(
+            f"{misaligned.height} parent row(s) differ from their child in ownership or NAICS "
+            f"vintage, e.g. {first['state_fips']} {first['reference_month']}: "
+            f"{first['parent_ownership']}/{first['parent_vintage']} against "
+            f"{first['ownership_code']}/{first['naics_vintage']} (INV-007)"
+        )
+
+    # `is_null() |` first, as in the size gates: a null count makes `<` null, `filter` drops a null
+    # predicate, and a pair with no establishment count would pass the check that exists to halt it.
+    fewer = pairs.filter(
+        pl.col("parent_establishments").is_null()
+        | pl.col("child_establishments").is_null()
+        | (pl.col("parent_establishments") < pl.col("child_establishments"))
+    )
+    if fewer.height:
+        first = fewer.row(0, named=True)
+        raise IncompatibleMarginError(
+            f"{fewer.height} parent row(s) carry fewer establishments than their child, or no count, "
+            f"e.g. {first['state_fips']} {first['reference_month']}: "
+            f"{first['parent_establishments']} against {first['child_establishments']}; a NAICS "
+            "parent holds every establishment of its children"
+        )
+
+    published = pairs.filter(
+        (pl.col("child_status") != "suppressed") & (pl.col("parent_status") != "suppressed")
+    )
+    below = published.filter(pl.col("parent_employment") < pl.col("child_employment"))
+    if below.height:
+        first = below.row(0, named=True)
+        raise IncompatibleMarginError(
+            f"{below.height} published parent value(s) sit below their published child, e.g. "
+            f"{first['state_fips']} {first['reference_month']}: {first['parent_employment']} "
+            f"against {first['child_employment']}; `child - parent <= 0` would make that "
+            "component infeasible"
+        )
+    bounding = pairs.filter(
+        (pl.col("child_status") == "suppressed") & (pl.col("parent_status") != "suppressed")
+    )
+    return {
+        "parent_pairs_checked": pairs.height,
+        "published_pairs_checked": published.height,
+        "suppressed_cells_with_a_published_parent": bounding.height,
+    }
+
+
 def run_compatibility_gates(data: HarmonizedData, *, industry_code: str) -> dict[str, object]:
     """Every gate, in the order a constraint builder needs them. Returns the margin report."""
     assert_definitional_alignment(data.qcew_monthly)
     size = data.qcew_national_size.filter(pl.col("industry_code") == industry_code)
-    return assert_size_margin_compatible(data.qcew_monthly, size)
+    report = assert_size_margin_compatible(data.qcew_monthly, size)
+    return {
+        **report,
+        "parent_margin": assert_parent_margin_compatible(data.qcew_monthly, data.qcew_state_parent),
+    }

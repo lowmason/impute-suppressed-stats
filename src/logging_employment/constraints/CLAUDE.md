@@ -15,9 +15,12 @@ least one suppressed states+DC cell, so the national/state employment identity i
 `rows.assert_no_national_employment_margin` refuses *both* shapes — states coupled to each other,
 states coupled to the national row — and `build_constraint_system` runs it over the drafts before
 they become frames. `cells.national_total_cells` separately restricts national cells to the months
-a size margin needs, so no orphan national cell reads as a state/national link. The only margin
+a size margin needs, so no orphan national cell reads as a state/national link. The first margin
 built here is `size_margin|<month>`: national classes minus the national all-sizes cell = 0, so
-INV-001 pins that total through its own fixing row instead of an rhs literal.
+INV-001 pins that total through its own fixing row instead of an rhs literal. The second, since
+plan 15, is `parent_margin|<child cell_id>`: a suppressed `state_total` cell minus its published
+private `113` `state_parent` cell <= 0, one state-month at a time. It couples a state cell to its
+own parent, never to another state or the nation, so the guard above admits it.
 
 **2. Every solve-path function has two execution paths.** `bounds.column_specs`,
 `bounds.matrix_rows`, `rank.equality_matrix`, `bounds.solve_component`, `diagnostics.diagnose` all

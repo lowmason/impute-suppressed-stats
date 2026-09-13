@@ -19,6 +19,11 @@ class FetchedBytes:
     content: bytes
     http_status: int
     retrieved_at_utc: str
+    # The response's `Last-Modified` header verbatim, or None when the server sent none (D-100).
+    # Defaulted so a `FetchedBytes` built by hand, as the store and fetch tests do, need not invent
+    # one. It is the server's modification time, not a release date; `contracts.py` records what
+    # each source was measured to send, beside `SOURCE_SNAPSHOT_SCHEMA`.
+    last_modified: str | None = None
 
 
 @dataclass
@@ -56,6 +61,7 @@ class HttpFetcher:
             content=response.content,
             http_status=response.status_code,
             retrieved_at_utc=dt.datetime.now(dt.UTC).isoformat(),
+            last_modified=response.headers.get("Last-Modified"),
         )
 
     def close(self) -> None:

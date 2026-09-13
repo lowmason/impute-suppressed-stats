@@ -12,14 +12,14 @@ post-hoc cosmetic adjustment" — there is no config key to skip it.
 Nothing outside `baselines/` calls into this package. `baselines/runner.py::run_baselines` is the
 production path and calls, in order: `observed_partition` → `closure_audit` →
 `assert_universe_closes` → `national_residual` → `allocate` → `integerize`, and (since R-S5P-3)
-reads `scaling.Bounds` so `runner.assert_within_bounds` can enforce INV-002's per-cell half.
+reads `scaling.Bounds` so `runner.assert_within_bounds` can enforce INV-002's per-cell half. Since
+plan 15 it also calls `scaling.scale_into_bounds` wherever `allocate` leaves a finite interval.
 `baselines/fallback.py::_assert_the_partition_is_the_anchors` also calls `national_residual`, to re-derive the residual from the
 context's partition and refuse an anchor that disagrees. The other six `baselines/` modules import
 `Weights` / `Anchor` / `Partition` as types only.
 
 Everything else is implemented, tested, and **dead until a later stage wires it**:
 
-- `scaling.scale_into_bounds` — reached only from `reconcile_draws` (Stage 5).
 - `draws.reconcile_draws` — no caller; Stage 5 builds `ReconciliationInputs` from
   `deterministic_bounds` plus the anchor.
 - `matrix.reconcile_matrix` / `projection.kl_project` — no caller; Stage 6, when `target_cell` first
@@ -73,13 +73,20 @@ The load-bearing points:
   subsetting reallocates absent cells' share onto the covered ones and looks well-formed. `Weights`
   deliberately carries no employees unit (`baselines.interfaces.EmployeeWeights` does); do not add
   unit validation here.
-- **`Bounds.upper = None` means +inf, not "missing"** (`Bounds.upper_of`, `scaling.py::upper_of`). On D1,
-  `selected_upper` is null on almost every unknown cell, so the `sum U < R_t` arm of §12.3's
-  predicate is vacuous. Coercing null to a large finite number would manufacture the "arbitrary
-  top-class cap" §9.3 forbids by name.
+- **`Bounds.upper = None` means +inf, not "missing"** (`Bounds.upper_of`, `scaling.py::upper_of`). On D1 it
+  is null on every suppressed state cell without a published private `113` parent, and every
+  month's missing set holds one, so the `sum U < R_t` arm of §12.3's predicate cannot fire. Coercing null to a large finite number would manufacture the "arbitrary
+  top-class cap" §9.3 forbids by name. An inverted pair (`lower > upper`) is refused when `Bounds`
+  is built (`scaling.py::Bounds.__post_init__`, `D-096`): both clipping sites would settle it in the
+  cap's favour, and §12.3's sum predicate cannot see a per-cell inversion.
 - **§12.3's strict predicate is compared against `tolerance`, not in exact float arithmetic**
   (`scaling.py::scale_into_bounds`,83`). Equality is feasible — every cell exactly on its bound must succeed — and
   seven lower bounds of 0.1 sum to 0.7000000000000001.
+- **In `scale_into_bounds`, `tolerance` accepts the result; it does not stop the search.** Bisection
+  runs until no double lies inside the bracket, and a result more than `tolerance` from the residual
+  (the iteration cap cut the search short) raises `InfeasibleResidualError`. Stopping at `tolerance`
+  handed `reconcile`'s gate, which re-applies the same 1e-9 to the persisted estimates, a D1 drift of
+  9.93e-10 (plan 15's final review).
 - **`kl_project` breaks on step size, not on violation, and never raises.** It returns
   `(x, violation)`; a caller needing convergence checks the second element. Re-verified against its
   own docstring example — seed `[1,1]`, margin `[[1,1]]`, target `[10]`, `upper=[1,1]` gives
@@ -117,8 +124,8 @@ This package's errors, in `..errors`: `UniverseClosureError` (whole-run halt),
 Cells are keyed by `state_fips` strings throughout; `Anchor.missing_cells` is a tuple and defines
 iteration order for every downstream array.
 
-`scaling.py` and several test files carry hand-typed D1 counts ("1,227 of 1,241") that are
-undated and unrecomputed; `specs/deferred_items.md` has an open item on the five remaining `1,227`
+Plan 15 rewrote the null-upper D1 counts that `D-111` made false, in `scaling.py` and the tests
+that copied them; `specs/deferred_items.md` (`D-056`) still governs the other undated `1,227`
 sites — read it before citing or copying one.
 
 ## Commands

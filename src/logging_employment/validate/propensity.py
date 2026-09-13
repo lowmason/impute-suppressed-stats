@@ -2,12 +2,11 @@
 
 §13.2 names five predictors. Three enter the score -- establishment count, historical volatility and
 sparsity. Employment per establishment is deliberately left out (see the `_epe` note in
-`target_propensity`), and the fifth -- "parent share" -- is NOT implemented and is not approximated: the STATE-level staged tables (`qcew_monthly`, `cbp_state_size`) carry industry 113310
-alone, so the pipeline has no parent 1133 or 113 state series to form a share against
-(`qcew_national_size` carries 113, 1133 and 11331, but only nationally). A private 113 state series
-IS published -- measured 2026-09-11 in `specs/findings/qcew-parent-margins.md` -- and is not
-ingested (`D-111`). Ingesting it is all an ESTABLISHMENT-count share needs,
-since establishment counts are published even where employment is suppressed. An EMPLOYMENT share
+`target_propensity`), and the fifth -- "parent share" -- is NOT implemented and is not approximated.
+The private 113 state series it would divide by IS staged since plan 15 (`qcew_state_parent`), and
+an ESTABLISHMENT-count share needs nothing more, since establishment counts are published even
+where employment is suppressed. It is left out by decision: a new predictor re-draws every regime's
+mask, and plan 15 re-ran the §13.10 comparand on the masks as they stood. An EMPLOYMENT share
 would also need a leave-one-out form like the volatility term, because a same-month share contains
 the hidden target's own value (§13.4). Fabricating a share
 from the national total instead would make the predictor a function of the residual this harness is
@@ -122,9 +121,11 @@ def complementary_partners(
     """§13.2 step 3's complementary-like cells, in the target's own month.
 
     SCOPE, stated because the obvious reading is wrong: on the `state_total` arm this defeats no
-    subtraction, because there is none. Measured 2026-09-07, all 4,716 state cells are single-cell
-    components — `assert_no_national_employment_margin` is Stage 0's SRC-QCEW-006 `decline` in
-    code. A masked state total is `unbounded` with and without partners.
+    subtraction, because there is none. `assert_no_national_employment_margin` is Stage 0's
+    SRC-QCEW-006 `decline` in code, so no row couples two state cells; since plan 15 the one row
+    touching a state cell is its `parent_margin`, which couples it to its own private `113` parent
+    and to nothing a partner could change. A masked state total's interval is the same with and
+    without partners.
 
     The partners are still required: §13.2 step 8 scores primary-like and complementary-like cells
     separately, and INV-009 reserves those labels for synthetic masks. Task 8's national-size arm

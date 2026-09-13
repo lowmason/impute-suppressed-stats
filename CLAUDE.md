@@ -24,7 +24,7 @@ uv run interrogate src           # docstring gate, fail-under = 100
 
 logging-estimates validate-config --config config.yaml   # these two run in a bare checkout,
 logging-estimates registry verify --config config.yaml   # no data/ needed
-logging-estimates fetch --source qcew --config config.yaml   # or qcew_size / cbp; network +
+logging-estimates fetch --source qcew --config config.yaml   # or qcew_parent / qcew_size / cbp; network +
                                                              # CENSUS_API_KEY from ./.env
 # then, in order:
 build-harmonized → build-constraints → solve-bounds → run-baselines → reconcile → validate
@@ -72,7 +72,7 @@ diff old against new by join before re-pinning one (§17.6).
 ## Architecture
 
 `fetch` puts raw bytes in a content-addressed immutable store; every later stage reads only the
-four harmonized Parquet tables (`contracts.HarmonizedData`), never an endpoint. `build-constraints`
+five harmonized Parquet tables (`contracts.HarmonizedData`), never an endpoint. `build-constraints`
 turns those into a cell/row/coefficient system, `solve-bounds` bounds each component,
 `run-baselines` produces weights that `reconcile/` turns into estimates, `validate` re-runs it under
 synthetic masks. Outputs land in `runs/<run_id>/` beside one JSON manifest per command.
@@ -133,7 +133,8 @@ synthetic masks. Outputs land in `runs/<run_id>/` beside one JSON manifest per c
   2017` before it, and *refuses* years < 2017 (`UnsupportedReferenceYearError`) rather than
   mislabelling them. `INV-007` (never stack incompatible vintages) is enforced at four separate
   points: `build.snapshot_paths` (the gotcha below), `constraints/cells.py::_assert_one_vintage_per_cell`,
-  `constraints/compat.py` (`:141`, `:154`) and `constraints/rows.py::constraint`.
+  `constraints/compat.py` (`:141`, `:154`, and `assert_parent_margin_compatible` since plan 15) and
+  `constraints/rows.py::constraint`.
   None of them is a general guarantee — `constraints/CLAUDE.md` says exactly what each covers.
 - **Docstrings are the design record.** Nearly every callable has one, and the house style is to
   say *why this and not the obvious alternative*, citing §/`INV-`/`REQ-`/`SRC-` ids; move those
@@ -153,11 +154,12 @@ synthetic masks. Outputs land in `runs/<run_id>/` beside one JSON manifest per c
   `validate/` tests calling `HarmonizedData.load(Path("data/staged"))` with no skip guard.
   `tests/conftest.py` now owns `STAGED` (**absolute**, so the old cwd-relative requirement to run
   pytest from the repo root is gone) and `requires_staged`, a skipif keyed on
-  `qcew_monthly.parquet` existing. Six modules take a module-level `pytestmark`; three MIXED
-  modules take per-test decorators, because a blanket mark there would convert five tests that
-  pass in a bare checkout into skips while still reporting "0 failed". **If you add a data-bound
-  test, guard it and re-check by arithmetic — skipped must rise by exactly the number you added
-  and passed must not fall.** Five modules still carry their own inline guard (`D-088`).
+  `qcew_monthly.parquet` existing, and it is the suite's only copy of that predicate since `D-088`
+  folded in the last five inline guards (2026-09-12). Ten modules take a module-level `pytestmark`;
+  four MIXED modules take per-test decorators, because a blanket mark there would convert tests
+  that pass in a bare checkout into skips while still reporting "0 failed". **If you add a
+  data-bound test, guard it and re-check by arithmetic — skipped must rise by exactly the number
+  you added and passed must not fall.**
 - **`ruff` is the only formatter, and its SCOPE is the gotcha.** Black was dropped 2026-09-09
   (plan 12's Task 0): the two disagreed on eight files — ruff >=0.9 rewrites `assert (x), msg`
   into `assert x, (msg)` and black leaves it — and `pyproject.toml` declared both, so "is the tree

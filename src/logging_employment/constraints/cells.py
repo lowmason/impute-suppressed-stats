@@ -32,6 +32,7 @@ from ..errors import ConceptViolationError
 KIND_STATE_TOTAL = "state_total"
 KIND_NATIONAL_TOTAL = "national_total"
 KIND_NATIONAL_SIZE = "national_size"
+KIND_STATE_PARENT = "state_parent"
 
 # `state_fips` on a national cell. Not a FIPS code, and deliberately not null: a null would be
 # indistinguishable from a missing value in a join, and no two-character FIPS can collide with it.
@@ -144,6 +145,31 @@ def national_size_cells(
     return _select(rows, KIND_NATIONAL_SIZE, size_concept, "employment")
 
 
+def state_parent_cells(
+    parent: pl.DataFrame, monthly: pl.DataFrame, *, size_concept: str
+) -> pl.DataFrame:
+    """One cell per published private `113` state-month whose `113310` child is suppressed (R-PM-2).
+
+    Only those. A parent over a PUBLISHED child restricts nothing that child's own fixing row has
+    not already pinned, and a SUPPRESSED parent publishes no value to bound anything with, so a cell
+    for either adds a variable and no information -- the reason `national_total_cells` emits only
+    the months a size margin needs. The parent is an observed cell: INV-001 pins it through its own
+    `fix|` row, and `rows.parent_margin_rows` never lifts its value into a right-hand side.
+    """
+    suppressed = monthly.filter(
+        (pl.col("area_type") == "state") & (pl.col("observation_status") == "suppressed")
+    ).select("state_fips", "reference_month")
+    rows = (
+        parent.filter(
+            (pl.col("area_type") == "state")
+            & pl.col("observation_status").is_in(["observed", "true_zero"])
+        )
+        .join(suppressed, on=["state_fips", "reference_month"], how="semi")
+        .with_columns(pl.lit(TOTAL_SIZE_CLASS).alias("size_class"))
+    )
+    return _select(rows, KIND_STATE_PARENT, size_concept, "employment_value")
+
+
 def _assert_one_vintage_per_cell(monthly: pl.DataFrame) -> None:
     """Halt if one area-month is published under more than one release vintage (INV-007)."""
     offending = (
@@ -199,6 +225,7 @@ def build_target_cells(
 ) -> pl.DataFrame:
     """The whole §7.7 target-cell index, sorted by `cell_id`."""
     _assert_one_vintage_per_cell(data.qcew_monthly)
+    _assert_one_vintage_per_cell(data.qcew_state_parent)
     size = data.qcew_national_size.filter(pl.col("industry_code") == industry_code)
     months = sorted(set(size["reference_month"].to_list()))
     built = pl.concat(
@@ -208,6 +235,9 @@ def build_target_cells(
                 data.qcew_monthly, size_concept=size_concept, reference_months=months
             ),
             national_size_cells(size, ownership_code=ownership_code, size_concept=size_concept),
+            state_parent_cells(
+                data.qcew_state_parent, data.qcew_monthly, size_concept=size_concept
+            ),
         ]
     ).sort("cell_id")
     duplicates = built.group_by("cell_id").len().filter(pl.col("len") > 1)

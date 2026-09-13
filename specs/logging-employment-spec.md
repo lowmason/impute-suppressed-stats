@@ -2421,9 +2421,9 @@ Other §21 rows keep their Appendix A defaults until a stage's plan or finding c
 > - **Every one of the 1,227 suppressed state-month employment cells is `unbounded`.** Measured,
 >   not predicted: `selected_lower` is 0 and `selected_upper` is **null**. `SRC-QCEW-006`'s
 >   `decline` leaves nonnegativity as the only public fact touching a state cell.
->   *Qualified 2026-09-12 (plan 14; measured 2026-09-11): true of what the engine CONSUMES, not of what is published — a
->   disclosed private `113` parent bounds 756 of the 1,227 above (`specs/findings/qcew-parent-margins.md`),
->   not yet a constraint row (`D-111`).*
+>   *Qualified 2026-09-12 (plan 14) and closed by plan 15 (`D-111`, 2026-09-13): the published private
+>   `113` parent is now a constraint row, so 756 of these 1227 carry a finite upper and
+>   471 stay `unbounded` (`specs/findings/stage-5-log.md`).*
 > - **The identifying content is 14 cells.** The suppressed national size classes come back
 >   `partially_identified` at widths of 130–894 employees. No cell anywhere is
 >   `exactly_recoverable`, and `exact_reconstruction_flag` fires nowhere on real data.
@@ -2431,6 +2431,8 @@ Other §21 rows keep their Appendix A defaults until a stage's plan or finding c
 >   184, relative width 0.232 against the 0.25 threshold). Read that as a measurement with a date,
 >   not an invariant: 2018 class 5 sits at **0.2589** and 2024 class 6 at **0.2796**, so a single
 >   BLS revision moves either under the threshold and the count becomes two or three.
+>   *Since `D-111` (plan 15, 2026-09-13) the count is 24: that cell plus 23 parent-bounded state
+>   cells of width 10 or less (the Stage 8 note below).*
 > - **The state panel is not rectangular.** 4,716 state cells, not 50 x 96 = 4,800: 84 state-months
 >   publish no row at all, and Stage 1 records absence as a missing row rather than an `absent`
 >   cell, so those months get no cell and no bound. Separately, "states+DC" is a universe name
@@ -2475,19 +2477,27 @@ Other §21 rows keep their Appendix A defaults until a stage's plan or finding c
 >   on the 14-cell national size panel. Stage 4 must not read a never-firing gate on
 >   target 1 as evidence that the constraint data is sound; that is the one reading
 >   the geometry makes available and the one it does not support.
+>   *Since `D-111` (plan 15, 2026-09-13): a masked state cell whose private `113` parent stays
+>   visible is bounded `[0, 113]`, so the gate can fire on a state-month target, and
+>   `recover.mask_and_solve` runs it on every masked solve (`ConstraintDataError`). It did not
+>   fire on `runs/4cf47a918dd8`.*
 > - **Stage 7 (the §13.9 envelope is unbounded above on state cells).** With
 >   `selected_upper` null on 1,227 of 1,241 unknown cells, `model_sensitivity_high`
 >   on a state-month release cell is set by the model alone — no public fact clips it
 >   from above. Only `model_sensitivity_low` meets a binding deterministic endpoint.
->   *Until `D-111` lands (measured 2026-09-11): a disclosed private `113` parent publishes an upper
->   endpoint on 756 of the 1,227, and once it is a constraint row those cells are clipped from above.*
+>   *Since `D-111` (plan 15, 2026-09-13): the parent row clips 756 of the 1227 from above;
+>   `model_sensitivity_high` stays model-set on the other 471.*
 > - **Stage 8 (the REQ-027 exactness path has no live instance).** *(Scoped 2026-09-12, plan 14: through any
->   measured margin. The `113 - 1131 - 1132` path is unmeasured on 252 quarters — `D-110`.)*
+>   measured margin. Completed by plan 15: the `113 - 1131 - 1132` path is measured too and reconstructs no suppressed quarter — `D-110` closed.)*
 >   `exact_reconstruction_flag` fires on no real cell in this run, so the §14.4 route
 >   for an exactly-reconstructed `N`-flagged cell can be exercised only by constructed
 >   tests on this window. `narrow_feasible_interval_flag` fired once, with two cells
 >   within 0.03 of the 0.25 threshold — Stage 8 should treat the count as revisable,
 >   not as one.
+>   *Since `D-111` (plan 15, 2026-09-13): it fires on 24 cells of `runs/4cf47a918dd8`, that
+>   national size cell plus 23 suppressed state cells whose visible parent is 10 or less, flagged
+>   by the absolute arm (`narrow_interval_absolute_width: 10`). `narrow_interval_action:
+>   manual_review` routes each to §9.8 disclosure review.*
 > - **Stage 6's re-route condition was checked and does not fire.**
 >   `specs/findings/source-audit.md` records `simultaneous_state_industry_size: false`
 >   and `stage6_reroute_required: false`, so §2.2's premise holds and Stage 6 keeps

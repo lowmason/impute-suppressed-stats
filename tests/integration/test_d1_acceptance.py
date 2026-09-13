@@ -42,6 +42,7 @@ from pathlib import Path
 
 import polars as pl
 import pytest
+from tests.conftest import STAGED, requires_staged
 
 from logging_employment import contracts
 from logging_employment.config import Config, load_config
@@ -50,15 +51,8 @@ from logging_employment.contracts import HarmonizedData
 from logging_employment.disclosure.flags import build_flags
 
 REPO = Path(__file__).resolve().parents[2]
-STAGED = REPO / "data" / "staged"
 
-pytestmark = [
-    pytest.mark.slow,
-    pytest.mark.skipif(
-        not (STAGED / "qcew_monthly.parquet").exists(),
-        reason="data/staged/ is gitignored; run `build-harmonized` first",
-    ),
-]
+pytestmark = [pytest.mark.slow, requires_staged]
 
 # The family prefix `cells.cell_id` stamps on the front of every identifier. Used in place of a
 # `starts_with("state_total|")` string so that one expression is the file's single notion of "which
@@ -126,6 +120,11 @@ def test_every_suppressed_state_month_carries_a_bound_status(solved, config) -> 
     The source anchor is not redundant with the coverage assertions. Both sides of the join descend
     from the same `build_target_cells` call, so a regression that dropped *some* suppressed state
     cells would drop their bound rows with them and leave the join exactly as green as it is here.
+
+    Since `D-111` the endpoints split on one public fact. A suppressed state cell whose private
+    `113` parent is published is bounded above by exactly that value; every other suppressed state
+    cell is still `unbounded`. The split is read from the STAGED parent table, never typed --
+    measured 2026-09-12 it is 756 bounded and 471 open.
     """
     built, result, _ = solved
     # Read the staged parquet directly rather than through the `harmonized` fixture, and do not
@@ -175,8 +174,32 @@ def test_every_suppressed_state_month_carries_a_bound_status(solved, config) -> 
         "suppressed state cells whose sharp lower bound went missing: "
         f"{sorted(covered.filter(pl.col('selected_lower').is_null())['cell_id'].to_list())[:3]}"
     )
-    assert covered.filter(pl.col("selected_upper").is_not_null()).is_empty()
-    assert set(covered["bound_status"]) == {"unbounded"}
+    published_parent = (
+        pl.read_parquet(STAGED / "qcew_state_parent.parquet")
+        .filter(pl.col("observation_status").is_in(["observed", "true_zero"]))
+        .select(
+            "state_fips",
+            "reference_month",
+            pl.col("employment_value").cast(pl.Float64).alias("parent_value"),
+        )
+    )
+    located = covered.join(
+        suppressed.select("cell_id", "state_fips", "reference_month"), on="cell_id", how="inner"
+    ).join(published_parent, on=["state_fips", "reference_month"], how="left")
+    bounded = located.filter(pl.col("parent_value").is_not_null())
+    open_above = located.filter(pl.col("parent_value").is_null())
+    assert bounded.height > 0 and open_above.height > 0
+    off_parent = bounded.filter(
+        pl.col("selected_upper").is_null()
+        | ((pl.col("selected_upper") - pl.col("parent_value")).abs() > 1e-6)
+    )
+    assert off_parent.is_empty(), sorted(off_parent["cell_id"].to_list())[:3]
+    assert bounded.filter(
+        (pl.col("bound_status") == "exactly_recoverable") != (pl.col("parent_value") == 0.0)
+    ).is_empty()
+    assert set(bounded["bound_status"]) <= {"partially_identified", "exactly_recoverable"}
+    assert open_above.filter(pl.col("selected_upper").is_not_null()).is_empty()
+    assert set(open_above["bound_status"]) == {"unbounded"}
 
 
 def test_no_national_size_label_contradicts_the_interval_the_engine_gave_that_cell(
@@ -529,42 +552,79 @@ def _coupling_rows(built: system.BuiltSystem) -> pl.DataFrame:
     )
 
 
-def test_no_coupling_row_touches_a_state_cell_so_each_state_cell_is_its_own_component(
+def test_the_only_rows_coupling_a_state_cell_are_parent_margins_within_one_state_month(
     solved,
 ) -> None:
-    """SRC-QCEW-006 came back `decline`, so no restriction may couple a state cell to anything.
+    """SRC-QCEW-006 came back `decline`, so no row couples a state cell to another state or the nation.
 
-    `rows.assert_no_national_employment_margin` is where that is enforced; the decomposition is
-    where it shows up. The singleton components are exactly the state cells, counted from the cell
-    index rather than typed. Exactly, not `>=`: `cells.national_total_cells` emits a national cell
-    only for a month the size margin needs, so every national cell is necessarily coupled.
+    Since `D-111` exactly one kind of row couples a state cell to anything: `parent_margin`, which
+    pairs one suppressed `state_total` cell with the `state_parent` cell of the same state and month.
+    So a state cell's component holds one cell, or two when its parent is published -- counted from
+    the cell index, never typed. `rows.assert_no_national_employment_margin` enforces the decline;
+    the decomposition is where it shows up.
     """
     built, result, _ = solved
-    coupled_cells = built.coefficients.join(_coupling_rows(built), on="constraint_id", how="semi")
-    assert coupled_cells.filter(_KIND == "state_total").height == 0
+    coupled = built.coefficients.join(
+        _coupling_rows(built), on="constraint_id", how="semi"
+    ).with_columns(_KIND.alias("kind"))
+    touching = sorted(
+        set(coupled.filter(pl.col("kind") == "state_total")["constraint_id"].to_list())
+    )
+    assert {identifier.split("|")[0] for identifier in touching} == {"parent_margin"}
+    per_row = (
+        coupled.filter(pl.col("constraint_id").is_in(touching))
+        .with_columns(
+            pl.col("cell_id").str.split("|").list.get(1).alias("state"),
+            pl.col("cell_id").str.split("|").list.get(2).alias("month"),
+        )
+        .group_by("constraint_id")
+        .agg(
+            pl.len().alias("cells"),
+            pl.col("kind").sort().str.join(",").alias("kinds"),
+            pl.col("state").n_unique().alias("states"),
+            pl.col("month").n_unique().alias("months"),
+        )
+    )
+    assert per_row.filter(
+        (pl.col("cells") != 2) | (pl.col("states") != 1) | (pl.col("months") != 1)
+    ).is_empty()
+    assert set(per_row["kinds"].to_list()) == {"state_parent,state_total"}
 
+    parents = built.cells.filter(_KIND == "state_parent")
     membership = graph.component_membership(built)
     state_cells = built.cells.filter(_KIND == "state_total").select("cell_id")
     state_components = membership.join(state_cells, on="cell_id", how="semi").join(
         result.components.select("component_id", "cell_count"), on="component_id", how="left"
     )
     assert state_components.height == state_cells.height
-    assert set(state_components["cell_count"].to_list()) == {1}
-    assert result.components.filter(pl.col("cell_count") == 1).height == state_cells.height
+    assert set(state_components["cell_count"].to_list()) == {1, 2}
+    assert state_components.filter(pl.col("cell_count") == 2).height == parents.height
+    assert parents.height == len(touching)
+    assert (
+        result.components.filter(pl.col("cell_count") == 1).height
+        == state_cells.height - parents.height
+    )
 
 
 def test_each_size_margin_month_is_one_component_holding_that_month_s_national_cells(
     solved,
 ) -> None:
-    """`rows.size_margin_rows` writes one equality per March, the only coupling row this stage builds.
+    """`rows.size_margin_rows` writes one equality per March, the only row coupling national cells.
 
-    So the coupled components are exactly the national cells partitioned by reference month: one
-    component per month, no month split across two, and the coupling rows named for those months.
+    So the national cells are partitioned by reference month: one component per month, no month
+    split across two, nothing but that month's national cells inside it, and the coupling rows named
+    for those months. Since `D-111` a second coupling row exists -- `parent_margin`, which fuses a
+    suppressed state cell with its own `state_parent` cell and never a national one, as
+    `test_the_only_rows_coupling_a_state_cell_are_parent_margins_within_one_state_month` pins -- so
+    the national family is named POSITIVELY here. Selected as every cell that is not `state_total`,
+    it silently took in the new `state_parent` kind and counted each month's parent components as
+    national ones. Every other coupled component holds a `state_parent` cell, and the two families
+    never share a component.
     """
     built, result, _ = solved
     membership = graph.component_membership(built)
     national = (
-        built.cells.filter(_KIND != "state_total")
+        built.cells.filter(_KIND.is_in(["national_total", "national_size"]))
         .select("cell_id", "reference_month")
         .join(membership, on="cell_id", how="left")
     )
@@ -580,12 +640,26 @@ def test_each_size_margin_month_is_one_component_holding_that_month_s_national_c
     ) == {1}
 
     coupled = result.components.filter(pl.col("cell_count") > 1)
-    assert set(coupled["component_id"]) == set(national["component_id"])
-    assert coupled.height == len(months)
-    assert set(_coupling_rows(built)["constraint_id"]) == {f"size_margin|{m}" for m in months}
+    national_components = set(national["component_id"])
+    parent_components = set(
+        membership.join(
+            built.cells.filter(_KIND == "state_parent").select("cell_id"), on="cell_id", how="semi"
+        )["component_id"]
+    )
+    assert len(national_components) == len(months)
+    assert national_components.isdisjoint(parent_components)
+    assert set(coupled["component_id"]) == national_components | parent_components
+    margins = {
+        identifier
+        for identifier in _coupling_rows(built)["constraint_id"].to_list()
+        if not identifier.startswith("parent_margin|")
+    }
+    assert margins == {f"size_margin|{m}" for m in months}
 
-    sized = coupled.select("component_id", "cell_count").join(
-        national.group_by("component_id").len(), on="component_id", how="left"
+    sized = (
+        coupled.filter(pl.col("component_id").is_in(sorted(national_components)))
+        .select("component_id", "cell_count")
+        .join(national.group_by("component_id").len(), on="component_id", how="left")
     )
     assert sized.filter(pl.col("cell_count") != pl.col("len")).height == 0
 

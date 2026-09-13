@@ -4,9 +4,9 @@ The frozen input behind `tests/integration/test_national_size_margin_golden.py`.
 gitignored in its entirety, so the tables the D1 build stages cannot serve as a golden's input
 where they sit: a golden is only as frozen as what it reads, and a test comparing a hand-derived
 oracle against `data/staged/` is pinned to whatever that machine last rebuilt from live BLS
-bytes. These four parquet files are that input, tracked.
+bytes. These five parquet files are that input, tracked.
 
-Four tables, because `HarmonizedData.load` expects all four. Two carry rows; two carry schema
+Five tables, because `HarmonizedData.load` expects all five. Two carry rows; three carry schema
 only.
 
 | File | Rows | Contents |
@@ -15,6 +15,7 @@ only.
 | `qcew_monthly.parquet` | 401 | 8 national all-sizes March rows + 393 state March rows |
 | `cbp_state_size.parquet` | 0 | schema only |
 | `bridge.parquet` | 0 | schema only |
+| `qcew_state_parent.parquet` | 0 | schema only |
 
 Byte sizes are deliberately not recorded, and neither is a hash of any file: parquet bytes depend
 on the polars version that wrote them, so a hash here would go red on a dependency bump while the

@@ -253,3 +253,18 @@ def test_release_status_distinguishes_preliminary_from_final() -> None:
     # SRC-QCEW-005: a final national control may not be combined with preliminary state values in
     # a hard equation. The column is what lets Stage 2 refuse that combination.
     assert "release_status" in final.columns
+
+
+def test_a_parent_slice_is_read_at_the_state_level_its_caller_names() -> None:
+    """R-PM-1: `113` is served at agglvl 55, so read at the default 58 its state rows are `other`."""
+    frame = _row(industry_code="113", agglvl_code="55")
+    kwargs = {
+        "snapshot_id": "snap",
+        "release_vintage": "2017Q1",
+        "release_status": "final",
+        "naics_vintage": "NAICS 2017",
+    }
+    assert set(qcew.parse_qcew_monthly(frame, **kwargs)["area_type"]) == {"other"}
+    assert set(qcew.parse_qcew_monthly(frame, **kwargs, state_agglvl="55")["area_type"]) == {
+        "state"
+    }

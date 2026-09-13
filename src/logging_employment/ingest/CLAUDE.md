@@ -1,7 +1,9 @@
 # `ingest/` — one module per source, plus the shared HTTP client
 
-Turns fetched bytes into the three source tables of §7.3 `qcew_monthly`, §7.4 `qcew_national_size`,
-§7.5 `cbp_state_size`. Nothing here decides *when* to fetch or *what* to write: `fetching.py`
+Turns fetched bytes into the source tables of §7.3 `qcew_monthly`, §7.4 `qcew_national_size` and
+§7.5 `cbp_state_size`, plus plan 15's `qcew_state_parent`: the private `113` state series, parsed by
+`qcew.parse_qcew_monthly` at the level `113` is served at (`state_agglvl=`, which `build.py` sets).
+Nothing here decides *when* to fetch or *what* to write: `fetching.py`
 drives acquisition, `build.py` drives parsing, both one level up. Spec obligations: §8.1
 `SRC-QCEW-001..007`, §8.2 `SRC-QSIZE-001..004`, §8.3 `SRC-CBP-001..005`, §18.3 fail-closed, and the
 §2.2 rows "Meaning of a QCEW zero", "QCEW size dimensionality", "CBP completeness and accuracy".
@@ -77,6 +79,7 @@ The two QCEW tables do not share a column vocabulary (`size_class` vs `size_code
 | QCEW size code with no published bounds | `UnknownSizeCodeError` | `qcew_size.py::_check_size_codes` |
 | state × industry × size rows present (§2.2 row 3 assumed absent) | `MissingCrossTabulationError` | `qcew_size.py::assert_no_state_industry_size` |
 | Census echoing a predicate column twice with disagreeing values | `SchemaMismatchError` | `cbp.py::_frame_from_rows` |
+| a stored metadata NAICS predicate that names no vintage (`NAICS<year>`) | `SchemaMismatchError` | `cbp.py::vintage_for_predicate` |
 | `disclosure_code == "-"` with `qtrly_estabs > 0` (breaks the true-zero premise) | `ValueError` | `qcew.py::_check_dash_rows_carry_no_establishments` |
 | bulk-zip industry substring does not narrow to one member (`11331` hits `111331 Apple orchards`) | `ValueError` | `qcew.py::read_bulk_zip` |
 | by-size zip does not hold exactly one CSV; boundary probe served no year | `ValueError` | `qcew_size.py::read_by_size_zip`, `qcew.py::probe_slice_boundary` |
@@ -99,9 +102,11 @@ not a fetch performed for this file.
   Two source-scanning tests enforce it: `"2014" not in qcew.py`, `"NAICS2022" not in cbp.py`.
 - `qcew_size` reuses `qcew.BULK_TO_SLICE_COLUMNS` / `BULK_ONLY_TITLE_COLUMNS`: the by-size file
   speaks the *bulk* vocabulary (`qtrly_estabs_count`), not the slice one.
-- CBP writes a second file per year, `{year}_variables.json` (`cbp.METADATA_SUFFIX`), with **no**
-  `source_snapshot` row (`fetching.py::fetch_source`) — invisible to the manifest, and skipped by name in the
-  glob path via `cbp.is_metadata_path`.
+- CBP writes a second file per year, `{year}_variables.json` (`cbp.METADATA_SUFFIX`), and since
+  2026-09-12 records a `source_snapshot` row for it like every other `put` (`D-097`). Both
+  `build.snapshot_paths` branches skip it by name via `cbp.is_metadata_path`, and
+  `build.predicate_from_stored_metadata` reads the manifest's copy, refusing more than one stored
+  copy when no manifest names one. A manifest written before that date has no metadata rows.
 
 ## Commands
 

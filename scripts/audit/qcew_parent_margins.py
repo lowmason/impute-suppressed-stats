@@ -3,7 +3,7 @@
 # dependencies = ["httpx>=0.27", "polars>=1.0"]
 # ///
 """Measure whether any §9.3 parent-industry or ownership margin identifies a suppressed private
-113310 state cell on D1 (R-S5G-5)."""
+113310 state cell on D1 (R-S5G-5), and whether 113 - 1131 - 1132 reconstructs one (R-PM-5)."""
 
 from __future__ import annotations
 
@@ -28,11 +28,13 @@ def identification(row: Mapping[str, bool]) -> str:
     measured against the official structure files), so a disclosed private parent at either level
     is the suppressed value itself and not a bound on it.
 
-    `113` is DIFFERENT and is deliberately not in the exact branch. Forestry and Logging aggregates
-    `1131`, `1132` and `1133`, so a disclosed `113` plus nonnegativity of the two siblings gives
-    `113310 <= 113`. That is §9.3's parent-total constraint doing real work -- today every
-    suppressed state cell is `[0, +inf)` -- but it is a bound, and recording it as exact would put
-    a modelled cell into the release path §14.4 guards.
+    `113` ALONE is deliberately not in the exact branch. Forestry and Logging aggregates `1131`,
+    `1132` and `1133`, so a disclosed `113` plus nonnegativity of the two siblings gives
+    `113310 <= 113`. That is §9.3's parent-total constraint doing real work, but it is a bound, and
+    recording it as exact would put a modelled cell into the release path §14.4 guards. `113` WITH
+    BOTH SIBLINGS published is exact (R-PM-5): `113 - 1131 - 1132 = 1133`, which the chain above
+    makes the suppressed value. One sibling leaves the other unknown, which tightens the bound
+    without closing it.
 
     Ownership splits the same way. `own_code 0` is Total Covered over the ownerships present, which
     Stage 0 measured as `3` (Local Government) and `5` (Private) for this industry. With the
@@ -40,6 +42,12 @@ def identification(row: Mapping[str, bool]) -> str:
     sibling is only known to be nonnegative and the total is an upper bound.
     """
     if row["parent_1133_disclosed"] or row["parent_11331_disclosed"]:
+        return EXACT
+    if (
+        row["parent_113_disclosed"]
+        and row["sibling_1131_disclosed"]
+        and row["sibling_1132_disclosed"]
+    ):
         return EXACT
     if row["ownership_total_disclosed"] and row["ownership_siblings_disclosed"]:
         return EXACT
@@ -50,7 +58,11 @@ def identification(row: Mapping[str, bool]) -> str:
 
 SOURCE = "qcew_parent_margins"
 SLICE_URL = "https://data.bls.gov/cew/data/api/{year}/{qtr}/industry/{industry}.csv"
-INDUSTRIES = ("113310", "113", "1133", "11331")
+INDUSTRIES = ("113310", "113", "1133", "11331", "1131", "1132")
+# R-PM-5's two siblings: `113 - 1131 - 1132 = 1133`. Walked and judged exactly like the parents, so
+# a sibling the route does not serve is a measured absence (`fetched: false`), never a silent zero.
+SIBLINGS = ("1131", "1132")
+Key = tuple[str, str, str]
 YEARS = range(2017, 2025)
 QUARTERS = (1, 2, 3, 4)
 PRIVATE, LOCAL_GOVERNMENT, TOTAL_COVERED = "5", "3", "0"
@@ -98,6 +110,46 @@ def disclosed_keys(rows: pl.DataFrame, own_code: str) -> set[tuple[str, str, str
     """
     published = rows.filter((pl.col("own_code") == own_code) & (pl.col("disclosure_code") != "N"))
     return set(zip(*published.select("area_fips", "year", "qtr").to_dict().values(), strict=True))
+
+
+def present_keys(rows: pl.DataFrame, own_code: str) -> set[Key]:
+    """`(area_fips, year, qtr)` for every row at one ownership, whatever its disclosure code.
+
+    The complement `sibling_exact` needs: a key missing from this set is a state-quarter the slice
+    publishes NO row for, which is a different fact from a row coded `N`.
+    """
+    at_ownership = rows.filter(pl.col("own_code") == own_code).select("area_fips", "year", "qtr")
+    return set(zip(*at_ownership.to_dict().values(), strict=True))
+
+
+def sibling_exact(
+    parent: set[Key],
+    siblings: Mapping[str, set[Key]],
+    present: Mapping[str, set[Key]],
+    *,
+    absent_is_zero: bool,
+) -> set[Key]:
+    """The quarters where `113 - 1131 - 1132` publishes `113310` exactly (R-PM-5).
+
+    `parent` holds the keys where `113` is published, `siblings[i]` those where sibling `i` is, and
+    `present[i]` those where sibling `i` has a row at all. Under the ladder's own reading a sibling
+    is known only when it is PUBLISHED. `absent_is_zero` adds the sensitivity reading: a
+    state-quarter with no sibling row has no sibling establishments and so no sibling employment.
+    It is reported beside the strict count and never folded into `identification`, because a
+    missing row is an inference and a published zero is a fact, and R-PM-4's ruling must not turn
+    on which of the two a reader prefers.
+
+    `present` carries only the siblings the route served. A sibling it never served has no row to
+    be absent from, so neither reading makes it known: an unfetched `1132` would otherwise read as
+    zero on every quarter and turn the sensitivity count into the whole bounded set.
+    """
+    exact = set(parent)
+    for industry, published in siblings.items():
+        known = set(published)
+        if absent_is_zero and industry in present:
+            known |= {key for key in parent if key not in present[industry]}
+        exact &= known
+    return exact
 
 
 def fetch_slice(client: httpx.Client, url: str) -> bytes | None:
@@ -159,7 +211,7 @@ def fetch_verdict(outcomes: Mapping[str, Mapping[str, int]], expected: int) -> N
 
 
 def main() -> None:
-    """Fetch the four industries across D1 and count who identifies whom."""
+    """Fetch the six industries across D1 and count who identifies whom."""
     frames: dict[str, list[pl.DataFrame]] = {industry: [] for industry in INDUSTRIES}
     outcomes = {i: {"ok": 0, "not_found": 0, "unparseable": 0} for i in INDUSTRIES}
     extracts: list[c.ExtractRecord] = []
@@ -223,6 +275,28 @@ def main() -> None:
             "disclosed_where_child_suppressed": len(disclosed[industry] & suppressed),
         }
 
+    # R-PM-5. Only a quarter a published `113` already bounds can be made exact by its siblings, so
+    # every sibling count is taken over those quarters.
+    bounded = disclosed["113"] & suppressed
+    siblings: dict[str, dict[str, object]] = {}
+    sibling_published: dict[str, set[Key]] = {}
+    sibling_present: dict[str, set[Key]] = {}
+    for industry in SIBLINGS:
+        if industry not in stacked:
+            siblings[industry] = {"fetched": False, "outcomes": outcomes[industry]}
+            sibling_published[industry] = set()
+            continue
+        rows = state_rows(stacked[industry], industry)
+        sibling_published[industry] = disclosed_keys(rows, PRIVATE)
+        sibling_present[industry] = present_keys(rows, PRIVATE)
+        siblings[industry] = {
+            "fetched": True,
+            "agglvl_codes_present": sorted(set(rows["agglvl_code"].to_list())),
+            "state_quarter_rows_private": rows.filter(pl.col("own_code") == PRIVATE).height,
+            "disclosed_private": len(sibling_published[industry]),
+            "disclosed_where_113_bounds": len(sibling_published[industry] & bounded),
+        }
+
     total_own = disclosed_keys(child, TOTAL_COVERED)
     sibling_own = disclosed_keys(child, LOCAL_GOVERNMENT)
 
@@ -234,6 +308,8 @@ def main() -> None:
                     "parent_113_disclosed": key in disclosed["113"],
                     "parent_1133_disclosed": key in disclosed["1133"],
                     "parent_11331_disclosed": key in disclosed["11331"],
+                    "sibling_1131_disclosed": key in sibling_published["1131"],
+                    "sibling_1132_disclosed": key in sibling_published["1132"],
                     "ownership_total_disclosed": key in total_own,
                     "ownership_siblings_disclosed": key in sibling_own,
                 }
@@ -265,6 +341,18 @@ def main() -> None:
                 ),
             },
             "parents": parents,
+            "siblings": {
+                "industries": siblings,
+                "exact_where_child_suppressed": len(
+                    sibling_exact(bounded, sibling_published, sibling_present, absent_is_zero=False)
+                ),
+                "exact_where_child_suppressed_if_absent_is_zero": len(
+                    sibling_exact(bounded, sibling_published, sibling_present, absent_is_zero=True)
+                ),
+                "a_sibling_published_where_113_bounds": len(
+                    (sibling_published["1131"] | sibling_published["1132"]) & bounded
+                ),
+            },
             "total_ownership_113310": {
                 "fetched": True,
                 # A MEASURED ABSENCE is the result. `own_code 0` missing here is an answer to

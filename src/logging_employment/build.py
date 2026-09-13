@@ -9,9 +9,10 @@ from pathlib import Path
 import polars as pl
 
 from .config import Config
-from .errors import AmbiguousSnapshotError, UnknownDisclosureRegimeError
+from .constants import QCEW_PARENT_INDUSTRY, QCEW_PARENT_STATE_AGGLVL
+from .errors import AmbiguousSnapshotError, ConceptViolationError, UnknownDisclosureRegimeError
 from .harmonize import bridge, disclosure
-from .harmonize.naics import vintage_for_year
+from .harmonize.naics import assert_113310_survives_the_window, vintage_for_year
 from .ingest import cbp, qcew, qcew_size
 
 BUILDER_VERSION = "build_harmonized/1"
@@ -76,18 +77,56 @@ def deterministic_order(frame: pl.DataFrame) -> pl.DataFrame:
     return frame.sort(by=natural + [c for c in frame.columns if c not in natural])
 
 
-def predicate_from_stored_metadata(cbp_raw_dir: Path, year: int) -> str:
+def _manifest_paths(manifest_path: Path, source_id: str) -> list[Path]:
+    """Every `raw_path` the run manifest records for one source."""
+    frame = pl.read_parquet(manifest_path).filter(pl.col("source_id") == source_id)
+    return [Path(p) for p in frame["raw_path"].to_list()]
+
+
+def _is_cbp_metadata(source_id: str, path: Path) -> bool:
+    """Whether a stored file is CBP variables metadata, which is never a data snapshot."""
+    return source_id == "cbp" and cbp.is_metadata_path(path)
+
+
+def predicate_from_stored_metadata(
+    cbp_raw_dir: Path, year: int, *, manifest_path: Path | None = None
+) -> str:
     """The NAICS predicate for one reference year, read from that year's stored metadata.
 
     A literal here would contradict Task 11's own test: the predicate name is a property of the
-    vintage CBP serves, not of the reference year's NAICS vintage, and Stage 0 measured the two
-    disagreeing for 2022 and 2023.
+    vintage CBP serves, not of QCEW's reference-year vintage rule, and the two disagree for 2022
+    and 2023, where CBP still serves `NAICS2017`.
+
+    ONE COPY, CHOSEN THE WAY `snapshot_paths` CHOOSES A DATA FILE (D-097). The predicate decides
+    which rows Census returns, and CBP's bytes are not reproducible, so the store can hold two
+    copies of one year's metadata. The manifest's copy wins when the manifest lists one. Otherwise
+    more than one stored copy halts, where this used to take the lowest sha256 silently.
     """
-    candidates = sorted(cbp_raw_dir.rglob(f"*{year}{cbp.METADATA_SUFFIX}"))
+    name = cbp.metadata_filename(year)
+    listed: list[Path] = []
+    if manifest_path is not None and manifest_path.exists():
+        listed = [p for p in _manifest_paths(manifest_path, "cbp") if p.name == name]
+    if listed:
+        missing = sorted(str(p) for p in listed if not p.exists())
+        if missing:
+            raise FileNotFoundError(
+                f"{manifest_path} lists CBP {year} metadata absent from the store, {missing[0]}; "
+                "fetch again or build without a manifest"
+            )
+        candidates = sorted(listed)
+    else:
+        candidates = sorted(cbp_raw_dir.rglob(name))
     if not candidates:
         raise FileNotFoundError(
             f"no stored variables.json for CBP {year}; fetch stores it beside the data file so the "
             "offline rebuild can discover the predicate the same way the online fetch did"
+        )
+    if len(candidates) > 1:
+        raise AmbiguousSnapshotError(
+            f"CBP {year} has {len(candidates)} stored copies of {name}: "
+            f"{[str(p) for p in candidates]}. The predicate each carries decides which rows Census "
+            "returns, so none is picked by sort order. Build with the run manifest, which records "
+            "the copy the run used."
         )
     return cbp.discover_naics_predicate(json.loads(candidates[0].read_text()))
 
@@ -113,13 +152,16 @@ def snapshot_paths(
     each snapshot that belongs to the run, which is what makes "the bytes this run was built from"
     a recoverable fact rather than a guess. Without it, an ambiguous store halts rather than
     picking a copy by sort order.
+
+    CBP METADATA IS NEVER A DATA SNAPSHOT, IN EITHER BRANCH. `fetch` records `{year}_variables.json`
+    in the manifest as well as storing it (D-097), so the manifest branch applies the same name
+    filter as the glob branch. `predicate_from_stored_metadata` is the one reader of those files.
     """
     if manifest_path is not None and manifest_path.exists():
         listed = [
-            Path(p)
-            for p in pl.read_parquet(manifest_path)
-            .filter(pl.col("source_id") == source_id)["raw_path"]
-            .to_list()
+            path
+            for path in _manifest_paths(manifest_path, source_id)
+            if not _is_cbp_metadata(source_id, path)
         ]
         if listed:
             missing = sorted(str(p) for p in listed if not p.exists())
@@ -131,9 +173,7 @@ def snapshot_paths(
             return sorted(listed)
 
     candidates = [
-        p
-        for p in (raw_root / source_id).rglob(pattern)
-        if not (source_id == "cbp" and cbp.is_metadata_path(p))
+        p for p in (raw_root / source_id).rglob(pattern) if not _is_cbp_metadata(source_id, p)
     ]
     by_key: dict[str, list[Path]] = {}
     for path in candidates:
@@ -148,6 +188,39 @@ def snapshot_paths(
             "which snapshot the run used."
         )
     return [by_key[k][0] for k in sorted(by_key)]
+
+
+def state_parent_rows(
+    raw: bytes, *, snapshot_id: str, release_status: str, naics_vintage: str
+) -> pl.DataFrame:
+    """The private `113` state rows of one stored parent slice (R-PM-1).
+
+    Parsed at `QCEW_PARENT_STATE_AGGLVL`, universe-filtered exactly as the `113310` table is
+    (REQ-002), then kept to state rows of the parent industry: the slice also carries national, MSA
+    and county rows, none of which bounds a state cell. AN EMPTY RESULT HALTS. The level is a
+    measurement, not a documented constant, and a changed level would otherwise build a table with
+    no rows -- a margin that silently vanished rather than one measured absent.
+    """
+    parsed = qcew.apply_universe_filter(
+        qcew.parse_qcew_monthly(
+            qcew.read_slice_csv(raw),
+            snapshot_id=snapshot_id,
+            release_vintage=snapshot_id,
+            release_status=release_status,
+            naics_vintage=naics_vintage,
+            state_agglvl=QCEW_PARENT_STATE_AGGLVL,
+        )
+    )
+    rows = parsed.filter(
+        (pl.col("area_type") == "state") & (pl.col("industry_code") == QCEW_PARENT_INDUSTRY)
+    )
+    if rows.is_empty():
+        raise ConceptViolationError(
+            f"{snapshot_id}: the stored parent slice carries no private {QCEW_PARENT_INDUSTRY} "
+            f"state row at agglvl {QCEW_PARENT_STATE_AGGLVL}; the level is measured, not "
+            "documented, so a changed one halts rather than building an empty parent table (R-PM-1)"
+        )
+    return rows
 
 
 def build_harmonized(
@@ -165,7 +238,22 @@ def build_harmonized(
     """
     if allow_network:
         raise ValueError("build_harmonized never fetches; use `fetch` to acquire bytes first")
+    # §3.1: "The ETL MUST verify the 113310 mapping mechanically." Checked before the first table
+    # is written, so a re-vendored crosswalk that no longer carries 113310 unchanged across the
+    # window's two vintages halts the build, not only the unit test that exercises the guard
+    # (D-102).
+    assert_113310_survives_the_window()
     hashes: dict[str, str] = {}
+    # Resolved BEFORE the first table is written. A raw store without the parent series would
+    # otherwise leave a partial staged layer behind -- one whose digests re-id a run from inputs no
+    # build ever completed.
+    parent_paths = snapshot_paths("qcew_parent", raw_root, "*.csv", manifest_path=manifest_path)
+    if not parent_paths:
+        raise FileNotFoundError(
+            f"no stored qcew_parent slice under {raw_root / 'qcew_parent'}; the §9.3 parent margin "
+            "needs the private 113 state series -- run `logging-estimates fetch --source "
+            "qcew_parent` first"
+        )
 
     # REQ-002 binds the pipeline, not the parser: `parse_qcew_monthly` returns whatever rows it
     # is given, which is right for a parser, so the universe filter is applied here -- on the
@@ -185,6 +273,20 @@ def build_harmonized(
     hashes["qcew_monthly"] = write_parquet_deterministic(
         pl.concat(qcew_frames), out_root / "qcew_monthly.parquet"
     )
+    hashes["qcew_state_parent"] = write_parquet_deterministic(
+        pl.concat(
+            [
+                state_parent_rows(
+                    path.read_bytes(),
+                    snapshot_id=path.stem,
+                    release_status=cfg.sources.qcew.release_status,
+                    naics_vintage=vintage_for_year(int(path.stem[:4])),
+                )
+                for path in parent_paths
+            ]
+        ),
+        out_root / "qcew_state_parent.parquet",
+    )
 
     size_frames = [
         qcew_size.parse_qcew_national_size(
@@ -202,7 +304,8 @@ def build_harmonized(
     cbp_frames = []
     # Metadata is skipped by name, not by luck: `fetch` writes `{year}_variables.json` into this
     # same tree, it matches `*.json`, and its stem's first four characters are the same reference
-    # year as the data file's.
+    # year as the data file's. Both `snapshot_paths` branches skip it, because the manifest records
+    # the metadata retrieval too (D-097).
     for path in snapshot_paths("cbp", raw_root, "*.json", manifest_path=manifest_path):
         year = int(path.stem[:4])
         regime = disclosure.regime_for_year(
@@ -214,13 +317,22 @@ def build_harmonized(
                 "no source establishes, whatever the config's fail_on_unknown flag permits a "
                 "report to say (SRC-CBP-003)"
             )
+        predicate = predicate_from_stored_metadata(
+            raw_root / "cbp", year, manifest_path=manifest_path
+        )
         cbp_frames.append(
             cbp.parse_cbp_state_size(
                 json.loads(path.read_text()),
                 snapshot_id=path.stem,
                 reference_year=year,
-                predicate=predicate_from_stored_metadata(raw_root / "cbp", year),
-                naics_vintage=vintage_for_year(year),
+                predicate=predicate,
+                # READ OFF CBP'S OWN METADATA (D-114), not `vintage_for_year`, which is BLS's rule
+                # for QCEW. The stored metadata serves `NAICS2017`, labelled "2017 NAICS code", for
+                # every window year, so that rule stamped the 2022 and 2023 rows with a vintage
+                # their own source contradicts. Nothing reads the column -- every CBP consumer keys
+                # on `reference_year` -- which is why the correction waited for a rebuild that
+                # re-ids the run anyway (plan 15).
+                naics_vintage=cbp.vintage_for_predicate(predicate),
                 regime=regime,
             )
         )

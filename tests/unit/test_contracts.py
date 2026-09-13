@@ -139,17 +139,38 @@ def test_an_assumed_threshold_is_an_evidence_kind_so_it_can_be_refused_by_name()
     assert contracts.RELATIONS == ("eq", "le", "ge", "range", "integrality")
 
 
-def test_harmonized_data_loads_the_four_stage_one_tables(tmp_path) -> None:
+def test_harmonized_data_loads_the_five_stage_one_tables(tmp_path) -> None:
     for name, schema in (
         ("qcew_monthly", {"reference_month": pl.String}),
         ("qcew_national_size", {"reference_year": pl.Int64}),
         ("cbp_state_size", {"reference_year": pl.Int64}),
         ("bridge", {"bridge_id": pl.String}),
+        ("qcew_state_parent", {"reference_month": pl.String}),
     ):
         pl.DataFrame(schema=schema).write_parquet(tmp_path / f"{name}.parquet")
     data = contracts.HarmonizedData.load(tmp_path)
     assert data.qcew_monthly.height == 0
     assert data.bridge.columns == ["bridge_id"]
+    assert data.qcew_state_parent.columns == ["reference_month"]
+
+
+def test_a_staged_layer_without_the_parent_table_halts_by_path(tmp_path) -> None:
+    """R-PM-1: an old four-table layer must not load as a layer with no parent margin."""
+    for name in ("qcew_monthly", "qcew_national_size", "cbp_state_size", "bridge"):
+        pl.DataFrame({"x": [1]}).write_parquet(tmp_path / f"{name}.parquet")
+    with pytest.raises(FileNotFoundError, match="qcew_state_parent.parquet"):
+        contracts.HarmonizedData.load(tmp_path)
+
+
+def test_a_directly_built_layer_carries_an_empty_parent_table_in_the_monthly_schema() -> None:
+    data = contracts.HarmonizedData(
+        qcew_monthly=pl.DataFrame(),
+        qcew_national_size=pl.DataFrame(),
+        cbp_state_size=pl.DataFrame(),
+        bridge=pl.DataFrame(),
+    )
+    assert data.qcew_state_parent.height == 0
+    assert data.qcew_state_parent.schema == pl.Schema(contracts.QCEW_MONTHLY_SCHEMA)
 
 
 def test_a_missing_harmonized_table_names_the_path_rather_than_raising_from_polars(

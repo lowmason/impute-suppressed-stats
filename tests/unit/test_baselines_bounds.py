@@ -1,15 +1,17 @@
-"""INV-002's per-cell half on the baseline production path (R-S5P-3).
+"""INV-002's per-cell half on the baseline production path (R-S5P-3, then D-111).
 
 The adding-up half has been enforced since Stage 3. The bounds half was not: nothing in
 `baselines/` read `deterministic_bounds`, so an estimate above a solved upper bound shipped as
-`anchored_and_reconciled`. On D1 that is harmless -- ALL 1,227 suppressed state cells are
-`unbounded` with a null `selected_upper`, so no bound can bind -- and the two halves are exactly
-that pair: the first cell that CAN violate must halt the run, and the D1 shape must be
-bit-for-bit unchanged.
+`anchored_and_reconciled`. Since `D-111` a published private `113` parent bounds most suppressed
+state cells above, and §12.2's unbounded allocation sits above that parent on almost every month,
+so the runner no longer HALTS on a binding bound: it reallocates by §12.3's bounded proportional
+scaling. What still halts is a month whose bounds cannot hold its residual, and a value that escapes
+its interval after scaling.
 
-No `data/` is touched. The runner is driven on `harmonized_toy`, whose 2023-01 missing set is the
-single state '04' against a residual of 50, so the allocated estimate is 50.0 for every estimator
-and one finite upper of 10.0 is enough to fire.
+No `data/` is touched. The runner is driven on `harmonized_toy`. Its 2023-01 missing set is the
+single state '04' against a residual of 50, so one finite upper of 10.0 cannot be scaled into; its
+2023-02 missing set is '04' and '06' against 80, split 20/60 by establishments, so a cap of 50 on
+'06' binds and '04' takes the remainder.
 """
 
 from __future__ import annotations
@@ -19,12 +21,17 @@ import pytest
 from polars.testing import assert_frame_equal
 
 from logging_employment.baselines.runner import (
+    REGISTRY,
     assert_within_bounds,
     run_baselines,
     state_total_bounds,
 )
 from logging_employment.contracts import DETERMINISTIC_BOUNDS_SCHEMA
-from logging_employment.errors import BoundViolationError, ConceptViolationError
+from logging_employment.errors import (
+    BoundViolationError,
+    ConceptViolationError,
+    InfeasibleResidualError,
+)
 from logging_employment.reconcile.scaling import Bounds
 
 TOY_CELL = "state_total|04|2023-01|5|113310|NAICS 2022|ALL"
@@ -74,36 +81,95 @@ def _january_cell(results: pl.DataFrame) -> str:
     return str(january["cell_id"].to_list()[0])
 
 
-def test_an_estimate_above_its_solved_upper_bound_halts_the_run(
+def test_a_bound_its_months_residual_cannot_fit_under_halts_the_run(
     harmonized_toy, appendix_a_config
 ) -> None:
-    """INV-002 admits no per-month refusal, so this raises rather than writing a decline row."""
+    """January's only missing cell is capped at 10 against a residual of 50: §12.3 refuses.
+
+    Scaling cannot help a month whose uppers sum below its residual, and §12.3 forbids approximating
+    that away, so this still HALTS -- as `InfeasibleResidualError`, not as a decline row.
+    """
     unchecked, _ = run_baselines(harmonized_toy, appendix_a_config)
     target = _january_cell(unchecked)
     bounds = Bounds(
         lower=dict.fromkeys(_cell_ids(unchecked), 0.0),
         upper={cell: (10.0 if cell == target else None) for cell in _cell_ids(unchecked)},
     )
-    with pytest.raises(BoundViolationError) as excinfo:
+    with pytest.raises(InfeasibleResidualError, match="fall below residual"):
         run_baselines(harmonized_toy, appendix_a_config, bounds=bounds)
-    message = str(excinfo.value)
-    assert target in message
-    assert "estimate=50.0" in message
-    assert "[0.0, 10.0]" in message
+
+
+def test_an_estimate_above_its_upper_bound_is_scaled_into_it_rather_than_halting(
+    harmonized_toy, appendix_a_config
+) -> None:
+    """§12.3: February's residual of 80 splits 20/60 by establishments; capped at 50, '06' takes 50.
+
+    The cap binds, so the scaling factor rises until the uncapped cell absorbs the rest: '04' goes
+    from 20 to 30, the month still sums to its residual, and the integer release honours the cap.
+    """
+    proportional = [e for e in REGISTRY if e.estimator_id == "establishment_proportional"]
+    unchecked, _ = run_baselines(harmonized_toy, appendix_a_config, estimators=proportional)
+    february = unchecked.filter(pl.col("reference_month") == "2023-02")
+    before = dict(zip(february["state_fips"], february["estimate"], strict=True))
+    assert before == pytest.approx({"04": 20.0, "06": 60.0})
+    capped = february.filter(pl.col("state_fips") == "06")["cell_id"].item()
+    bounds = Bounds(
+        lower=dict.fromkeys(_cell_ids(unchecked), 0.0),
+        upper={cell: (50.0 if cell == capped else None) for cell in _cell_ids(unchecked)},
+    )
+    checked, _ = run_baselines(
+        harmonized_toy, appendix_a_config, estimators=proportional, bounds=bounds
+    )
+    after = checked.filter(pl.col("reference_month") == "2023-02")
+    estimates = dict(zip(after["state_fips"], after["estimate"], strict=True))
+    assert estimates == pytest.approx({"04": 30.0, "06": 50.0})
+    integers = dict(zip(after["state_fips"], after["estimate_integer"], strict=True))
+    assert integers == {"04": 30, "06": 50}
+
+
+def test_an_upper_a_solver_tolerance_below_an_integer_still_admits_that_integer(
+    harmonized_toy, appendix_a_config
+) -> None:
+    """HiGHS reports an integer bound only to within `feasibility_tolerance`: 49.99999995 is 50.
+
+    `integer_bounds` cuts the release with that tolerance, so '06' may carry 50. The integer check
+    must admit what that cut admits, or a bound the solver could not tell from 50 halts the run.
+    """
+    proportional = [e for e in REGISTRY if e.estimator_id == "establishment_proportional"]
+    unchecked, _ = run_baselines(harmonized_toy, appendix_a_config, estimators=proportional)
+    february = unchecked.filter(pl.col("reference_month") == "2023-02")
+    capped = february.filter(pl.col("state_fips") == "06")["cell_id"].item()
+    bounds = Bounds(
+        lower=dict.fromkeys(_cell_ids(unchecked), 0.0),
+        upper={cell: (50.0 - 5e-8 if cell == capped else None) for cell in _cell_ids(unchecked)},
+    )
+    checked, _ = run_baselines(
+        harmonized_toy, appendix_a_config, estimators=proportional, bounds=bounds
+    )
+    after = checked.filter(pl.col("reference_month") == "2023-02")
+    integers = dict(zip(after["state_fips"], after["estimate_integer"], strict=True))
+    assert integers == {"04": 30, "06": 50}
+
+
+def test_a_month_whose_allocation_sits_inside_every_bound_is_left_bit_identical(
+    harmonized_toy, appendix_a_config
+) -> None:
+    """§12.2's fast path survives: a finite upper that does not bind moves nothing, not one bit."""
+    unchecked, unchecked_audit = run_baselines(harmonized_toy, appendix_a_config)
+    bounds = Bounds(
+        lower=dict.fromkeys(_cell_ids(unchecked), 0.0),
+        upper=dict.fromkeys(_cell_ids(unchecked), 1_000_000.0),
+    )
+    checked, checked_audit = run_baselines(harmonized_toy, appendix_a_config, bounds=bounds)
+    assert_frame_equal(checked, unchecked)
+    assert_frame_equal(checked_audit, unchecked_audit)
 
 
 def test_the_d1_shape_of_every_upper_null_changes_nothing(
     harmonized_toy, appendix_a_config
 ) -> None:
-    """All 1,227 suppressed state cells are `unbounded` on D1, so the gate must be a no-op there.
-
-    The denominator matters and an earlier draft got it wrong. 1,241 is D1's count of UNKNOWN
-    cells across BOTH kinds -- 1,227 `state_total` plus 14 `national_size` -- so "1,227 of 1,241
-    suppressed state cells" implied 14 suppressed state cells with a finite upper, which would
-    mean a bound COULD bind and contradicts the very point being made. Measured from
-    `runs/f03023ac9f3a/deterministic_bounds.parquet`: 4,716 `state_total|` rows, of which exactly
-    1,227 are `unbounded` and 1,227 have a null `selected_upper`.
-    """
+    """A cell with no finite upper -- every suppressed state cell before `D-111`, and every one
+    without a published private `113` parent after it -- must leave the run bit-identical."""
     unchecked, unchecked_audit = run_baselines(harmonized_toy, appendix_a_config)
     bounds = Bounds(
         lower=dict.fromkeys(_cell_ids(unchecked), 0.0),

@@ -12,6 +12,7 @@ from pathlib import Path
 import polars as pl
 
 from .config import SECRET_ENV_VARS, Config, credentials
+from .constants import QCEW_PARENT_INDUSTRY
 from .contracts import (
     CBP_STATE_SIZE_SCHEMA,
     QCEW_MONTHLY_SCHEMA,
@@ -25,7 +26,7 @@ from .ingest import cbp, qcew, qcew_size
 from .ingest.base import FetchedBytes, HttpFetcher
 from .store import RawStore, snapshot_row
 
-KNOWN_SOURCES = ("qcew", "qcew_size", "cbp")
+KNOWN_SOURCES = ("qcew", "qcew_parent", "qcew_size", "cbp")
 
 # (source_id, reference year) pairs whose publisher genuinely serves nothing, each carrying the
 # measurement that established it. A pair listed here is allowed to answer non-200 or empty; every
@@ -79,7 +80,7 @@ def _usable(fetched: FetchedBytes, *, source_id: str, year: int, reference: str)
 def merge_source_manifest(rows: Sequence[dict[str, object]], path: Path, source_id: str) -> str:
     """Fold one source's snapshot rows into the run manifest, replacing that source's rows.
 
-    `fetch` runs once per source, and all three invocations name the same artifact. Writing each
+    `fetch` runs once per source, and every invocation names the same artifact. Writing each
     one straight out would leave the manifest describing whichever source ran last, so a reader
     asking where `qcew_monthly.parquet` came from would find only CBP. Rows for the source being
     fetched are replaced rather than appended, so re-fetching one source refreshes its provenance
@@ -138,41 +139,53 @@ def fetch_source(
     """
     if source not in KNOWN_SOURCES:
         raise ValueError(f"unknown source {source!r}; known: {KNOWN_SOURCES}")
+    window_years = list(
+        years or range(int(cfg.project.start_month[:4]), int(cfg.project.end_month[:4]) + 1)
+    )
+    # Refuse an unsupported year BEFORE any side effect (D-081). Every arm below stamps
+    # `vintage_for_year(year)` inside `snapshot_row`, after `store.put` has written the bytes, so a
+    # pre-2017 `start_month` used to leave one blob in the immutable store and raise before
+    # `merge_source_manifest` recorded anything: an orphan that every manifest-less build then
+    # globs. Checked here, the refusal costs a message instead.
+    for year in window_years:
+        vintage_for_year(year)
     creds = credentials(env_path)
     contact = creds.get("BLS_CONTACT_EMAIL") or os.environ.get("BLS_CONTACT_EMAIL", "")
     secrets = [creds.get(name) for name in SECRET_ENV_VARS]
     store = RawStore(Path(raw_root or cfg.storage.raw_uri))
     fetcher = HttpFetcher(contact_email=contact)
-    window_years = list(
-        years or range(int(cfg.project.start_month[:4]), int(cfg.project.end_month[:4]) + 1)
-    )
     rows: list[dict[str, object]] = []
     try:
-        if source == "qcew":
+        if source in ("qcew", "qcew_parent"):
+            # ONE CLIENT, TWO SERIES (R-PM-1). The private `113` state series is the same QCEW
+            # product on the same route as `113310`, so it reuses the boundary probe and
+            # `qcew.fetch_slice` rather than a second client; only the industry and the store it
+            # lands in differ. The boundary is probed for the industry being fetched, because a
+            # route property measured for one industry is not a measurement for another (§5.4).
+            # `release_status` is QCEW's own key: the parent is that product, over that window.
+            industry = cfg.project.industry_code_used if source == "qcew" else QCEW_PARENT_INDUSTRY
             boundary = qcew.probe_slice_boundary(
                 fetcher,
-                cfg.project.industry_code_used,
+                industry,
                 range(min(window_years) - 5, min(window_years) + 1),
             )
             for year in window_years:
                 for quarter in list(quarters or (1, 2, 3, 4)):
                     route = qcew.route_for_year(year, boundary)
                     if route == "slice":
-                        fetched = qcew.fetch_slice(
-                            fetcher, year, quarter, cfg.project.industry_code_used
-                        )
+                        fetched = qcew.fetch_slice(fetcher, year, quarter, industry)
                         name = f"{year}q{quarter}.csv"
                     else:
                         fetched = fetcher.get(qcew.bulk_url(year))
                         name = f"{year}_qtrly_by_industry.zip"
                     if not _usable(
-                        fetched, source_id="qcew", year=year, reference=f"{year}q{quarter}"
+                        fetched, source_id=source, year=year, reference=f"{year}q{quarter}"
                     ):
                         continue
-                    stored = store.put("qcew", fetched, name)
+                    stored = store.put(source, fetched, name)
                     rows.append(
                         snapshot_row(
-                            source_id="qcew",
+                            source_id=source,
                             fetched=fetched,
                             stored=stored,
                             reference_start=f"{year}-{(quarter - 1) * 3 + 1:02d}",
@@ -181,7 +194,7 @@ def fetch_source(
                             naics_vintage=vintage_for_year(year),
                             schema_fingerprint=schema_fingerprint(QCEW_MONTHLY_SCHEMA),
                             parser_version=qcew.PARSER_VERSION,
-                            source_publication_date="",
+                            source_publication_date=fetched.last_modified,
                             secrets=secrets,
                         )
                     )
@@ -204,7 +217,7 @@ def fetch_source(
                         naics_vintage=vintage_for_year(year),
                         schema_fingerprint=schema_fingerprint(QCEW_NATIONAL_SIZE_SCHEMA),
                         parser_version=qcew_size.PARSER_VERSION,
-                        source_publication_date="",
+                        source_publication_date=fetched.last_modified,
                         secrets=secrets,
                     )
                 )
@@ -217,9 +230,31 @@ def fetch_source(
                 ):
                     continue
                 # Stored beside the data response, under the name `build` looks for, so the
-                # offline rebuild discovers the predicate exactly as this fetch did.
-                store.put("cbp", variables, cbp.metadata_filename(year))
+                # offline rebuild discovers the predicate exactly as this fetch did. It gets a
+                # snapshot row like every other `put` here (D-097): its predicate decides which rows
+                # Census returns, so the manifest must say which copy a run read, and
+                # `build.predicate_from_stored_metadata` reads that row. No schema of its own
+                # exists, so it is recorded against the table and parser it feeds.
+                stored_variables = store.put("cbp", variables, cbp.metadata_filename(year))
                 predicate = cbp.discover_naics_predicate(json.loads(variables.content))
+                # Both CBP rows record the vintage CBP's own predicate names (D-114), for the reason
+                # `build.build_harmonized` gives at its stamp; QCEW's year rule does not apply here.
+                vintage = cbp.vintage_for_predicate(predicate)
+                rows.append(
+                    snapshot_row(
+                        source_id="cbp",
+                        fetched=variables,
+                        stored=stored_variables,
+                        reference_start=f"{year}-03",
+                        reference_end=f"{year}-03",
+                        release_status="final",
+                        naics_vintage=vintage,
+                        schema_fingerprint=schema_fingerprint(CBP_STATE_SIZE_SCHEMA),
+                        parser_version=cbp.PARSER_VERSION,
+                        source_publication_date=variables.last_modified,
+                        secrets=secrets,
+                    )
+                )
                 query = cbp.build_query(year, predicate, cfg.project.industry_code_used)
                 fetched = fetcher.get(cbp.CBP_URL.format(year=year), params={**query, "key": key})
                 if not _usable(fetched, source_id="cbp", year=year, reference=f"{year} data"):
@@ -233,10 +268,10 @@ def fetch_source(
                         reference_start=f"{year}-03",
                         reference_end=f"{year}-03",
                         release_status="final",
-                        naics_vintage=vintage_for_year(year),
+                        naics_vintage=vintage,
                         schema_fingerprint=schema_fingerprint(CBP_STATE_SIZE_SCHEMA),
                         parser_version=cbp.PARSER_VERSION,
-                        source_publication_date="",
+                        source_publication_date=fetched.last_modified,
                         secrets=secrets,
                     )
                 )

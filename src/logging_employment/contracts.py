@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import polars as pl
@@ -55,6 +55,12 @@ SOURCE_SNAPSHOT_SCHEMA: dict[str, pl.DataType] = {
     "request_url_or_file": pl.String,
     "request_parameters_json": pl.String,
     "retrieved_at_utc": pl.String,
+    # §7.2's `source_publication_date` holds the response's `Last-Modified` header, verbatim, and
+    # is null when the server sent none (D-100). It is the server's modification time, not a
+    # release calendar. Probed 2026-09-12: data.bls.gov answered 2018-08-28 for the 2017q1 slice
+    # and 2025-09-02 for the 2024q4 slice; Census answered 2026-07-27 for the 2023 CBP data query
+    # and sent no header for that year's `variables.json`. An empty string marks a row written
+    # before 2026-09-12, when every producer site wrote "" here.
     "source_publication_date": pl.String,
     "reference_start": pl.String,
     "reference_end": pl.String,
@@ -229,8 +235,9 @@ DECLINE_KINDS: tuple[str, ...] = ("by_design", "data_gap", "reconciliation_failu
 def assert_declared_provenance(frame: pl.DataFrame) -> None:
     """Refuse a provenance value outside its declared tuple.
 
-    The six tuples this checks (`RECONCILIATION_STATUSES`, `WEIGHT_BASES`, `ANCHOR_BASES`,
-    `DECLINE_KINDS`, `SUPPRESSION_TYPES`, `STRATUM_KINDS`) are the closed sets a baseline row's provenance may draw from, but
+    The seven tuples this checks (`RECONCILIATION_STATUSES`, `WEIGHT_BASES`, `ANCHOR_BASES`,
+    `DECLINE_KINDS`, `SUPPRESSION_TYPES`, `STRATUM_KINDS`, `MASK_ARMS`) are the closed sets a
+    baseline row's provenance may draw from, but
     `BASELINE_RESULT_SCHEMA` checks dtypes only -- `pl.String` accepts any string. `weight_basis`
     is the live exposure: `run_baselines` copies it from an estimator's own `outcome.basis`, so a
     third-party estimator's typo reached `baseline_results.parquet` and passed every test. Nulls
@@ -248,6 +255,10 @@ def assert_declared_provenance(frame: pl.DataFrame) -> None:
         # enforced by nothing at runtime, and a second declared-but-unenforced set is what this
         # avoids.
         ("stratum_kind", STRATUM_KINDS),
+        # D-082. Since plan 12 `mask_arm` is PRODUCED from `MaskTarget.arm` rather than written as
+        # a literal at the emit sites, so its value comes from data. Both harness calls pass a
+        # frame that carries it: the scored frame and the assembled metrics.
+        ("mask_arm", MASK_ARMS),
     ):
         if column not in frame.columns:
             continue
@@ -700,7 +711,18 @@ def assert_required_columns_present(frame: pl.DataFrame, name: str) -> None:
         )
 
 
-_HARMONIZED_TABLES = ("qcew_monthly", "qcew_national_size", "cbp_state_size", "bridge")
+_HARMONIZED_TABLES = (
+    "qcew_monthly",
+    "qcew_national_size",
+    "cbp_state_size",
+    "bridge",
+    "qcew_state_parent",
+)
+
+
+def _no_state_parent() -> pl.DataFrame:
+    """The parent table a directly built `HarmonizedData` carries when its caller supplies none."""
+    return pl.DataFrame(schema=QCEW_MONTHLY_SCHEMA)
 
 
 @dataclass(frozen=True)
@@ -710,16 +732,26 @@ class HarmonizedData:
     Every downstream stage reads only this layer, never a source endpoint. Loading is eager and
     fails on the first missing file rather than deferring to a Polars error at first use, so a run
     started before `build-harmonized` halts with the path it wanted.
+
+    `qcew_state_parent` is the private `113` state series (`specs/completed/stage5-parent-margin.md` R-PM-1),
+    in `QCEW_MONTHLY_SCHEMA` because it is the same QCEW product through the same parser. It is a
+    TABLE OF ITS OWN rather than extra rows in `qcew_monthly` because two consumers select a cell
+    from that table by `(state_fips, reference_month)` alone -- `validate/mask.apply_mask` and
+    `validate/leakage.assert_no_retained_truth` -- and a parent row shares both keys with its
+    child. It defaults to an EMPTY frame only for a directly constructed instance, which is how
+    every fixture-built test predates it; `load` still requires the file, so a staged layer
+    without it halts rather than silently building no parent margin.
     """
 
     qcew_monthly: pl.DataFrame
     qcew_national_size: pl.DataFrame
     cbp_state_size: pl.DataFrame
     bridge: pl.DataFrame
+    qcew_state_parent: pl.DataFrame = field(default_factory=_no_state_parent)
 
     @classmethod
     def load(cls, staged_root: Path) -> HarmonizedData:
-        """Read the four Stage 1 tables from a `data/staged`-shaped directory."""
+        """Read the five Stage 1 tables from a `data/staged`-shaped directory."""
         frames = {}
         for name in _HARMONIZED_TABLES:
             path = staged_root / f"{name}.parquet"

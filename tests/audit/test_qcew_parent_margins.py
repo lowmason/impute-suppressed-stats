@@ -21,13 +21,15 @@ NOTHING = {
     "parent_113_disclosed": False,
     "parent_1133_disclosed": False,
     "parent_11331_disclosed": False,
+    "sibling_1131_disclosed": False,
+    "sibling_1132_disclosed": False,
     "ownership_total_disclosed": False,
     "ownership_siblings_disclosed": False,
 }
 
 
 def test_no_disclosed_margin_is_the_status_quo():
-    """Today's measured state: every one of the 1,227 suppressed cells is `[0, +inf)`."""
+    """Nothing published identifies nothing: the ladder's floor is NONE."""
     assert m.identification(NOTHING) == m.NONE
 
 
@@ -52,6 +54,62 @@ def test_exact_outranks_a_bound_when_both_are_available():
     """The strongest margin wins: a cell with both is a REQ-027 case, not a bounded one."""
     both = {**NOTHING, "parent_113_disclosed": True, "parent_1133_disclosed": True}
     assert m.identification(both) == m.EXACT
+
+
+def test_a_disclosed_113_with_both_siblings_disclosed_is_exact():
+    """R-PM-5: `113 - 1131 - 1132 = 1133`, and `1133 -> 11331 -> 113310` is single-child."""
+    row = {
+        **NOTHING,
+        "parent_113_disclosed": True,
+        "sibling_1131_disclosed": True,
+        "sibling_1132_disclosed": True,
+    }
+    assert m.identification(row) == m.EXACT
+
+
+@pytest.mark.parametrize("sibling", ["sibling_1131_disclosed", "sibling_1132_disclosed"])
+def test_one_disclosed_sibling_under_a_disclosed_113_still_only_bounds(sibling):
+    """The other sibling stays unknown and nonnegative: a tighter bound, never an exact value."""
+    assert (
+        m.identification({**NOTHING, "parent_113_disclosed": True, sibling: True}) == m.UPPER_BOUND
+    )
+
+
+def test_disclosed_siblings_without_their_parent_identify_nothing():
+    row = {**NOTHING, "sibling_1131_disclosed": True, "sibling_1132_disclosed": True}
+    assert m.identification(row) == m.NONE
+
+
+ALABAMA = ("01000", "2019", "1")
+OREGON = ("41000", "2019", "1")
+WASHINGTON = ("53000", "2019", "1")
+
+
+def test_sibling_exact_needs_the_parent_and_both_siblings_published():
+    exact = m.sibling_exact(
+        {ALABAMA, OREGON},
+        {"1131": {ALABAMA, OREGON}, "1132": {ALABAMA}},
+        {"1131": {ALABAMA, OREGON}, "1132": {ALABAMA, OREGON}},
+        absent_is_zero=False,
+    )
+    assert exact == {ALABAMA}
+
+
+def test_an_absent_sibling_row_counts_as_zero_only_under_the_sensitivity_reading():
+    """No row at all means no establishments; a row coded `N` is a suppression, never a zero."""
+    parent = {OREGON, WASHINGTON}
+    siblings = {"1131": {OREGON, WASHINGTON}, "1132": set()}
+    present = {"1131": {OREGON, WASHINGTON}, "1132": {OREGON}}
+    assert m.sibling_exact(parent, siblings, present, absent_is_zero=False) == set()
+    assert m.sibling_exact(parent, siblings, present, absent_is_zero=True) == {WASHINGTON}
+
+
+def test_a_sibling_the_route_never_served_is_never_read_as_zero():
+    """An unserved sibling has no `present` entry: no row to be absent from, so never a zero."""
+    parent = {OREGON}
+    siblings = {"1131": {OREGON}, "1132": set()}
+    present = {"1131": {OREGON}}
+    assert m.sibling_exact(parent, siblings, present, absent_is_zero=True) == set()
 
 
 EXPECTED = 32

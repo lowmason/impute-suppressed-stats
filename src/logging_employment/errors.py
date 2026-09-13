@@ -151,3 +151,14 @@ class BoundViolationError(LoggingEmploymentError):
     considered opinion. §18.3's "fail rather than guess" governs, and R-S5P-3 says so in words:
     "a violation MUST raise a named error from the `LoggingEmploymentError` hierarchy".
     """
+
+
+class ConstraintDataError(LoggingEmploymentError):
+    """A known value lies outside the deterministic bounds solved for its cell (§13.5).
+
+    §13.5: "A known pseudo-hidden truth outside the deterministic bounds is a constraint-data bug
+    until proven otherwise." A RAISE, because the harness would otherwise score estimates against a
+    constraint system that provably excludes the value being scored, and every bound metric it
+    emitted would describe a system that is wrong about the data. Distinct from
+    `BoundViolationError`, which is an ESTIMATE outside its interval; this is the TRUTH outside it.
+    """

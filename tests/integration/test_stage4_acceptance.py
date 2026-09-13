@@ -8,6 +8,7 @@ from pathlib import Path
 
 import polars as pl
 import pytest
+from tests.conftest import STAGED, requires_staged
 
 from logging_employment import contracts
 from logging_employment.baselines.runner import REGISTRY
@@ -18,12 +19,13 @@ from logging_employment.contracts import (
     HarmonizedData,
     validate_frame,
 )
+from logging_employment.reconcile.scaling import Bounds
 from logging_employment.runs import run_id
+from logging_employment.validate import harness
 from logging_employment.validate.harness import run_pseudo_suppression
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURE = REPO / "tests" / "fixtures" / "baselines"
-STAGED = REPO / "data" / "staged"
 
 
 def _fixture_config() -> Config:
@@ -71,10 +73,7 @@ def test_only_the_truncating_regime_records_origins(fixture_run):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(
-    not (STAGED / "qcew_monthly.parquet").exists(),
-    reason="data/staged is gitignored; the seven D1 origins need the rebuilt tables",
-)
+@requires_staged
 def test_the_guard_is_binding_on_the_d1_panel():
     """The fixture makes the guard vacuous, so the binding case is witnessed separately.
 
@@ -216,20 +215,21 @@ def test_an_empty_run_reads_as_nothing_scored_rather_than_a_schema_failure():
     assert len(result.manifest["regimes"]) == 13
 
 
-@pytest.mark.skipif(
-    not (STAGED / "qcew_monthly.parquet").exists(),
-    reason="data/staged is gitignored; the run id is a function of the input digests",
-)
-def test_the_shipped_config_still_resolves_to_the_stage_4_acceptance_run():
-    """V1: the sharpest single check that no config field was added or removed.
+@requires_staged
+def test_the_shipped_config_resolves_to_the_parent_margin_comparand_run():
+    """V1: the sharpest single check that no config field and no staged input changed unnoticed.
 
     `run_id` hashes `resolved_dict(cfg)` — the whole pydantic model — and the input digests. This
     cannot use the `staged_repo` fixture: that rewrites every `storage.*_uri` into a tmp path and
     copies the smaller fixture parquets, so both halves of the payload differ by construction. It
     needs the real `config.yaml` and the real staged layer.
+
+    MOVED ONCE, deliberately, by plan 15 Task 4: the fifth staged table (`qcew_state_parent`) and
+    `D-114`'s rewrite of `cbp_state_size.parquet` re-id every run. The previous pin, `f03023ac9f3a`,
+    is Stage 4's acceptance run; it stays on disk as the comparand plan 15 Task 9 measures against.
     """
     cfg = load_config(REPO / "config.yaml")
-    assert run_id(cfg, _input_digests(cfg)) == "f03023ac9f3a"
+    assert run_id(cfg, _input_digests(cfg)) == "4cf47a918dd8"
 
 
 def test_no_scoring_regime_gained_or_lost_a_score(fixture_run):
@@ -295,3 +295,39 @@ def test_exactly_four_regimes_carry_a_changed_reason(fixture_run):
         "structural_break",
         "naics_transition",
     }
+
+
+def test_the_harness_hands_the_baselines_the_masked_bounds_it_solved(monkeypatch):
+    """D-087: every scoring call to `run_baselines` carries the MASKED system's bounds.
+
+    A bound-blind harness would score estimates production rescales before release, and bounds
+    solved from the unmasked layer would leak the answer: there every pseudo-masked cell is still
+    observed, pinned to its published value. This fixture layer carries no parent margin, so each
+    cell the mask hid must reach `run_baselines` unbounded above.
+    """
+    seen: list[tuple[HarmonizedData, object]] = []
+    real = harness.run_baselines
+
+    def spy(data, config, **kwargs):
+        seen.append((data, kwargs.get("bounds")))
+        return real(data, config, **kwargs)
+
+    monkeypatch.setattr(harness, "run_baselines", spy)
+    layer = HarmonizedData.load(FIXTURE)
+    run_pseudo_suppression(layer, REGISTRY[:1], _fixture_config())
+    assert seen
+
+    state = pl.col("area_type") == "state"
+    key = ["state_fips", "reference_month"]
+    visible = layer.qcew_monthly.filter(state & (pl.col("observation_status") != "suppressed"))
+    hidden_cells = 0
+    for masked, bounds in seen:
+        assert isinstance(bounds, Bounds) and bounds.lower
+        hidden = masked.qcew_monthly.filter(
+            state & (pl.col("observation_status") == "suppressed")
+        ).join(visible.select(key), on=key, how="semi")
+        for fips, month in hidden.select(key).iter_rows():
+            [cell] = [c for c in bounds.lower if c.startswith(f"state_total|{fips}|{month}|")]
+            assert bounds.upper[cell] is None
+            hidden_cells += 1
+    assert hidden_cells

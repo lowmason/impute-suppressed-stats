@@ -14,12 +14,14 @@ from typer.testing import CliRunner
 from logging_employment.cli import app
 from logging_employment.config import load_config
 from logging_employment.contracts import SOURCE_SNAPSHOT_SCHEMA, validate_frame
-from logging_employment.errors import SourceFetchError
+from logging_employment.errors import SourceFetchError, UnsupportedReferenceYearError
 from logging_employment.fetching import (
+    KNOWN_SOURCES,
     fetch_source,
     merge_source_manifest,
     write_source_manifest,
 )
+from logging_employment.registry.loader import load_registry
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -192,7 +194,10 @@ def test_the_cbp_branch_records_no_key_even_though_the_request_carries_one(
     assert rows
     blob = json.dumps(rows)
     assert "SECRET-CENSUS-KEY" not in blob
-    assert "key" not in json.loads(rows[0]["request_parameters_json"])
+    # Every row, not `rows[0]`: the metadata retrieval records a row too (D-097), it comes first,
+    # and it carries no parameters at all, so indexing the first row would test nothing.
+    for row in rows:
+        assert "key" not in json.loads(row["request_parameters_json"])
 
 
 def test_the_cbp_branch_stores_metadata_where_the_offline_build_looks_for_it(
@@ -388,7 +393,12 @@ def test_the_declared_cbp_2024_absence_still_completes(
     rows = fetch_source(
         "cbp", _cfg(), env_path=None, raw_root=tmp_path, output_root=tmp_path, years=[2023, 2024]
     )
-    assert [r["reference_start"] for r in rows] == ["2023-03"]
+    # Two rows for the one published year, the variables metadata and the data response (D-097),
+    # and none for 2024.
+    assert sorted(Path(str(r["raw_path"])).name for r in rows) == [
+        "2023.json",
+        "2023_variables.json",
+    ]
     assert (tmp_path / "source_manifest.parquet").exists()
 
 
@@ -424,3 +434,165 @@ def test_a_cbp_data_leg_that_fails_after_its_metadata_succeeded_halts(
             "cbp", _cfg(), env_path=None, raw_root=tmp_path, output_root=tmp_path, years=[2023]
         )
     assert not (tmp_path / "source_manifest.parquet").exists()
+
+
+@pytest.mark.parametrize("source", ["qcew", "qcew_parent", "qcew_size", "cbp"])
+def test_a_pre_2017_window_is_refused_before_anything_is_requested_or_stored(
+    source: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-081. `vintage_for_year` refuses a year below 2017, but every source arm called it inside
+    `snapshot_row`, after `store.put`. A pre-2017 `start_month` therefore wrote one blob into the
+    immutable store and raised before `merge_source_manifest`, leaving an orphan that a later
+    manifest-less `build-harmonized` globs. The window must be refused before a request is made or
+    the store is opened."""
+    requested: list[str] = []
+    census = _cbp_handler(set())
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(str(request.url))
+        if request.url.host == "api.census.gov":
+            return census(request)
+        return httpx.Response(200, content=SLICE)
+
+    _mock_transport(monkeypatch, handler)
+    monkeypatch.setenv("CENSUS_API_KEY", "SECRET-CENSUS-KEY")
+    cfg = _cfg()
+    early = cfg.model_copy(
+        update={"project": cfg.project.model_copy(update={"start_month": "2016-01"})}
+    )
+    with pytest.raises(UnsupportedReferenceYearError, match="2016"):
+        fetch_source(
+            source, early, env_path=None, raw_root=tmp_path / "raw", output_root=tmp_path / "runs"
+        )
+    assert requested == []
+    assert not (tmp_path / "raw").exists()
+    assert not (tmp_path / "runs" / "source_manifest.parquet").exists()
+
+
+def _dated_handler(stamp: str | None):
+    """Serve every source's fixture bytes, with `Last-Modified: stamp` on each response or none."""
+    census = _cbp_handler(set())
+    headers = {} if stamp is None else {"Last-Modified": stamp}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.census.gov":
+            served = census(request)
+            return httpx.Response(served.status_code, content=served.content, headers=headers)
+        return httpx.Response(200, content=SLICE, headers=headers)
+
+    return handler
+
+
+def _fetch_one_period(source: str, tmp_path: Path) -> list[dict[str, object]]:
+    year = 2023 if source == "cbp" else 2017
+    return fetch_source(
+        source,
+        _cfg(),
+        env_path=None,
+        raw_root=tmp_path,
+        output_root=tmp_path,
+        years=[year],
+        quarters=[1],
+    )
+
+
+@pytest.mark.parametrize("source", ["qcew", "qcew_parent", "qcew_size", "cbp"])
+def test_source_publication_date_carries_the_last_modified_header_verbatim(
+    source: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-100. All three producer sites wrote the literal "" into `source_publication_date`, so no
+    reader could tell "the source sent no date" from "nobody filled it in". The value is the
+    stamp data.bls.gov actually sent for the 2017q1 slice on 2026-09-12."""
+    stamp = "Tue, 28 Aug 2018 16:22:41 GMT"
+    _mock_transport(monkeypatch, _dated_handler(stamp))
+    monkeypatch.setenv("CENSUS_API_KEY", "SECRET-CENSUS-KEY")
+    rows = _fetch_one_period(source, tmp_path)
+    assert rows
+    assert {row["source_publication_date"] for row in rows} == {stamp}
+    manifest = pl.read_parquet(tmp_path / "source_manifest.parquet")
+    assert set(manifest["source_publication_date"].to_list()) == {stamp}
+
+
+@pytest.mark.parametrize("source", ["qcew", "qcew_parent", "qcew_size", "cbp"])
+def test_a_response_without_last_modified_records_null_rather_than_an_empty_string(
+    source: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-100. Census's `variables.json` sends no `Last-Modified` (probed 2026-09-12). Null says the
+    header was absent; the empty string now marks only rows written before this change."""
+    _mock_transport(monkeypatch, _dated_handler(None))
+    monkeypatch.setenv("CENSUS_API_KEY", "SECRET-CENSUS-KEY")
+    rows = _fetch_one_period(source, tmp_path)
+    assert rows
+    assert {row["source_publication_date"] for row in rows} == {None}
+    manifest = pl.read_parquet(tmp_path / "source_manifest.parquet")
+    assert manifest["source_publication_date"].to_list() == [None] * manifest.height
+
+
+def test_every_stored_cbp_object_has_a_snapshot_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-097. The CBP arm stored `{year}_variables.json` with no `snapshot_row`, while every other
+    `store.put` in `fetch_source` is paired with one: the live manifest carried 7 CBP rows against 14
+    stored objects. Derived from the store rather than typed, so a third unrecorded put fails too."""
+    _mock_transport(monkeypatch, _cbp_handler(set()))
+    monkeypatch.setenv("CENSUS_API_KEY", "SECRET-CENSUS-KEY")
+    fetch_source(
+        "cbp", _cfg(), env_path=None, raw_root=tmp_path, output_root=tmp_path, years=[2023]
+    )
+    stored = {p for p in (tmp_path / "cbp").rglob("*") if p.is_file()}
+    manifest = pl.read_parquet(tmp_path / "source_manifest.parquet")
+    assert {Path(p) for p in manifest["raw_path"].to_list()} == stored
+
+
+def _recording_slice_handler(seen: list[str]):
+    """Serve the 2017q1 slice for every request, recording each URL the fetch actually asked for."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(200, content=SLICE)
+
+    return handler
+
+
+def test_the_parent_source_fetches_the_113_slice_into_its_own_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R-PM-1: the private `113` series rides `ingest/qcew.py`'s slice route under its own source id.
+
+    Every request names `industry/113.csv` -- the boundary probe included, because a route property
+    measured for `113310` is not a measurement for `113` -- and nothing lands in `qcew`'s store.
+    """
+    seen: list[str] = []
+    _mock_transport(monkeypatch, _recording_slice_handler(seen))
+    rows = fetch_source(
+        "qcew_parent",
+        _cfg(),
+        env_path=None,
+        raw_root=tmp_path,
+        output_root=tmp_path,
+        years=[2017],
+        quarters=[1],
+    )
+    assert [row["source_id"] for row in rows] == ["qcew_parent"]
+    assert seen and all(url.endswith("/industry/113.csv") for url in seen)
+    assert len(list((tmp_path / "qcew_parent").rglob("2017q1.csv"))) == 1
+    assert not (tmp_path / "qcew").exists()
+    manifest = pl.read_parquet(tmp_path / "source_manifest.parquet")
+    assert manifest["source_id"].to_list() == ["qcew_parent"]
+
+
+def test_every_fetchable_source_has_a_registry_row() -> None:
+    """§7.1: a source the pipeline can fetch is a source the registry describes."""
+    registry = load_registry(REPO / "src" / "logging_employment" / "registry" / "sources.yaml")
+    assert set(KNOWN_SOURCES) <= {row.source_id for row in registry}
+
+
+def test_both_cbp_snapshot_rows_record_the_vintage_the_metadata_serves(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-114: the metadata row and the data row both stamp the vintage CBP's predicate names."""
+    _mock_transport(monkeypatch, _dated_handler(None))
+    monkeypatch.setenv("CENSUS_API_KEY", "SECRET-CENSUS-KEY")
+    rows = _fetch_one_period("cbp", tmp_path)
+    assert len(rows) == 2
+    assert {row["naics_vintage"] for row in rows} == {"NAICS 2017"}

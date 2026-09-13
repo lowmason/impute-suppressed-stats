@@ -79,8 +79,9 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
   `national_size` is declared in `contracts.MASK_ARMS` and implemented
   (`recover.mask_and_solve_size`, `mask.apply_size_mask`) but nothing scores it: the §10 baselines
   estimate state totals, not size classes. `scoreboard._best`'s two-arm refusal guards a future
-  wiring, not a live branch. NOTE `contracts.assert_declared_provenance` still does NOT check
-  `mask_arm` against `MASK_ARMS` — an open item in `specs/deferred_items.md`.
+  wiring, not a live branch. `contracts.assert_declared_provenance` checks `mask_arm` against
+  `MASK_ARMS` as of 2026-09-12 (`D-082`); before that an invented arm reached both validation
+  tables unrefused.
 - **A regime that scores nothing must say why.** Every manifest entry with `n_scored == 0` carries
   a `reason`, pinned by
   `test_d1_validation.py::test_no_regime_reports_zero_scores_without_saying_why`. The empty
@@ -136,15 +137,22 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
   `deterministic_bounds.parquet`** — that table still holds the published value for a cell this
   harness just hid. `MaskedSystem` is always a full rebuild, because `constraint_set_hash` is a
   stored field and `dataclasses.replace` would copy the unmasked hash onto a different system.
-  **Corollary, and why this package calls `run_baselines` WITHOUT bounds** (plan 13, R-S5P-3):
-  the production path checks every estimate against §9's interval and RAISES on a violation —
-  **nothing clips**, `assert_within_bounds` never modifies a value. Handing the harness the RUN
-  DIRECTORY's intervals would make the check's own verdict depend on the truth this harness hid,
-  which is a leak in the signal. Masked bounds would not leak and **already exist** —
-  `mask_and_solve` returns `MaskedSystem.bounds`, solved from the masked system, one line before
-  the `run_baselines` call. So the gap is not a missing input: it is that raising is the wrong
-  response on a SCORING path, where one estimator missing one interval would abort the whole run.
-  That ruling is `D-087`.
+  **Corollary, and why this package passes `run_baselines` the MASKED bounds** (`D-087`, ruled by
+  plan 15): the RUN DIRECTORY's intervals would make the estimates depend on the truth this harness
+  hid, so the harness passes `state_total_bounds(MaskedSystem.bounds)`, solved from the masked
+  system one line earlier. `run_baselines` scales an estimate a finite bound binds on back into it
+  (§12.3) exactly as production does, so an out-of-interval estimate never reaches a scored row.
+  `mask_and_solve` also HALTS on a withheld truth outside its masked bounds (§13.5,
+  `ConstraintDataError`) and returns `recoverable`, the targets it still pins exactly, which
+  `harness.reject_exactly_recoverable` drops from scoring and counts per regime (§13.2 step 6).
+  §13.5's bound metrics read the rows from BEFORE that rejection, so `exact_recovery_rate` counts
+  what step 6 removes. On the state arm exact recovery means a zero truth, and
+  `leakage.assert_no_retained_truth` refuses a zero truth first (`mask._hide` writes the literal
+  `"0"` a real `N` row publishes), so step 6 cannot fire there end to end (`D-118`).
+- **A masked cell's private `113` parent is hidden exactly when it holds no other establishments**
+  (`mask.parents_to_hide`, §13.2 step 4) and keeps its real visibility otherwise;
+  `leakage.assert_no_retained_truth` re-applies the rule to the masked layer. The docstring carries
+  the measurements and the rule's one-sided error: optimism on 34 of 409 real suppressions.
 - **The truth join is INNER**, so a scored row that was never masked is impossible by construction
   rather than by assertion.
 - **Eligibility is `area_type == 'state' & observed & qtrly_establishments > 0`.** Admitting a
@@ -163,9 +171,10 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
   at 1, 4 and 14 threads. rmse's root is `math.sqrt`, not `** 0.5` (libm `pow`). What stays
   PLATFORM-bound is CRPS (`np.dot`) and everything downstream of `constrained_regression` (BLAS,
   LAPACK, libm) — which is why the golden compares floats through `tests/golden_compare.py`.
-- **§13.5 numbers on `state_total` are vacuous by construction.** Every masked state cell is
-  `unbounded` with a null `selected_upper`, so `truth_in_bound_rate == 1.0` means "[0, +inf)
-  contains the truth". `bound_cells_finite_upper` rides on every row to separate the two.
+- **§13.5 numbers on `state_total` inform only where a parent stays visible.** Since plan 15 a
+  masked state cell whose private `113` parent stays public is bounded `[0, 113]`; every other masked
+  state cell is still `[0, +inf)`, where `truth_in_bound_rate == 1.0` means nothing.
+  `bound_cells_finite_upper` rides on every row to separate the two.
 - **Leave-one-out is by POSITION, not by value**, in `metrics.probabilistic_metrics`; and
   `propensity.target_propensity` accumulates sums, not moments, so a cell's own month can be
   subtracted back out. Both are §13.4 bullet 1 at two different layers.
@@ -244,6 +253,8 @@ uv run logging-estimates validate --config config.yaml [--estimators id,id]
   against the process CWD, so a real `validate` from the repo root writes into the checkout.
   Redirecting it to a temp dir *moves the run id* — derive the run path rather than typing it
   (`tests/integration/test_validate_cli.py::_metrics_path`).
-- The dated D1 numbers this package quotes (4,716 single-cell state components, 272/400 fully
-  observed state-years, the six never-observed FIPS, `runs/f03023ac9f3a`) live in the docstrings
-  and in `tests/unit/test_validate_regimes.py`. Recompute before citing one.
+- The dated D1 numbers this package quotes (4,716 state cells in single-cell components before
+  plan 15, 756 of which now share one with their `state_parent`; 272/400 fully observed
+  state-years; the six never-observed FIPS; `runs/f03023ac9f3a`, superseded as §13.10's comparand
+  by `runs/4cf47a918dd8`) live in the docstrings and in `tests/unit/test_validate_regimes.py`.
+  Recompute before citing one.

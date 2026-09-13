@@ -1,8 +1,8 @@
 """§17.3's seven reconciliation properties, and §17.1's rows 8-10 named explicitly.
 
 Properties 2, 3 and 5 use SYNTHETIC fixtures by necessity, not by convenience. On the D1 window
-`selected_upper` is null on 1,227 of 1,241 unknown cells, so a finite upper bound never binds and
-`sum U < R_t` never fires; and `target_cell` carries no state-by-size cell at all until Stage 6.
+a finite upper binds only through the §9.3 parent margin (plan 15), and `sum U < R_t` never fires
+because every month's missing set holds a cell no parent bounds; and `target_cell` carries no state-by-size cell at all until Stage 6.
 Drawing these properties' inputs from the real tables would produce three tests that pass without
 exercising the behaviour they are named for.
 
@@ -93,7 +93,7 @@ def test_property_1_no_bound_scaling_sums_exactly_to_the_residual() -> None:
 
 
 def test_property_2_bounded_scaling_respects_every_bound() -> None:
-    """SYNTHETIC finite uppers: on D1 every state cell is unbounded above."""
+    """SYNTHETIC finite uppers: on D1 only the 756 parent-bounded state cells carry one."""
     rng = np.random.default_rng(SEED + 1)
     for _ in range(TRIALS):
         cells = _cells(int(rng.integers(2, 10)))

@@ -66,8 +66,9 @@ def allocate(anchor: Anchor, weights: Weights) -> dict[str, float]:
     """§12.2: E_{s,t} = R_t * q_{s,t} / sum_{j in M_t} q_{j,t}.
 
     The required no-bound fast path, kept as its own code path rather than folded into §12.3's
-    bounded scaling. On the D1 window every state cell is unbounded above, so this path carries
-    the whole production load and deserves to be readable on its own.
+    bounded scaling. `baselines/runner.run_baselines` calls it first on every month and falls
+    through to `scale_into_bounds` only where this allocation leaves a finite interval (plan 15),
+    so it still carries most of the production load and deserves to be readable on its own.
 
     The domain check runs BEFORE the empty-missing-set shortcut, not after. Checking second would
     let a caller pass a populated weight vector against an empty missing set and receive `{}`

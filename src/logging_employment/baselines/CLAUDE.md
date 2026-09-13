@@ -66,18 +66,17 @@ model" structural rather than stated. `allocate.check_domain` (`reconcile/alloca
 any vector whose domain is not exactly `anchor.missing_cells`, or that is non-positive/non-finite,
 or that lacks a per-cell `basis`.
 
-**The runner enforces INV-002's per-cell half** (plan 13, R-S5P-3). `run_baselines` takes an
-optional keyword-only `bounds: Bounds | None`; `runner.state_total_bounds` turns §7.10's
-`deterministic_bounds` table into it and `runner.assert_within_bounds` raises
-`errors.BoundViolationError` for a released value outside its own `[L, U]` — a RAISE, not a
-`Decline` row, because unlike `WeightDomainError` this is not a data gap. Keyed by the seven-field
-`cell_id`, NOT `state_fips`: `scale_into_bounds` keys the same type by bare state, but that object
-is one month's feasible set while `run_baselines` walks the whole window in one call. Both the
-float and §12.6's integer release are checked, and a violation HALTS — nothing clips, so no
-estimate is ever silently moved into range. `cli.py` passes bounds; `validate/harness.py`
-deliberately does NOT, because halting is the wrong response on a scoring path and because the
-run directory's intervals were solved with the truth the harness hid still in the system (masked
-bounds do exist there — see `validate/CLAUDE.md` and `D-087`).
+**The runner enforces INV-002's per-cell half** (plan 13, R-S5P-3; reallocation since plan 15).
+`run_baselines` takes an optional keyword-only `bounds: Bounds | None`; `runner.state_total_bounds`
+turns §7.10's `deterministic_bounds` table into it, keyed by the seven-field `cell_id`, NOT
+`state_fips`, and `runner.month_bounds` projects one month's missing set onto the bare-state keys
+`scale_into_bounds` and `integerize` read. A month §12.2's `allocate` keeps inside every interval
+is left bit-identical; a month it does not is reallocated by §12.3's `scale_into_bounds`, and
+§12.6's integers are cut to the same bounds. Two raises remain: `InfeasibleResidualError` when a
+month's bounds cannot hold its residual, and `errors.BoundViolationError` if a value still escapes
+after scaling — a defect, never a `Decline` row. `cli.py` passes the run directory's bounds;
+`validate/harness.py` passes `MaskedSystem.bounds`, never the run directory's (`D-087`, see
+`validate/CLAUDE.md`).
 
 Consumers outside this package: `validate/harness.py` imports `Estimator` and
 `runner.{REGISTRY, run_baselines}`; `validate/scoreboard.py` imports

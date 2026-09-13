@@ -20,6 +20,7 @@ import polars as pl
 
 from ..contracts import HarmonizedData
 from ..errors import LeakageError
+from .mask import parents_to_hide
 
 # Columns that stay PUBLIC when a cell is suppressed, so a value of theirs equal to the withheld
 # employment is a coincidence rather than a retention. Excluded by name, and by name only, so that
@@ -85,6 +86,21 @@ def assert_no_retained_truth(masked: HarmonizedData, truth: pl.DataFrame) -> Non
                     f"{column} on {row['state_fips']}/{row['reference_month']} retains the "
                     f"held-out value {withheld}"
                 )
+    # §13.4 bullet 2 for the §9.3 parent: "overlapping margins must reflect the intended synthetic
+    # suppression pattern". A parent the mask's own rule hides equals the withheld value, so a
+    # masked layer still publishing one hands the truth back through a margin. Checked by
+    # re-applying `parents_to_hide` to the masked layer, not by comparing values: a public parent
+    # that merely coincides with a truth is not a leak. The guard shares the rule, so it catches a
+    # mask that skipped the rule, never a wrong rule; the rule's own tests pin that.
+    if not masked.qcew_state_parent.is_empty():
+        exposed = parents_to_hide(masked.qcew_state_parent, truth)
+        if exposed.height:
+            first = exposed.row(0, named=True)
+            raise LeakageError(
+                f"the private 113 parent on {first['state_fips']}/{first['reference_month']} is "
+                "still published although the masked cell holds all of its establishments, so it "
+                f"equals the held-out value ({exposed.height} such parent(s))"
+            )
 
 
 def assert_no_future_rows(frame: pl.DataFrame, *, origin: str) -> None:

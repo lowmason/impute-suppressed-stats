@@ -12,6 +12,7 @@ from pathlib import Path
 
 import polars as pl
 import pytest
+from tests.conftest import requires_staged
 
 from logging_employment.baselines.interfaces import FALLBACK, OWN
 from logging_employment.baselines.runner import preferred_estimator, run_baselines
@@ -19,15 +20,8 @@ from logging_employment.config import load_config
 from logging_employment.contracts import HarmonizedData
 
 REPO = Path(__file__).resolve().parents[2]
-STAGED = REPO / "data" / "staged"
 
-pytestmark = [
-    pytest.mark.slow,
-    pytest.mark.skipif(
-        not (STAGED / "qcew_monthly.parquet").exists(),
-        reason="data/staged is gitignored; the D1 acceptance run needs the rebuilt tables",
-    ),
-]
+pytestmark = [pytest.mark.slow, requires_staged]
 
 
 def _run():

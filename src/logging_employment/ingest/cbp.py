@@ -1,9 +1,10 @@
 """CBP ingestion: state x six-digit x establishment-size counts as March-centered measurements.
 
-`naics_vintage` is a caller-supplied stamp this module passes through untouched. Stage 0 measured
-CBP's NAICS *predicate* for every window year but recorded no per-year NAICS vintage, so nothing
-here derives one, and the value a caller passes is documented-not-measured until some later task
-measures it.
+`naics_vintage` is a caller-supplied stamp this module passes through untouched. Since `D-114`
+both callers derive it from CBP's own metadata through `vintage_for_predicate`, not from QCEW's
+reference-year rule, because the two disagree for two window years: measured 2026-09-12, every
+stored `{year}_variables.json` for 2017-2023 serves exactly one NAICS variable, `NAICS2017`,
+labelled "2017 NAICS code", including 2022 and 2023, which QCEW's rule stamps "NAICS 2022".
 """
 
 from __future__ import annotations
@@ -78,15 +79,39 @@ def discover_naics_predicate(variables_json: dict) -> str:
     """The NAICS predicate name this vintage actually serves.
 
     Read from fetched metadata, never computed from the reference year's NAICS vintage: Stage 0
-    measured `NAICS2017` for every year 2017-2023, including the years whose data carry the
-    NAICS 2022 vintage, so a name derived from the vintage would ask for a variable CBP does not
-    serve.
+    measured `NAICS2017` for every year 2017-2023, including 2022 and 2023, the years QCEW's vintage
+    rule places on NAICS 2022, so a name derived from that rule would ask for a 2022-vintage
+    variable CBP does not serve. The stored metadata labels the variable "2017 NAICS code" in every
+    one of those years (re-read 2026-09-12): it describes CBP's codes as 2017 codes, not only the
+    variable's name. This docstring used to say the 2022 and 2023 data carry the NAICS 2022 vintage,
+    an uncited premise the metadata contradicts (`D-098`).
     """
     names = [n for n in variables_json.get("variables", {}) if n.startswith("NAICS")]
     predicates = [n for n in names if not n.endswith("_LABEL")]
     if len(predicates) != 1:
         raise ValueError(f"expected exactly one NAICS predicate in the metadata, found {names}")
     return predicates[0]
+
+
+_PREDICATE_VINTAGE = re.compile(r"NAICS(\d{4})")
+
+
+def vintage_for_predicate(predicate: str) -> str:
+    """The NAICS vintage a CBP response is coded in, read off the predicate its metadata served.
+
+    CBP names its industry variable after the vintage it serves -- `NAICS2017` for every year
+    2017-2023, labelled "2017 NAICS code" in each year's stored metadata -- so the vintage is read
+    from that name, not computed from the reference year (`D-114`). `harmonize.naics.
+    vintage_for_year` is BLS's rule for QCEW; applied here it stamped CBP's 2022 and 2023 rows with
+    a vintage their own source contradicts. A predicate naming no four-digit year is refused rather
+    than guessed.
+    """
+    found = _PREDICATE_VINTAGE.fullmatch(predicate)
+    if found is None:
+        raise SchemaMismatchError(
+            f"CBP predicate {predicate!r} names no NAICS vintage; expected NAICS<year>"
+        )
+    return f"NAICS {found.group(1)}"
 
 
 def discover_empszes(empszes_json: dict, data_rows: list[list[str]]) -> dict[str, str]:

@@ -26,7 +26,13 @@ from logging_employment.runs import run_dir, run_id
 
 REPO = Path(__file__).resolve().parents[2]
 BASELINE_FIXTURES = REPO / "tests" / "fixtures" / "baselines"
-STAGED_TABLES = ("qcew_monthly", "qcew_national_size", "cbp_state_size", "bridge")
+STAGED_TABLES = (
+    "qcew_monthly",
+    "qcew_national_size",
+    "cbp_state_size",
+    "bridge",
+    "qcew_state_parent",
+)
 
 
 @dataclass(frozen=True)

@@ -61,7 +61,13 @@ from logging_employment.errors import ConceptViolationError
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURES = REPO / "tests" / "fixtures" / "national_size_margin"
-FIXTURE_TABLES = ("qcew_monthly", "qcew_national_size", "cbp_state_size", "bridge")
+FIXTURE_TABLES = (
+    "qcew_monthly",
+    "qcew_national_size",
+    "cbp_state_size",
+    "bridge",
+    "qcew_state_parent",
+)
 
 # The sharp bounds for all 14 suppressed national size cells of the D1 window, derived
 # analytically from the published margin and supports before this engine existed. Keys are
@@ -205,7 +211,7 @@ def test_the_fixture_carries_both_levels_so_the_alignment_gate_is_not_vacuous() 
 def test_the_golden_fixture_is_tracked_in_git_not_rebuilt_from_ignored_data() -> None:
     """The property that makes the golden above mean anything.
 
-    `data/` is gitignored. If these four tables were sliced out of it at test time, the golden
+    `data/` is gitignored. If these tables were sliced out of it at test time, the golden
     would be pinned to whatever that machine last rebuilt, and a fresh clone could not run this
     file at all.
 
