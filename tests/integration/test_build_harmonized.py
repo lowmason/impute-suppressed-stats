@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
@@ -271,3 +272,87 @@ def test_a_crosswalk_that_no_longer_pairs_113310_halts_the_build_before_writing(
     with pytest.raises(ValueError, match="one-to-one"):
         build_harmonized(_cfg(), raw_root=frozen_raw, out_root=out)
     assert not out.exists()
+
+
+def _cbp_manifest_row(raw_path: Path) -> dict[str, object]:
+    """One `source_snapshot` row naming `raw_path`; every other field is a placeholder."""
+    return {
+        "snapshot_id": raw_path.parent.name,
+        "source_id": "cbp",
+        "request_url_or_file": "u",
+        "request_parameters_json": "{}",
+        "retrieved_at_utc": "t",
+        "source_publication_date": None,
+        "reference_start": "2023-03",
+        "reference_end": "2023-03",
+        "release_status": "final",
+        "naics_vintage": "NAICS 2022",
+        "schema_fingerprint": "f" * 64,
+        "content_sha256": "a" * 64,
+        "byte_count": 1,
+        "http_status": 200,
+        "parser_version": "cbp_state_size/1",
+        "raw_path": str(raw_path),
+    }
+
+
+def _second_metadata_copy(frozen_raw: Path, directory: str) -> Path:
+    """A second stored `2023_variables.json` whose predicate differs, so a pick is observable."""
+    other = frozen_raw / "cbp" / directory
+    other.mkdir()
+    path = other / "2023_variables.json"
+    path.write_text(json.dumps({"variables": {"NAICS2012": {"label": "2012 NAICS code"}}}))
+    return path
+
+
+def test_manifest_listed_cbp_metadata_is_not_returned_as_a_data_snapshot(
+    frozen_raw: Path, tmp_path: Path
+) -> None:
+    """D-097. Once `fetch` records the metadata retrieval, the manifest lists both files for a CBP
+    year. The glob branch skips metadata by name, and the manifest branch must skip it too, or the
+    build parses `2023_variables.json` as a data response."""
+    from logging_employment.build import snapshot_paths
+    from logging_employment.fetching import write_source_manifest
+
+    data = frozen_raw / "cbp" / "frozen" / "2023.json"
+    metadata = frozen_raw / "cbp" / "frozen" / "2023_variables.json"
+    manifest = tmp_path / "source_manifest.parquet"
+    write_source_manifest([_cbp_manifest_row(data), _cbp_manifest_row(metadata)], manifest)
+    assert snapshot_paths("cbp", frozen_raw, "*.json", manifest_path=manifest) == [data]
+
+
+def test_two_stored_copies_of_one_years_metadata_halt_rather_than_picking_by_sort_order(
+    frozen_raw: Path, tmp_path: Path
+) -> None:
+    """D-097. `snapshot_paths` refuses a data key with two stored copies, and the predicate read
+    took `sorted(...)[0]` of the same shape. The predicate decides which rows Census returns."""
+    from logging_employment.build import predicate_from_stored_metadata
+    from logging_employment.errors import AmbiguousSnapshotError
+
+    _second_metadata_copy(frozen_raw, "aaa-other-hash")
+    with pytest.raises(AmbiguousSnapshotError, match="2023_variables.json"):
+        predicate_from_stored_metadata(frozen_raw / "cbp", 2023)
+
+
+def test_the_run_manifest_names_which_metadata_copy_the_build_reads(
+    frozen_raw: Path, tmp_path: Path
+) -> None:
+    """D-097, end to end. The decoy sorts first and names another predicate, so the old
+    sort-order pick would read it; the manifest names the fixture's copy, and the build must read
+    that one and complete."""
+    from logging_employment.build import predicate_from_stored_metadata
+    from logging_employment.fetching import write_source_manifest
+
+    _second_metadata_copy(frozen_raw, "aaa-other-hash")
+    chosen = frozen_raw / "cbp" / "frozen" / "2023_variables.json"
+    data = frozen_raw / "cbp" / "frozen" / "2023.json"
+    manifest = tmp_path / "source_manifest.parquet"
+    write_source_manifest([_cbp_manifest_row(data), _cbp_manifest_row(chosen)], manifest)
+    assert (
+        predicate_from_stored_metadata(frozen_raw / "cbp", 2023, manifest_path=manifest)
+        == "NAICS2017"
+    )
+    hashes = build_harmonized(
+        _cfg(), raw_root=frozen_raw, out_root=tmp_path / "j", manifest_path=manifest
+    )
+    assert set(hashes) == {"qcew_monthly", "qcew_national_size", "cbp_state_size", "bridge"}

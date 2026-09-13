@@ -224,8 +224,27 @@ def fetch_source(
                 ):
                     continue
                 # Stored beside the data response, under the name `build` looks for, so the
-                # offline rebuild discovers the predicate exactly as this fetch did.
-                store.put("cbp", variables, cbp.metadata_filename(year))
+                # offline rebuild discovers the predicate exactly as this fetch did. It gets a
+                # snapshot row like every other `put` here (D-097): its predicate decides which rows
+                # Census returns, so the manifest must say which copy a run read, and
+                # `build.predicate_from_stored_metadata` reads that row. No schema of its own
+                # exists, so it is recorded against the table and parser it feeds.
+                stored_variables = store.put("cbp", variables, cbp.metadata_filename(year))
+                rows.append(
+                    snapshot_row(
+                        source_id="cbp",
+                        fetched=variables,
+                        stored=stored_variables,
+                        reference_start=f"{year}-03",
+                        reference_end=f"{year}-03",
+                        release_status="final",
+                        naics_vintage=vintage_for_year(year),
+                        schema_fingerprint=schema_fingerprint(CBP_STATE_SIZE_SCHEMA),
+                        parser_version=cbp.PARSER_VERSION,
+                        source_publication_date=variables.last_modified,
+                        secrets=secrets,
+                    )
+                )
                 predicate = cbp.discover_naics_predicate(json.loads(variables.content))
                 query = cbp.build_query(year, predicate, cfg.project.industry_code_used)
                 fetched = fetcher.get(cbp.CBP_URL.format(year=year), params={**query, "key": key})

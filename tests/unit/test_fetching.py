@@ -192,7 +192,10 @@ def test_the_cbp_branch_records_no_key_even_though_the_request_carries_one(
     assert rows
     blob = json.dumps(rows)
     assert "SECRET-CENSUS-KEY" not in blob
-    assert "key" not in json.loads(rows[0]["request_parameters_json"])
+    # Every row, not `rows[0]`: the metadata retrieval records a row too (D-097), it comes first,
+    # and it carries no parameters at all, so indexing the first row would test nothing.
+    for row in rows:
+        assert "key" not in json.loads(row["request_parameters_json"])
 
 
 def test_the_cbp_branch_stores_metadata_where_the_offline_build_looks_for_it(
@@ -388,7 +391,12 @@ def test_the_declared_cbp_2024_absence_still_completes(
     rows = fetch_source(
         "cbp", _cfg(), env_path=None, raw_root=tmp_path, output_root=tmp_path, years=[2023, 2024]
     )
-    assert [r["reference_start"] for r in rows] == ["2023-03"]
+    # Two rows for the one published year, the variables metadata and the data response (D-097),
+    # and none for 2024.
+    assert sorted(Path(str(r["raw_path"])).name for r in rows) == [
+        "2023.json",
+        "2023_variables.json",
+    ]
     assert (tmp_path / "source_manifest.parquet").exists()
 
 
@@ -516,3 +524,19 @@ def test_a_response_without_last_modified_records_null_rather_than_an_empty_stri
     assert {row["source_publication_date"] for row in rows} == {None}
     manifest = pl.read_parquet(tmp_path / "source_manifest.parquet")
     assert manifest["source_publication_date"].to_list() == [None] * manifest.height
+
+
+def test_every_stored_cbp_object_has_a_snapshot_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-097. The CBP arm stored `{year}_variables.json` with no `snapshot_row`, while every other
+    `store.put` in `fetch_source` is paired with one: the live manifest carried 7 CBP rows against 14
+    stored objects. Derived from the store rather than typed, so a third unrecorded put fails too."""
+    _mock_transport(monkeypatch, _cbp_handler(set()))
+    monkeypatch.setenv("CENSUS_API_KEY", "SECRET-CENSUS-KEY")
+    fetch_source(
+        "cbp", _cfg(), env_path=None, raw_root=tmp_path, output_root=tmp_path, years=[2023]
+    )
+    stored = {p for p in (tmp_path / "cbp").rglob("*") if p.is_file()}
+    manifest = pl.read_parquet(tmp_path / "source_manifest.parquet")
+    assert {Path(p) for p in manifest["raw_path"].to_list()} == stored

@@ -99,9 +99,11 @@ not a fetch performed for this file.
   Two source-scanning tests enforce it: `"2014" not in qcew.py`, `"NAICS2022" not in cbp.py`.
 - `qcew_size` reuses `qcew.BULK_TO_SLICE_COLUMNS` / `BULK_ONLY_TITLE_COLUMNS`: the by-size file
   speaks the *bulk* vocabulary (`qtrly_estabs_count`), not the slice one.
-- CBP writes a second file per year, `{year}_variables.json` (`cbp.METADATA_SUFFIX`), with **no**
-  `source_snapshot` row (`fetching.py::fetch_source`) — invisible to the manifest, and skipped by name in the
-  glob path via `cbp.is_metadata_path`.
+- CBP writes a second file per year, `{year}_variables.json` (`cbp.METADATA_SUFFIX`), and since
+  2026-09-12 records a `source_snapshot` row for it like every other `put` (`D-097`). Both
+  `build.snapshot_paths` branches skip it by name via `cbp.is_metadata_path`, and
+  `build.predicate_from_stored_metadata` reads the manifest's copy, refusing more than one stored
+  copy when no manifest names one. A manifest written before that date has no metadata rows.
 
 ## Commands
 

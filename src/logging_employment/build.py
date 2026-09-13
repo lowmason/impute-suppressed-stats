@@ -76,18 +76,56 @@ def deterministic_order(frame: pl.DataFrame) -> pl.DataFrame:
     return frame.sort(by=natural + [c for c in frame.columns if c not in natural])
 
 
-def predicate_from_stored_metadata(cbp_raw_dir: Path, year: int) -> str:
+def _manifest_paths(manifest_path: Path, source_id: str) -> list[Path]:
+    """Every `raw_path` the run manifest records for one source."""
+    frame = pl.read_parquet(manifest_path).filter(pl.col("source_id") == source_id)
+    return [Path(p) for p in frame["raw_path"].to_list()]
+
+
+def _is_cbp_metadata(source_id: str, path: Path) -> bool:
+    """Whether a stored file is CBP variables metadata, which is never a data snapshot."""
+    return source_id == "cbp" and cbp.is_metadata_path(path)
+
+
+def predicate_from_stored_metadata(
+    cbp_raw_dir: Path, year: int, *, manifest_path: Path | None = None
+) -> str:
     """The NAICS predicate for one reference year, read from that year's stored metadata.
 
     A literal here would contradict Task 11's own test: the predicate name is a property of the
     vintage CBP serves, not of the reference year's NAICS vintage, and Stage 0 measured the two
     disagreeing for 2022 and 2023.
+
+    ONE COPY, CHOSEN THE WAY `snapshot_paths` CHOOSES A DATA FILE (D-097). The predicate decides
+    which rows Census returns, and CBP's bytes are not reproducible, so the store can hold two
+    copies of one year's metadata. The manifest's copy wins when the manifest lists one. Otherwise
+    more than one stored copy halts, where this used to take the lowest sha256 silently.
     """
-    candidates = sorted(cbp_raw_dir.rglob(f"*{year}{cbp.METADATA_SUFFIX}"))
+    name = cbp.metadata_filename(year)
+    listed: list[Path] = []
+    if manifest_path is not None and manifest_path.exists():
+        listed = [p for p in _manifest_paths(manifest_path, "cbp") if p.name == name]
+    if listed:
+        missing = sorted(str(p) for p in listed if not p.exists())
+        if missing:
+            raise FileNotFoundError(
+                f"{manifest_path} lists CBP {year} metadata absent from the store, {missing[0]}; "
+                "fetch again or build without a manifest"
+            )
+        candidates = sorted(listed)
+    else:
+        candidates = sorted(cbp_raw_dir.rglob(name))
     if not candidates:
         raise FileNotFoundError(
             f"no stored variables.json for CBP {year}; fetch stores it beside the data file so the "
             "offline rebuild can discover the predicate the same way the online fetch did"
+        )
+    if len(candidates) > 1:
+        raise AmbiguousSnapshotError(
+            f"CBP {year} has {len(candidates)} stored copies of {name}: "
+            f"{[str(p) for p in candidates]}. The predicate each carries decides which rows Census "
+            "returns, so none is picked by sort order. Build with the run manifest, which records "
+            "the copy the run used."
         )
     return cbp.discover_naics_predicate(json.loads(candidates[0].read_text()))
 
@@ -113,13 +151,16 @@ def snapshot_paths(
     each snapshot that belongs to the run, which is what makes "the bytes this run was built from"
     a recoverable fact rather than a guess. Without it, an ambiguous store halts rather than
     picking a copy by sort order.
+
+    CBP METADATA IS NEVER A DATA SNAPSHOT, IN EITHER BRANCH. `fetch` records `{year}_variables.json`
+    in the manifest as well as storing it (D-097), so the manifest branch applies the same name
+    filter as the glob branch. `predicate_from_stored_metadata` is the one reader of those files.
     """
     if manifest_path is not None and manifest_path.exists():
         listed = [
-            Path(p)
-            for p in pl.read_parquet(manifest_path)
-            .filter(pl.col("source_id") == source_id)["raw_path"]
-            .to_list()
+            path
+            for path in _manifest_paths(manifest_path, source_id)
+            if not _is_cbp_metadata(source_id, path)
         ]
         if listed:
             missing = sorted(str(p) for p in listed if not p.exists())
@@ -131,9 +172,7 @@ def snapshot_paths(
             return sorted(listed)
 
     candidates = [
-        p
-        for p in (raw_root / source_id).rglob(pattern)
-        if not (source_id == "cbp" and cbp.is_metadata_path(p))
+        p for p in (raw_root / source_id).rglob(pattern) if not _is_cbp_metadata(source_id, p)
     ]
     by_key: dict[str, list[Path]] = {}
     for path in candidates:
@@ -207,7 +246,8 @@ def build_harmonized(
     cbp_frames = []
     # Metadata is skipped by name, not by luck: `fetch` writes `{year}_variables.json` into this
     # same tree, it matches `*.json`, and its stem's first four characters are the same reference
-    # year as the data file's.
+    # year as the data file's. Both `snapshot_paths` branches skip it, because the manifest records
+    # the metadata retrieval too (D-097).
     for path in snapshot_paths("cbp", raw_root, "*.json", manifest_path=manifest_path):
         year = int(path.stem[:4])
         regime = disclosure.regime_for_year(
@@ -224,7 +264,9 @@ def build_harmonized(
                 json.loads(path.read_text()),
                 snapshot_id=path.stem,
                 reference_year=year,
-                predicate=predicate_from_stored_metadata(raw_root / "cbp", year),
+                predicate=predicate_from_stored_metadata(
+                    raw_root / "cbp", year, manifest_path=manifest_path
+                ),
                 naics_vintage=vintage_for_year(year),
                 regime=regime,
             )
