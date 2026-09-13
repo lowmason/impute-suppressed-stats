@@ -2,6 +2,19 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: implement this plan task-by-task via subagent-driven-development (the default) — or executing-plans when your human partner chose inline execution at the handoff. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status: COMPLETE (2026-09-13)** — executed via executing-plans; deferred items in specs/deferred_items.md
+
+> Deviation (whole plan): every code block was checked out from `verify/plan-15-v2`, the branch the
+> provenance note above describes, after its red step had been observed; each task commit's diff
+> against that branch was the run-id pin alone, apart from Task 7 Step 7's rewrite. Blocks this plan
+> never executed ran first here, with `data/` present, so their deviations are recorded below.
+>
+> Final review (code-reviewer, Opus): with fixes, all landed after Task 10 — `f4ed4d0` (§12.3's
+> bisection shared its stopping rule with `reconcile`'s gate), `78ae889` (a named CBP refusal),
+> `a9659b6` (§13.5 before step 6, and the D-087 wiring pinned against a leak), `0e473e9` (notes the
+> branch had falsified without editing), and `f413a1e` (R-PM-7 re-measured on the final code).
+> Deferred items for this plan: `D-115`..`D-119`.
+
 **Goal:** Turn the disclosed private `113` parent into a hard §9.3 upper bound on the suppressed `113310` state cells it covers, make every consumer of `deterministic_bounds` honour that bound instead of halting on it, decide the parent's visibility under §13.2's synthetic mask, and re-run the Stage 5 comparand against the bounded identification set.
 
 **Architecture:** A fifth harmonized table, `qcew_state_parent`, carries the private `113` state series, fetched through `ingest/qcew.py`'s slice route under a new `qcew_parent` source and parsed by the existing QCEW parser at the level `113` is served at. `constraints/` adds a `state_parent` cell kind and one `child - parent <= 0` row per published parent over a suppressed child. `baselines/runner.py` reallocates by §12.3 bounded proportional scaling when §12.2's allocation leaves a finite interval, and `validate/` hides a parent exactly where it has no other establishments, enforces §13.5's out-of-bounds rule, rejects exactly recoverable targets and hands the masked bounds to the baselines (`D-087`).
@@ -110,7 +123,7 @@ R-PM-5 requires "the same script and the same ladder", so the two committed audi
 - Consumes: nothing from this plan.
 - Produces: `summary.json` gains `findings.siblings = {"industries": {"1131": {...}, "1132": {...}}, "exact_where_child_suppressed": int, "exact_where_child_suppressed_if_absent_is_zero": int, "a_sibling_published_where_113_bounds": int}`; `qcew_parent_margins.sibling_exact(parent: set[Key], siblings: Mapping[str, set[Key]], present: Mapping[str, set[Key]], *, absent_is_zero: bool) -> set[Key]`, with `Key = tuple[str, str, str]`.
 
-- [ ] **Step 1: Prove the stored extracts still produce the committed finding, then copy them aside**
+- [x] **Step 1: Prove the stored extracts still produce the committed finding, then copy them aside**
 
 The renderer re-hashes every extract against the summary before it writes, so an unchanged finding is the digest check.
 
@@ -122,7 +135,7 @@ cp -Rp data/raw/audit/qcew_parent_margins /tmp/qcew_parent_margins.before-rpm5
 
 Expected: `wrote …/specs/findings/qcew-parent-margins.md`, then `git diff` exits 0. **If it does not, stop:** the extracts no longer match digest `e620bb5ead34003d5f4324dc8fe16a7fa3738c62124c4de5b0bf56baf282477b`, and every number in this plan needs re-measuring before any task runs.
 
-- [ ] **Step 2: Write the failing ladder and `sibling_exact` tests**
+- [x] **Step 2: Write the failing ladder and `sibling_exact` tests**
 
 In `tests/audit/test_qcew_parent_margins.py`, replace `NOTHING` and the first test with:
 
@@ -202,12 +215,12 @@ def test_a_sibling_the_route_never_served_is_never_read_as_zero():
     assert m.sibling_exact(parent, siblings, present, absent_is_zero=True) == set()
 ```
 
-- [ ] **Step 3: Run them and watch the three that encode new behaviour fail**
+- [x] **Step 3: Run them and watch the three that encode new behaviour fail**
 
 Run: `uv run pytest tests/audit/test_qcew_parent_margins.py -q`
 Expected: `4 failed` — the exact test (`assert 'upper_bound' == 'exact'`) and the three `sibling_exact` tests (`AttributeError: module 'qcew_parent_margins' has no attribute 'sibling_exact'`). The one-sibling and no-parent tests pass already: the current ladder ignores keys it does not read, and those two pin behaviour the change must keep.
 
-- [ ] **Step 4: Implement the sibling rung and the counts**
+- [x] **Step 4: Implement the sibling rung and the counts**
 
 In `scripts/audit/qcew_parent_margins.py`, change the module docstring's last line to `113310 state cell on D1 (R-S5G-5), and whether 113 - 1131 - 1132 reconstructs one (R-PM-5)."""`. Replace `identification` with:
 
@@ -353,12 +366,12 @@ In `c.write_summary(... findings={...})`, add after the `"parents": parents,` li
             },
 ```
 
-- [ ] **Step 5: Run the ladder tests green**
+- [x] **Step 5: Run the ladder tests green**
 
 Run: `uv run pytest tests/audit/test_qcew_parent_margins.py -q`
 Expected: all pass, 7 more than before Step 2.
 
-- [ ] **Step 6: Write the failing renderer-premise tests**
+- [x] **Step 6: Write the failing renderer-premise tests**
 
 In `tests/audit/test_render_parent_margins.py`, replace `CLEAN`'s `"slice_outcomes"` entry and add a `"siblings"` entry after `"parents"`:
 
@@ -395,12 +408,12 @@ Append three cases to `test_each_broken_summary_premise_halts_by_naming_its_sent
         ),
 ```
 
-- [ ] **Step 7: Run them and watch the three new cases fail**
+- [x] **Step 7: Run them and watch the three new cases fail**
 
 Run: `uv run pytest tests/audit/test_render_parent_margins.py -q`
 Expected: `3 failed`, each an `AssertionError` on an empty `broken` list; `test_the_measured_summary_supports_every_guarded_sentence` still passes.
 
-- [ ] **Step 8: Guard and render the sibling section**
+- [x] **Step 8: Guard and render the sibling section**
 
 In `scripts/audit/render_parent_margins.py::summary_premises`, insert after the two lines that append `"'none carries an exact reconstruction' is false"`:
 
@@ -465,12 +478,12 @@ R-PM-4 does not bind (`D-110`). One sibling is published on
 """
 ```
 
-- [ ] **Step 9: Run every audit test green**
+- [x] **Step 9: Run every audit test green**
 
 Run: `uv run pytest tests/audit -q`
 Expected: all pass; the two files carry 10 more tests than before Step 2.
 
-- [ ] **Step 10: Format, lint and commit the code**
+- [x] **Step 10: Format, lint and commit the code**
 
 ```bash
 uv run ruff format scripts/audit/qcew_parent_margins.py scripts/audit/render_parent_margins.py
@@ -484,7 +497,7 @@ git commit -m "feat(audit): measure R-PM-5's sibling path with the parent-margin
 
 Expected: `ruff check` clean, the grep prints `no PEP 758 except syntax` (both files declare `>=3.12`), the audit tests pass.
 
-- [ ] **Step 11: Run the measurement (network, 192 requests) and render it**
+- [x] **Step 11: Run the measurement (network, 192 requests) and render it**
 
 ```bash
 (cd scripts/audit && set -a && source ../../.env && set +a && uv run --no-project qcew_parent_margins.py && uv run --no-project render_parent_margins.py)
@@ -492,7 +505,7 @@ Expected: `ruff check` clean, the grep prints `no PEP 758 except syntax` (both f
 
 Expected: the renderer prints `wrote …/qcew-parent-margins.md`. **If it halts naming "the sibling path reconstructs no suppressed quarter" or "reading an absent sibling row as zero", stop and escalate:** R-PM-4 binds, and Tasks 7-8 need an exactness path this plan does not contain.
 
-- [ ] **Step 12: Check that the four original industries' bytes did not move, and read the numbers off the summary**
+- [x] **Step 12: Check that the four original industries' bytes did not move, and read the numbers off the summary**
 
 ```bash
 for i in 113310 113 1133 11331; do diff -rq /tmp/qcew_parent_margins.before-rpm5/$i data/raw/audit/qcew_parent_margins/$i && echo "$i unchanged"; done
@@ -502,7 +515,7 @@ git diff --stat specs/findings/qcew-parent-margins.md
 
 Expected: four `unchanged` lines; `{'exact': 0, 'months_identified': 756, 'none': 157, 'upper_bound': 252}`; `{'a_sibling_published_where_113_bounds': 17, 'exact_where_child_suppressed': 0, 'exact_where_child_suppressed_if_absent_is_zero': 0}`, both in sorted-key order because `write_summary` sorts keys. The 17 is a union: 7 bounded quarters publish `1131` and 10 publish `1132`, and no quarter publishes both, because such a quarter would be exact and the exact count is 0. If a BLS revision moved an original extract, the regenerated finding is authoritative: carry its numbers into Tasks 4, 7 and 9 in place of 252, 756 and 107, and say so in Step 13's entry.
 
-- [ ] **Step 13: Record the R-PM-4 ruling in the Stage 5 log, derived from the summary**
+- [x] **Step 13: Record the R-PM-4 ruling in the Stage 5 log, derived from the summary**
 
 ```bash
 uv run python - <<'EOF'
@@ -536,7 +549,7 @@ print(section)
 EOF
 ```
 
-- [ ] **Step 14: Commit the finding and the ruling**
+- [x] **Step 14: Commit the finding and the ruling**
 
 ```bash
 git add specs/findings/qcew-parent-margins.md specs/findings/stage-5-log.md
@@ -560,7 +573,7 @@ git commit -m "docs(findings): record R-PM-5's sibling measurement and rule R-PM
 - Consumes: nothing from earlier tasks.
 - Produces: `constants.QCEW_PARENT_INDUSTRY = "113"`, `constants.QCEW_PARENT_STATE_AGGLVL = "55"`; `fetching.KNOWN_SOURCES` including `"qcew_parent"`; stored objects under `data/raw/qcew_parent/<sha256>/{year}q{quarter}.csv` with `source_id = "qcew_parent"` rows in `runs/source_manifest.parquet`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `tests/unit/test_fetching.py`, extend the fetching import block and add the registry loader:
 
@@ -626,12 +639,12 @@ In `tests/unit/test_registry.py::test_the_seed_registry_is_sound`, the seed regi
     assert {r.source_id for r in rows} == {"qcew", "qcew_parent", "qcew_size", "cbp"}
 ```
 
-- [ ] **Step 2: Run them and watch them fail**
+- [x] **Step 2: Run them and watch them fail**
 
 Run: `uv run pytest tests/unit/test_fetching.py tests/unit/test_registry.py -q`
 Expected: `5 failed`. Four are the parent-source test and the three `[qcew_parent]` parametrizations, each with `ValueError: unknown source 'qcew_parent'; known: ('qcew', 'qcew_size', 'cbp')`. The fifth is `test_the_seed_registry_is_sound`, because the registry has no `qcew_parent` row yet. The registry-coverage test passes already: it pins that today's three sources are described, and it must keep passing once `qcew_parent` joins `KNOWN_SOURCES`.
 
-- [ ] **Step 3: Record the parent level as a measured constant**
+- [x] **Step 3: Record the parent level as a measured constant**
 
 Append to `src/logging_employment/constants.py`:
 
@@ -646,7 +659,7 @@ QCEW_PARENT_INDUSTRY = "113"
 QCEW_PARENT_STATE_AGGLVL = "55"
 ```
 
-- [ ] **Step 4: Put `qcew_parent` on the shared slice route**
+- [x] **Step 4: Put `qcew_parent` on the shared slice route**
 
 In `src/logging_employment/fetching.py`, add `from .constants import QCEW_PARENT_INDUSTRY` directly below `from .config import SECRET_ENV_VARS, Config, credentials`, and change `KNOWN_SOURCES` to:
 
@@ -703,7 +716,7 @@ Replace the whole `if source == "qcew":` branch — from that line down to, not 
 
 In `merge_source_manifest`'s docstring, a fourth source makes one count false. Change `` `fetch` runs once per source, and all three invocations name the same artifact. `` to `` `fetch` runs once per source, and every invocation names the same artifact. ``
 
-- [ ] **Step 5: Accept the source at the CLI and describe it in the registry**
+- [x] **Step 5: Accept the source at the CLI and describe it in the registry**
 
 In `src/logging_employment/cli.py`, replace the `fetch` command with:
 
@@ -750,7 +763,7 @@ Append this row to the end of `src/logging_employment/registry/sources.yaml`, wi
 
 Then correct the file's first line, which counts the sources. Change `# The §7.1 source registry, seeded for the three sources Stage 1 ingests.` to `# The §7.1 source registry, seeded for the three sources Stage 1 ingests and plan 15's qcew_parent.`
 
-- [ ] **Step 6: Run the tests and the gates**
+- [x] **Step 6: Run the tests and the gates**
 
 ```bash
 uv run pytest tests/unit/test_fetching.py tests/unit/test_registry.py -q
@@ -761,7 +774,7 @@ uv run pytest -q
 
 Expected: the fetch and registry tests pass; `OK: registry verified`; ruff and interrogate clean. Suite: **+5 passed** (the parent test, the registry test and the three `[qcew_parent]` parametrizations), 0 failed.
 
-- [ ] **Step 7: Fetch the parent series (network, 38 requests)**
+- [x] **Step 7: Fetch the parent series (network, 38 requests)**
 
 ```bash
 uv run logging-estimates fetch --source qcew_parent --config config.yaml
@@ -770,7 +783,7 @@ uv run python -c "import polars as pl; m = pl.read_parquet('runs/source_manifest
 
 Expected: `qcew_parent: 32 snapshot row(s) -> data/raw`, then `32 2017-01 2024-12 0` — every quarter stored, each with the `Last-Modified` stamp `D-100` records.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/logging_employment/constants.py src/logging_employment/registry/sources.yaml src/logging_employment/fetching.py src/logging_employment/cli.py tests/unit/test_fetching.py tests/unit/test_registry.py
@@ -793,7 +806,7 @@ git commit -m "feat(fetch): add the qcew_parent source for the private 113 state
 - Consumes: nothing from earlier tasks.
 - Produces: `cbp.vintage_for_predicate(predicate: str) -> str` — `"NAICS2017"` gives `"NAICS 2017"`; a predicate naming no four-digit year raises `ValueError`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/unit/test_cbp.py`:
 
@@ -837,12 +850,12 @@ def test_both_cbp_snapshot_rows_record_the_vintage_the_metadata_serves(
     assert {row["naics_vintage"] for row in rows} == {"NAICS 2017"}
 ```
 
-- [ ] **Step 2: Run them and watch them fail**
+- [x] **Step 2: Run them and watch them fail**
 
 Run: `uv run pytest tests/unit/test_cbp.py tests/unit/test_fetching.py tests/integration/test_build_harmonized.py -q`
 Expected: `7 failed` — five `AttributeError: module 'logging_employment.ingest.cbp' has no attribute 'vintage_for_predicate'`, the build test with `['NAICS 2022'] == ['NAICS 2017']` false, the fetch test with `{'NAICS 2022'} == {'NAICS 2017'}` false.
 
-- [ ] **Step 3: Read the vintage off the predicate**
+- [x] **Step 3: Read the vintage off the predicate**
 
 In `src/logging_employment/ingest/cbp.py`, add directly after `discover_naics_predicate` (the module already imports `re`):
 
@@ -870,7 +883,7 @@ def vintage_for_predicate(predicate: str) -> str:
 
 Do not write a 2022 predicate literal anywhere in this module: `tests/unit/test_cbp.py::test_no_naics2022_predicate_is_ever_constructed` greps the file for it.
 
-- [ ] **Step 4: Stamp the harmonized CBP rows from the predicate**
+- [x] **Step 4: Stamp the harmonized CBP rows from the predicate**
 
 In `src/logging_employment/build.py::build_harmonized`, replace the `cbp_frames.append(...)` call — including the `DELIBERATELY QCEW-DERIVED, AND WRONG FOR 2022 AND 2023 (D-098)` comment block inside it — with:
 
@@ -896,7 +909,7 @@ In `src/logging_employment/build.py::build_harmonized`, replace the `cbp_frames.
         )
 ```
 
-- [ ] **Step 5: Stamp both CBP snapshot rows from the predicate**
+- [x] **Step 5: Stamp both CBP snapshot rows from the predicate**
 
 In `src/logging_employment/fetching.py`'s CBP branch, move the predicate discovery up so it directly follows `stored_variables = store.put("cbp", variables, cbp.metadata_filename(year))`, and derive the stamp once:
 
@@ -920,7 +933,7 @@ stored `{year}_variables.json` for 2017-2023 serves exactly one NAICS variable, 
 labelled "2017 NAICS code", including 2022 and 2023, which QCEW's rule stamps "NAICS 2022".
 ```
 
-- [ ] **Step 6: Run the tests and the gates**
+- [x] **Step 6: Run the tests and the gates**
 
 ```bash
 uv run pytest tests/unit/test_cbp.py tests/unit/test_fetching.py tests/integration/test_build_harmonized.py -q
@@ -930,7 +943,7 @@ uv run pytest -q
 
 Expected: targeted tests pass; ruff and interrogate clean. Suite: **+7 passed**, 0 failed. `data/staged/` is not rebuilt here, so no run id moves yet.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/logging_employment/ingest/cbp.py src/logging_employment/build.py src/logging_employment/fetching.py tests/unit/test_cbp.py tests/unit/test_fetching.py tests/integration/test_build_harmonized.py
@@ -958,7 +971,7 @@ git commit -m "fix(cbp): stamp CBP's NAICS vintage from its own predicate (D-114
 - Consumes: `constants.QCEW_PARENT_INDUSTRY`, `constants.QCEW_PARENT_STATE_AGGLVL` and the stored `qcew_parent` slices (Task 2); `cbp.vintage_for_predicate` (Task 3).
 - Produces: `qcew.parse_qcew_monthly(frame, *, snapshot_id, release_vintage, release_status, naics_vintage, state_agglvl: str = QCEW_STATE_AGGLVL)`; `HarmonizedData.qcew_state_parent: pl.DataFrame` in `QCEW_MONTHLY_SCHEMA`, empty by default; `build.state_parent_rows(raw: bytes, *, snapshot_id: str, release_status: str, naics_vintage: str) -> pl.DataFrame`; `data/staged/qcew_state_parent.parquet`.
 
-- [ ] **Step 1: Create the fixtures**
+- [x] **Step 1: Create the fixtures**
 
 ```bash
 uv run python - <<'EOF'
@@ -1028,7 +1041,7 @@ In the same README's regeneration script, the schema-only loop must write the ne
 
 In `tests/integration/test_national_size_margin_golden.py::test_the_golden_fixture_is_tracked_in_git_not_rebuilt_from_ignored_data`'s docstring, change `If these four tables were sliced out of it at test time` to `If these tables were sliced out of it at test time`.
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Append to `tests/unit/test_qcew_parser.py`:
 
@@ -1148,12 +1161,12 @@ def test_a_raw_store_with_no_parent_slice_halts_before_writing_anything(
     assert not list(out.glob("*.parquet"))
 ```
 
-- [ ] **Step 3: Run them and watch them fail**
+- [x] **Step 3: Run them and watch them fail**
 
 Run: `uv run pytest tests/unit/test_qcew_parser.py tests/unit/test_contracts.py tests/integration/test_build_harmonized.py -q`
 Expected: `9 failed` — the parser test (`TypeError: ... unexpected keyword argument 'state_agglvl'`), the three contracts tests (`AttributeError` on `qcew_state_parent`, or `DID NOT RAISE`), `test_rebuild_is_byte_identical` and `test_the_run_manifest_names_which_metadata_copy_the_build_reads` (set mismatch), and the three new build tests (`FileNotFoundError` reading the parquet, `AttributeError` from `monkeypatch.setattr`, `DID NOT RAISE`).
 
-- [ ] **Step 4: Let the parser read state rows at a named level**
+- [x] **Step 4: Let the parser read state rows at a named level**
 
 In `src/logging_employment/ingest/qcew.py`, change `parse_qcew_monthly`'s signature to:
 
@@ -1180,7 +1193,7 @@ add this paragraph to its docstring, after the `source_row_hash` paragraph:
 
 and change `.when(pl.col("agglvl_code") == QCEW_STATE_AGGLVL)` to `.when(pl.col("agglvl_code") == state_agglvl)`.
 
-- [ ] **Step 5: Add the table to the harmonized contract**
+- [x] **Step 5: Add the table to the harmonized contract**
 
 In `src/logging_employment/contracts.py`, change `from dataclasses import dataclass` to `from dataclasses import dataclass, field`, then replace `_HARMONIZED_TABLES` and the head of `HarmonizedData` down to, not including, `    @classmethod` with:
 
@@ -1227,7 +1240,7 @@ class HarmonizedData:
 
 and change `load`'s docstring to `"""Read the five Stage 1 tables from a `data/staged`-shaped directory."""`.
 
-- [ ] **Step 6: Build the table, halting on a missing or empty series**
+- [x] **Step 6: Build the table, halting on a missing or empty series**
 
 In `src/logging_employment/build.py`, add `from .constants import QCEW_PARENT_INDUSTRY, QCEW_PARENT_STATE_AGGLVL` below `from .config import Config`, and change the errors import to `from .errors import AmbiguousSnapshotError, ConceptViolationError, UnknownDisclosureRegimeError`. Add this function directly before `build_harmonized`:
 
@@ -1339,7 +1352,9 @@ In `tests/integration/test_baseline_golden.py::test_the_golden_fixture_is_tracke
 
 The fourth counts the tables instead of naming them, so a search for the names never finds it. In `tests/integration/test_build_harmonized.py::test_the_run_manifest_resolves_which_snapshot_the_build_reads`, change `assert len(hashes) == 4` to `assert len(hashes) == 5`. It passes at Step 3, because the build still writes four tables there, and fails from this step on until it is changed.
 
-- [ ] **Step 7: Run the targeted tests and the fixture-based goldens green**
+- [x] **Step 7: Run the targeted tests and the fixture-based goldens green**
+
+> Deviation: with `data/` present the second command does not all pass: `tests/integration/test_stage4_acceptance.py::test_the_guard_is_binding_on_the_d1_panel` is `requires_staged` and fails in this red window on the missing fifth staged table (the contract expects five while `data/staged` still holds four); the plan's run had no `data/` and skipped it. It passed in Step 10's suite (1504 passed, 0 failed).
 
 ```bash
 uv run pytest tests/unit/test_qcew_parser.py tests/unit/test_contracts.py tests/integration/test_build_harmonized.py -q
@@ -1348,7 +1363,7 @@ uv run pytest tests/integration/test_constraint_golden.py tests/integration/test
 
 Expected: both pass. The goldens pass UNCHANGED because every fixture directory carries an empty parent table. Do not run the whole suite yet: until Step 8 rebuilds `data/staged/`, every data-bound test that calls `HarmonizedData.load(STAGED)` fails on the missing fifth file.
 
-- [ ] **Step 8: Rebuild the staged layer**
+- [x] **Step 8: Rebuild the staged layer**
 
 ```bash
 shasum -a 256 data/staged/*.parquet | tee /tmp/staged-before-plan15.sha256
@@ -1373,7 +1388,7 @@ EOF
 
 Expected: `qcew_monthly`, `qcew_national_size` and `bridge` digests unchanged against `/tmp/staged-before-plan15.sha256`; `cbp_state_size` changed (`D-114`); `qcew_state_parent` new. Then `parent rows 4764 months 96`, `state rows with no parent row 0`, `suppressed state months with a published parent 756` (Task 1's figure), `CBP vintages ['NAICS 2017']`.
 
-- [ ] **Step 9: Move the acceptance pin to the new run id**
+- [x] **Step 9: Move the acceptance pin to the new run id**
 
 In `tests/integration/test_stage4_acceptance.py`, replace `test_the_shipped_config_still_resolves_to_the_stage_4_acceptance_run` with:
 
@@ -1406,7 +1421,7 @@ grep -c "$NEW_ID" tests/integration/test_stage4_acceptance.py
 
 Expected: a 12-character hex id that is not `f03023ac9f3a`, and a count of `1`.
 
-- [ ] **Step 10: Run the gates**
+- [x] **Step 10: Run the gates**
 
 ```bash
 uv run ruff format src tests && uv run ruff check src tests && uv run interrogate src
@@ -1415,7 +1430,7 @@ uv run pytest -q
 
 Expected: clean; suite **+6 passed** (parser 1, contracts 2 net, build 3), 0 failed. The renamed contracts test and the moved pin are rewrites, not additions.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add src/logging_employment/ingest/qcew.py src/logging_employment/contracts.py src/logging_employment/build.py tests/fixtures/qcew/slice_113_2017q1.csv tests/fixtures/qcew/README.md tests/fixtures/baselines/qcew_state_parent.parquet tests/fixtures/constraints/qcew_state_parent.parquet tests/fixtures/national_size_margin/qcew_state_parent.parquet tests/integration/conftest.py tests/unit/test_qcew_parser.py tests/unit/test_contracts.py tests/integration/test_build_harmonized.py tests/integration/test_stage4_acceptance.py tests/fixtures/national_size_margin/README.md tests/integration/test_national_size_margin_golden.py tests/integration/test_constraint_cli.py tests/integration/test_baseline_golden.py
@@ -1436,7 +1451,7 @@ git commit -m "feat(harmonize): stage the private 113 state series as qcew_state
 - Consumes: nothing from earlier tasks.
 - Produces: every `configured_highs(config)` instance carries `mip_rel_gap = 0.0`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `tests/unit/test_constraint_bounds.py`, add `import highspy` and `import numpy as np` to the third-party imports in sorted order, and append:
 
@@ -1485,12 +1500,12 @@ def test_a_milp_minimum_is_the_true_optimum_not_one_inside_the_default_gap() -> 
     assert model.getInfo().objective_function_value == pytest.approx(30526.0, abs=1e-6)
 ```
 
-- [ ] **Step 2: Run them and watch them fail**
+- [x] **Step 2: Run them and watch them fail**
 
 Run: `uv run pytest tests/unit/test_constraint_bounds.py -q -k "zero_relative_gap or true_optimum"`
 Expected: `2 failed` — `assert 0.0001 == 0.0`, and the minimum coming back as 30528 up to float noise (`30527.99999999998` when this plan was written) against `30526.0 ± 1.0e-06`.
 
-- [ ] **Step 3: Set the gap where every solver is built**
+- [x] **Step 3: Set the gap where every solver is built**
 
 In `src/logging_employment/constraints/bounds.py::configured_highs`, add after the `mip_feasibility_tolerance` line:
 
@@ -1512,7 +1527,7 @@ and append this paragraph to its docstring:
     that case.
 ```
 
-- [ ] **Step 4: Run the tests and the gates**
+- [x] **Step 4: Run the tests and the gates**
 
 ```bash
 uv run pytest tests/unit/test_constraint_bounds.py -q
@@ -1522,7 +1537,7 @@ uv run pytest -q
 
 Expected: clean; suite **+2 passed**, 0 failed. No D1 bound moves: MILP still runs on 0 components until Task 7 builds the parent rows.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/logging_employment/constraints/bounds.py tests/unit/test_constraint_bounds.py
@@ -1545,7 +1560,7 @@ This lands BEFORE the parent rows (Task 7) so no commit on this branch ever ship
 - Consumes: `reconcile.scaling.scale_into_bounds(anchor, weights, bounds, *, tolerance, max_iterations)` (existing).
 - Produces: `runner.assert_bounds_cover(values, bounds, *, cell_ids, estimator_id, reference_month) -> None`; `runner.month_bounds(bounds, *, cell_ids, cells) -> Bounds` (keyed by bare state); `runner.leaves_its_interval(values, bounds, *, tolerance) -> bool`; `runner.integer_bounds(bounds, *, tolerance) -> dict[str, dict[str, int | None]]`. `run_baselines(..., bounds=...)` now reallocates a month §12.2 puts outside an interval and raises `InfeasibleResidualError` (bounds cannot hold the residual), `integerize`'s `ValueError` (the integer cut of the bounds cannot hold the integer total) or `BoundViolationError` (a value escaped after scaling).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `tests/unit/test_baselines_bounds.py`, replace the module docstring with:
 
@@ -1720,12 +1735,12 @@ def test_the_production_path_scales_an_estimate_into_a_finite_upper_below_it(sta
     assert rerun["estimate_integer"].item() <= row["estimate"] / 2.0
 ```
 
-- [ ] **Step 2: Run them and watch the new behaviour fail**
+- [x] **Step 2: Run them and watch the new behaviour fail**
 
 Run: `uv run pytest tests/unit/test_baselines_bounds.py tests/integration/test_baseline_cli.py -q`
 Expected: `4 failed`. The infeasible test raises `BoundViolationError` where `InfeasibleResidualError` was expected. The scaled test and the solver-tolerance test raise `BoundViolationError` on the unscaled float. The rewritten CLI test fails `assert 1 == 0`, because the second `run-baselines` still halts on `BoundViolationError`. The bit-identical test passes already; it pins the fast path the change must keep.
 
-- [ ] **Step 3: Split out the coverage check and add the month helpers**
+- [x] **Step 3: Split out the coverage check and add the month helpers**
 
 In `src/logging_employment/baselines/runner.py`, add `import math` above `from collections.abc import Mapping, Sequence`, and change `from ..reconcile.scaling import Bounds` to `from ..reconcile.scaling import Bounds, scale_into_bounds`.
 
@@ -1834,7 +1849,9 @@ and in its docstring replace the paragraph that begins `` `tolerance` is the cal
     upper HiGHS reported as 49.99999995, and a stricter check would refuse what the cut allowed.
 ```
 
-- [ ] **Step 4: Scale where §12.2 leaves an interval**
+- [x] **Step 4: Scale where §12.2 leaves an interval**
+
+> Deviation (final review): the runner passed reconciliation's acceptance tolerance as the bisection's stopping rule, so D1 shipped a max residual drift of 9.93e-10 against the 1e-9 gate `reconcile` re-applies. `f4ed4d0` bisects to a double's resolution and refuses a result off its residual; the re-run's drift is 4.547e-13.
 
 In `run_baselines`, replace everything from the first `            if bounds is not None:` after `allocated = allocate(anchor, outcome)` through the end of the `integers = (...)` expression with:
 
@@ -1936,7 +1953,7 @@ In `run_baselines`' docstring, replace the three paragraphs that begin `` `bound
     number actually published honours the interval too.
 ```
 
-- [ ] **Step 5: Run the tests and the gates**
+- [x] **Step 5: Run the tests and the gates**
 
 ```bash
 uv run pytest tests/unit/test_baselines_bounds.py tests/unit/test_baselines_runner.py tests/integration/test_baseline_cli.py -q
@@ -1946,7 +1963,7 @@ uv run pytest -q
 
 Expected: clean; suite **+3 passed** (four tests replace one; `test_baseline_cli.py`'s halting test is rewritten, not added), 0 failed. D1 cannot tell the difference yet: until Task 7 no state cell has a finite upper, so no production month takes the scaling branch.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/logging_employment/baselines/runner.py tests/unit/test_baselines_bounds.py tests/integration/test_baseline_cli.py
@@ -1971,7 +1988,7 @@ git commit -m "feat(baselines): scale an estimate into a finite bound by §12.3 
 - Consumes: `HarmonizedData.qcew_state_parent` (Task 4); `configured_highs`' zero gap (Task 5); the runner's §12.3 scaling (Task 6).
 - Produces: `cells.KIND_STATE_PARENT = "state_parent"`; `cells.state_parent_cells(parent: pl.DataFrame, monthly: pl.DataFrame, *, size_concept: str) -> pl.DataFrame`; `rows.parent_margin_rows(cells_frame: pl.DataFrame) -> list[ConstraintDraft]`, ids `parent_margin|<child cell_id>`; `compat.assert_parent_margin_compatible(monthly: pl.DataFrame, parent: pl.DataFrame) -> dict[str, int]`; `run_compatibility_gates`' report gains a `"parent_margin"` entry.
 
-- [ ] **Step 1: Write the failing builder, gate and solve tests**
+- [x] **Step 1: Write the failing builder, gate and solve tests**
 
 In `tests/unit/test_constraint_builders.py`, add `import dataclasses` in the standard-library group directly after `from __future__ import annotations`, change the errors import to `from logging_employment.errors import ConceptViolationError, IncompatibleMarginError`, and append:
 
@@ -2181,12 +2198,12 @@ def test_a_parent_under_the_milp_width_reaches_the_integer_solve(make_monthly, m
     assert (child["selected_lower"], child["selected_upper"]) == (0.0, 12.0)
 ```
 
-- [ ] **Step 2: Run them and watch them fail**
+- [x] **Step 2: Run them and watch them fail**
 
 Run: `uv run pytest tests/unit/test_constraint_builders.py tests/unit/test_constraint_compat.py tests/unit/test_constraint_bounds.py -q`
 Expected: `10 failed` — the builders and compat tests on `AttributeError` (`parent_margin_rows`, `assert_parent_margin_compatible`) or an empty parent-cell list, the first solve test on `selected_upper` being `None` (`assert (0.0, None) == (0.0, 150.0)`), the second on the MILP pair (`assert (None, None) == (0.0, 12.0)`).
 
-- [ ] **Step 3: Emit the parent cells**
+- [x] **Step 3: Emit the parent cells**
 
 In `src/logging_employment/constraints/cells.py`, add `KIND_STATE_PARENT = "state_parent"` directly below `KIND_NATIONAL_SIZE = "national_size"`, add this function directly below `national_size_cells`:
 
@@ -2224,7 +2241,7 @@ and in `build_target_cells`, add `_assert_one_vintage_per_cell(data.qcew_state_p
             ),
 ```
 
-- [ ] **Step 4: Build one `parent_margin` row per parent cell**
+- [x] **Step 4: Build one `parent_margin` row per parent cell**
 
 In `src/logging_employment/constraints/rows.py`, add `KIND_STATE_PARENT,` to the `from .cells import (...)` block, between `KIND_NATIONAL_TOTAL,` and `KIND_STATE_TOTAL,` and add this function directly after `size_support_rows`:
 
@@ -2288,7 +2305,7 @@ def parent_margin_rows(cells_frame: pl.DataFrame) -> list[ConstraintDraft]:
     return drafts
 ```
 
-- [ ] **Step 5: Gate the pair before any row exists, and wire the builder in**
+- [x] **Step 5: Gate the pair before any row exists, and wire the builder in**
 
 In `src/logging_employment/constraints/compat.py`, add directly before `run_compatibility_gates`:
 
@@ -2395,12 +2412,14 @@ def run_compatibility_gates(data: HarmonizedData, *, industry_code: str) -> dict
 
 In `src/logging_employment/constraints/system.py::build_constraint_system`, add `*rows_module.parent_margin_rows(cell_frame),` as the last element of the `drafts` list.
 
-- [ ] **Step 6: Run the new tests green**
+- [x] **Step 6: Run the new tests green**
 
 Run: `uv run pytest tests/unit/test_constraint_builders.py tests/unit/test_constraint_compat.py tests/unit/test_constraint_bounds.py tests/unit/test_constraint_system.py -q`
 Expected: all pass, 10 more than before Step 1.
 
-- [ ] **Step 7: Rewrite the four D1 assertions `D-111` falsifies, as derived invariants**
+- [x] **Step 7: Rewrite the four D1 assertions `D-111` falsifies, as derived invariants**
+
+> Deviation: a fifth D1 assertion also fell and is rewritten here: `test_each_size_margin_month_is_one_component_holding_that_month_s_national_cells` selected national cells as `_KIND != "state_total"`, which took in Task 7's `state_parent` kind (`{5, ..., 11} == {1}`). It now names `national_total` and `national_size` and derives the parent side from the component decomposition, not from a cell count; mutation-checked, then Step 8's suite matched (1519).
 
 In `tests/integration/test_d1_acceptance.py`, in `test_every_suppressed_state_month_carries_a_bound_status`, append to the docstring:
 
@@ -2557,7 +2576,7 @@ def test_a_complementary_mask_changes_nothing_about_state_total_identification()
     assert intervals[0][1] is not None
 ```
 
-- [ ] **Step 8: Run the gates**
+- [x] **Step 8: Run the gates**
 
 ```bash
 uv run ruff format src tests && uv run ruff check src tests && uv run interrogate src
@@ -2566,7 +2585,7 @@ uv run pytest -q
 
 Expected: clean; suite **+10 passed**, 0 failed. Four data-bound tests were rewritten in Step 7 and pass against the staged layer: they are the D1 witnesses of done-when 1 and the status half of done-when 3. `test_the_rank_cache_computes_once_per_shape_rather_than_once_per_component` needs no change: its ceiling counts coupled components, and every parent component has one shape.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add src/logging_employment/constraints/cells.py src/logging_employment/constraints/rows.py src/logging_employment/constraints/compat.py src/logging_employment/constraints/system.py tests/unit/test_constraint_builders.py tests/unit/test_constraint_compat.py tests/unit/test_constraint_bounds.py tests/integration/test_d1_acceptance.py tests/unit/test_validate_recover.py tests/unit/test_validate_complementary.py
@@ -2593,7 +2612,7 @@ git commit -m "feat(constraints): bound suppressed state cells by their publishe
 - Consumes: `HarmonizedData.qcew_state_parent` (Task 4); `runner.state_total_bounds` and the runner's scaling (Task 6); the parent rows (Task 7).
 - Produces: `mask.parents_to_hide(parent: pl.DataFrame, chosen: pl.DataFrame) -> pl.DataFrame` (sorted `state_fips`, `reference_month` keys); `apply_mask` also returns a masked `qcew_state_parent`; `errors.ConstraintDataError`; `recover.locate_withheld(truth, cells, bounds) -> pl.DataFrame`; `recover.assert_truth_within_bounds(located, *, tolerance: float) -> None`; `recover.exactly_recoverable(located) -> pl.DataFrame`; `MaskedSystem.recoverable: pl.DataFrame`; `harness.reject_exactly_recoverable(scored, recoverable) -> tuple[pl.DataFrame, int]`; each regime's manifest entry gains `rejected_exactly_recoverable: int`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/unit/test_validate_parent_mask.py`:
 
@@ -2838,7 +2857,7 @@ def test_the_harness_hands_the_baselines_the_masked_bounds_it_solved(monkeypatch
     assert all(isinstance(bounds, Bounds) and bounds.lower for bounds in seen)
 ```
 
-- [ ] **Step 2: Run them and watch them fail**
+- [x] **Step 2: Run them and watch them fail**
 
 Run the two separately, because a collection error stops pytest before any other file runs:
 
@@ -2849,7 +2868,7 @@ uv run pytest tests/integration/test_stage4_acceptance.py::test_the_harness_hand
 
 Expected: the first stops at collection with `ImportError: cannot import name 'ConstraintDataError'` and `1 error`; count the module's nine tests as failing. The second is `1 failed`, on `assert False` where `False = all(<genexpr>)`: every scoring call passes no bounds.
 
-- [ ] **Step 3: Add the error**
+- [x] **Step 3: Add the error**
 
 Append to `src/logging_employment/errors.py`:
 
@@ -2867,7 +2886,7 @@ class ConstraintDataError(LoggingEmploymentError):
     """
 ```
 
-- [ ] **Step 4: Hide a parent exactly where it has no other establishments**
+- [x] **Step 4: Hide a parent exactly where it has no other establishments**
 
 In `src/logging_employment/validate/mask.py`, add directly after `eligible_targets`:
 
@@ -2981,7 +3000,7 @@ and append this closing paragraph to `apply_mask`'s docstring:
     (§13.2 step 4); every other parent keeps its real visibility.
 ```
 
-- [ ] **Step 5: Make the leakage guard re-apply the rule**
+- [x] **Step 5: Make the leakage guard re-apply the rule**
 
 In `src/logging_employment/validate/leakage.py`, add `from .mask import parents_to_hide` below `from ..errors import LeakageError`, and append to the end of `assert_no_retained_truth`:
 
@@ -3003,7 +3022,7 @@ In `src/logging_employment/validate/leakage.py`, add `from .mask import parents_
             )
 ```
 
-- [ ] **Step 6: Check the truth and find the exactly recoverable targets on every masked solve**
+- [x] **Step 6: Check the truth and find the exactly recoverable targets on every masked solve**
 
 In `src/logging_employment/validate/recover.py`: change the module docstring's first line to `"""§13.2 steps 5-6 and §13.5: rank, bound and check analysis on a masked component.`; change `from dataclasses import dataclass` to `from dataclasses import dataclass, field`; change `from ..constraints.cells import KIND_NATIONAL_SIZE` to `from ..constraints.cells import KIND_NATIONAL_SIZE, KIND_STATE_TOTAL`; add `from ..errors import ConstraintDataError` below the contracts import. Replace `MaskedSystem` and `mask_and_solve` with:
 
@@ -3115,7 +3134,9 @@ def exactly_recoverable(located: pl.DataFrame) -> pl.DataFrame:
 
 Keep `_empty_truth`, `is_exactly_recoverable` and `mask_and_solve_size` exactly as they are.
 
-- [ ] **Step 7: Score with the masked bounds and reject what they recover**
+- [x] **Step 7: Score with the masked bounds and reject what they recover**
+
+> Deviation (final review): §13.5's bound metrics were computed after step 6 had removed the rows they count, so `exact_recovery_rate` read 0 whenever the rejection worked, and the D-087 wiring test could not see bounds leaked from the unmasked layer. `a9659b6` fixes the ordering and pins the wiring; both are mutation-checked. Step 6 itself cannot fire end to end on the state arm (`D-118`).
 
 In `src/logging_employment/validate/harness.py`, change the runner import to `from ..baselines.runner import REGISTRY, run_baselines, state_total_bounds`; add `"rejected_exactly_recoverable": 0,` as the last key of the `entry` dict literal; and in the seed loop replace
 
@@ -3187,7 +3208,7 @@ def reject_exactly_recoverable(
     return kept, recoverable.height
 ```
 
-- [ ] **Step 8: Run the tests and the gates**
+- [x] **Step 8: Run the tests and the gates**
 
 ```bash
 uv run pytest tests/unit/test_validate_parent_mask.py tests/integration/test_stage4_acceptance.py tests/unit/test_validate_leakage_guards.py tests/unit/test_validate_mask.py tests/unit/test_validate_recover.py -q
@@ -3197,7 +3218,7 @@ uv run pytest -q
 
 Expected: clean; suite **+10 passed** (nine in the new module, the wiring test), 0 failed. The fixture goldens stay byte-identical: their layers carry no parent margin, so every scored bound is open and `run_baselines` takes the bit-identical path.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add src/logging_employment/errors.py src/logging_employment/baselines/runner.py src/logging_employment/validate/mask.py src/logging_employment/validate/leakage.py src/logging_employment/validate/recover.py src/logging_employment/validate/harness.py tests/unit/test_validate_parent_mask.py tests/integration/test_stage4_acceptance.py
@@ -3219,7 +3240,7 @@ No code changes. Every number recorded here is printed by a script over the run 
 - Consumes: everything above; `runs/f03023ac9f3a/` as the comparand, read-only.
 - Produces: `runs/<new id>/` holding `schema_manifest.json`, `deterministic_bounds.parquet`, `disclosure_flags.parquet`, `baseline_results/`, and the three `validation_*` tables.
 
-- [ ] **Step 1: Build and solve the bounded system, and check done-when 1 and 3**
+- [x] **Step 1: Build and solve the bounded system, and check done-when 1 and 3**
 
 ```bash
 uv run logging-estimates build-constraints --config config.yaml
@@ -3256,7 +3277,7 @@ EOF
 
 Expected: the run name matches the pin Task 4 wrote; `suppressed state cells 1227`; `finite selected_upper 756` (done-when 1, equal to `specs/findings/qcew-parent-margins.md`'s 756); `solver_status [('optimal', 756), ('unbounded', 471)]` (done-when 3); `bound_status [('partially_identified', 756), ('unbounded', 471)]`; `MILP rows 107 - MILP moved an LP endpoint on 0` (done-when 3's gap question: the MILP ran at zero gap and agreed with LP everywhere, as Decision 7 derives); `exact_reconstruction_flag 0` (R-PM-4). **If `finite selected_upper` differs from the finding, stop and explain the difference before going on** — done-when 1 allows a difference only if it is explained.
 
-- [ ] **Step 2: Run the baselines against the bounds, and verify the adding-up identity**
+- [x] **Step 2: Run the baselines against the bounds, and verify the adding-up identity**
 
 ```bash
 uv run logging-estimates run-baselines --config config.yaml
@@ -3265,7 +3286,7 @@ uv run logging-estimates reconcile --config config.yaml
 
 Expected: both exit 0. `run-baselines` no longer halts on the first parent-bounded month (Task 6); `reconcile` reports every month's estimates re-summing to its residual.
 
-- [ ] **Step 3: Re-run the harness (12 minutes or more)**
+- [x] **Step 3: Re-run the harness (12 minutes or more)**
 
 ```bash
 time uv run logging-estimates validate --config config.yaml
@@ -3273,7 +3294,9 @@ time uv run logging-estimates validate --config config.yaml
 
 Expected: exit 0, the per-regime `scored=` lines, nine regimes scoring. The shipped run took 12 min 08 s before this plan; every masked system now carries parent rows and some MILP components, so a longer run is not a hang. A `ConstraintDataError` here would mean a withheld truth outside its masked bounds (§13.5): stop and diagnose, never relax the check.
 
-- [ ] **Step 4: Measure what moved, by join, and append it to the Stage 5 log**
+- [x] **Step 4: Measure what moved, by join, and append it to the Stage 5 log**
+
+> Deviation (final review): the section this step appended was replaced by its re-measurement on the final code (`f413a1e`), with a derived addendum: the disclosure flags, what the WAPE movement is, §13.10's comparability caveat, and what the review's fixes moved.
 
 ```bash
 uv run python - <<'EOF' | tee /tmp/plan15-rpm7.md
@@ -3409,7 +3432,7 @@ cat /tmp/plan15-rpm7.md >> specs/findings/stage-5-log.md
 
 Expected: the script prints a markdown section and it is appended to the log. Read it before committing: `key-only rows` should be `0 / 0` for `baseline_results`, the scoreboard and `validation_metrics` (the same cells, estimators and strata ran), the scored-rows count should not fall unless `rejected` is non-zero, and `code_commit` must not end in `-dirty`.
 
-- [ ] **Step 5: Run the gates on the re-run tree**
+- [x] **Step 5: Run the gates on the re-run tree**
 
 ```bash
 uv run pytest -q
@@ -3417,7 +3440,7 @@ uv run pytest -q
 
 Expected: 0 failed, the same passed count as after Task 8. The acceptance pin Task 4 moved names this run directory, which now exists.
 
-- [ ] **Step 6: Commit the record**
+- [x] **Step 6: Commit the record**
 
 ```bash
 git add specs/findings/stage-5-log.md
@@ -3441,7 +3464,7 @@ git commit -m "docs(findings): record R-PM-7's re-run of the Stage 5 comparand a
 
 One script applies every edit, for two reasons: the counts and the run id the new text quotes are read off Task 9's artifacts rather than typed, and each edit must match its passage exactly once or nothing is written. Stage-block rule 1 governs the roadmap: the correction REPLACES the pending sentences, and the superseded reading goes to `specs/findings/stage-5-log.md`.
 
-- [ ] **Step 1: Save the rewrite script**
+- [x] **Step 1: Save the rewrite script**
 
 Save this as `/tmp/plan15_task10_docs.py`. It is a one-off and is not committed.
 
@@ -3757,7 +3780,7 @@ with Path("specs/findings/stage-5-log.md").open("a", encoding="utf-8") as log:
 print(f"rewrote {len(texts)} files and the Stage 5 roadmap block; run {NEW_ID}: {BOUNDED} bounded, {OPEN} open")
 ```
 
-- [ ] **Step 2: Check every match, then apply**
+- [x] **Step 2: Check every match, then apply**
 
 ```bash
 uv run python /tmp/plan15_task10_docs.py --check
@@ -3767,7 +3790,9 @@ grep -c '^- \[ \] Stage 5:' specs/logging-employment-spec-roadmap.md
 
 Expected: `all 22 edits and the roadmap span match exactly once`; then `rewrote 13 files and the Stage 5 roadmap block; run <the Task 4 id>: 756 bounded, 471 open`; then `1`, so the Stage 5 block is still exactly one line. If `--check` names a passage, an earlier task or a merge changed it: re-read that file and correct the script's `old` text. Never loosen the exactly-once rule.
 
-- [ ] **Step 3: Find anything the script did not reach**
+- [x] **Step 3: Find anything the script did not reach**
+
+> Deviation: at this step the second grep was not empty. It matched six gitignored `__pycache__` binaries compiled before Step 2's edits, while text files were clean (`grep -rnI` printed nothing). After Step 4's suite regenerated the caches, the literal grep printed nothing. Every `D-111` hit outside the history files reads as landed.
 
 ```bash
 grep -rn 'D-111\|756 of the 1,227' src specs README.md CLAUDE.md --include='*.py' --include='*.md' | cut -d: -f1 | sort | uniq -c
@@ -3776,7 +3801,7 @@ grep -rn '1,227 of 1,241' src tests
 
 Expected: every remaining `D-111` hit either reads as landed ("since `D-111`", "before `D-111`", "closed by plan 15") or sits in a history file: `specs/deferred_items.md` (ticked by the completion protocol), `specs/findings/stage-5-log.md`, `specs/completed/`, `specs/plans/`, and `specs/stage5-parent-margin.md` itself, which the completion protocol retires. Rewrite any hit that still reads as pending, under the same exactly-once rule. The second grep prints nothing. Two `1,227 of … 1,241` sentences stay in `specs/logging-employment-spec.md`: they are dated Stage 3 and Stage 7 re-validation records of what Stage 2 shipped, not claims about today.
 
-- [ ] **Step 4: Run the gates**
+- [x] **Step 4: Run the gates**
 
 ```bash
 uv run ruff format src tests && uv run ruff check src tests && uv run interrogate src
@@ -3785,7 +3810,7 @@ uv run pytest -q
 
 Expected: clean; `passed` unchanged from Task 9, since only docstrings and documents moved.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add specs/logging-employment-spec-roadmap.md specs/findings/stage-5-log.md README.md CLAUDE.md specs/logging-employment-spec.md src/logging_employment/reconcile/scaling.py src/logging_employment/reconcile/allocate.py src/logging_employment/reconcile/CLAUDE.md src/logging_employment/baselines/CLAUDE.md src/logging_employment/validate/CLAUDE.md src/logging_employment/validate/metrics.py src/logging_employment/validate/propensity.py src/logging_employment/constraints/CLAUDE.md tests/unit/test_scaling.py tests/unit/test_reconcile_properties.py

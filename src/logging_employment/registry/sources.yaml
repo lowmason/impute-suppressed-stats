@@ -86,6 +86,6 @@ sources:
     size_dimension: "all establishment sizes only, as for the qcew slice route; not separately measured for 113 [documented-not-measured]"
     disclosure_regime: "qcew_disclosure_code_v1"
     revision_policy: "a quarter is finalized with the following year's Q1 release [documented]"
-    model_role: "hard constraint source: a published private 113 state value bounds the suppressed 113310 cell of the same state-month from above (§9.3 parent-total constraint; specs/stage5-parent-margin.md R-PM-2)"
+    model_role: "hard constraint source: a published private 113 state value bounds the suppressed 113310 cell of the same state-month from above (§9.3 parent-total constraint; specs/completed/stage5-parent-margin.md R-PM-2)"
     limitations: "published on 1278 of 1588 private state-quarters and on 252 of the 409 where 113310 is suppressed (qcew_parent_margins.findings.parents.113). A bound, never an exact value: the sibling path 113 - 1131 - 1132 reconstructs no suppressed quarter (qcew_parent_margins.findings.siblings, plan 15 Task 1)"
 

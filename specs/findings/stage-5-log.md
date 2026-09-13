@@ -83,7 +83,7 @@ the LP width to fall below 25, so `D-093`'s gap binds only on the narrow subset 
 
 **Not measured, and named rather than assumed.** `113 - 1131 - 1132 = 1133`, and the chain below
 `1133` is 1:1 — so a quarter with all three disclosed is an *exact* reconstruction. `1131` and
-`1132` are outside R-S5G-5's named scope and were not fetched. `specs/stage5-parent-margin.md`
+`1132` are outside R-S5G-5's named scope and were not fetched. `specs/completed/stage5-parent-margin.md`
 owns that measurement.
 
 ## 2026-09-11 — `runs/f03023ac9f3a` validation artifacts regenerated under the stratum schema

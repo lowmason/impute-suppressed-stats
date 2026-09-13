@@ -1663,7 +1663,7 @@ names but no existing item owns; the Stage 4 `Exit:` line cites them.
       This is not a wrong number on D1: every state cell is `unbounded` with a null
       `selected_upper`, so the bounds rule cannot fire on the state-total arm at all.
       *(Qualified 2026-09-12: once `D-111` lands, 756 state cells carry a finite upper, and
-      `specs/stage5-parent-margin.md` R-PM-3 owns BOTH rules on the state-total arm -- §13.2 step 6 for
+      `specs/completed/stage5-parent-margin.md` R-PM-3 owns BOTH rules on the state-total arm -- §13.2 step 6 for
       the parent case and §13.5's out-of-bounds rule. This item keeps the size-class arm, and its
       Done-when applies to that arm.)*
       Target: Stage 6 — the first stage with a size-class estimator and state x size cells, which
@@ -1831,7 +1831,7 @@ the event that makes it reachable rather than a date.
       disclosed `113` parent on a suppressed quarter is a `'-'` true zero -- so `exact` is 0 by measurement
       -- through the measured margins; the `113 - 1131 - 1132` path was not measured (`D-110`). `113` is disclosed on **252 of 409** (756 months), bounding `113310` above.
       Recorded in the Stage 5 roadmap `Consumes`, `specs/findings/qcew-parent-margins.md` and
-      `specs/findings/stage-5-log.md`; the bound is routed to `specs/stage5-parent-margin.md`
+      `specs/findings/stage-5-log.md`; the bound is routed to `specs/completed/stage5-parent-margin.md`
       (`D-111`) rather than absorbed. Ticked on the MEASUREMENT (R-S5G-5..7); R-S5G-8's consequence is
       NOT closed here and is carried by `D-110` and `D-111`. Original text follows unedited. Measured: `deterministic_bounds.parquet`
       is 1,227 `unbounded` with `selected_upper` null on all 1,227, 3,534 `observed`, 14
@@ -1863,7 +1863,7 @@ the event that makes it reachable rather than a date.
       everywhere): the 1,227 state cells fail the first gate and the 14 finite national cells fail
       the second (widths 130-894). **`D-092` measured a bound 2026-09-11**: a disclosed `113` parent
       bounds 756 of the 1,227 suppressed cells above, so this fires for the subset under the width
-      threshold once `D-111` (`specs/stage5-parent-margin.md` R-PM-6) builds that bound into the
+      threshold once `D-111` (`specs/completed/stage5-parent-margin.md` R-PM-6) builds that bound into the
       system -- `specs/findings/qcew-parent-margins.md` derives how many that is.
       → done in plan 15 (2026-09-13): `79471c8` sets `mip_rel_gap` to 0 in
       `constraints/bounds.py::configured_highs`, which builds every solver (`mip_abs_gap` keeps 1e-6,
@@ -2118,7 +2118,7 @@ the event that makes it reachable rather than a date.
       `113 - 1131 - 1132 = 1133` is exact wherever all three are disclosed, and it can apply only on
       the 252 quarters where `113` is (and only where `1131` and `1132` are too) -- so on those
       quarters `REQ-027`'s status is UNKNOWN, not absent, and R-S5G-8's "before any release path can reach those cells" still binds. Measuring
-      it is `specs/stage5-parent-margin.md` R-PM-5. Pattern: `specs/findings/qcew-parent-margins.md`.
+      it is `specs/completed/stage5-parent-margin.md` R-PM-5. Pattern: `specs/findings/qcew-parent-margins.md`.
       Size: quick-fix. Revisit if: R-PM-5 finds `113`, `1131` and `1132` jointly disclosed on a
       suppressed quarter, or a QCEW revision publishes a parent where the child is `N`. Re-running
       `scripts/audit/qcew_parent_margins.py` OVERWRITES the stored extracts it would be compared
@@ -2138,7 +2138,7 @@ the event that makes it reachable rather than a date.
       `deterministic_bounds.parquet` carries `+inf` on all of them. It is not vacuous on the
       published distribution: where `113310` and `113` are both disclosed, `113310 / 113` has median
       0.916 over 3,069 month-observations -- a description of disclosed pairs, not of the suppressed
-      cells the bound applies to (`specs/stage5-parent-margin.md` R-PM-8). Routed there (R-PM-1..8):
+      cells the bound applies to (`specs/completed/stage5-parent-margin.md` R-PM-8). Routed there (R-PM-1..8):
       registry rows, new cell kinds and a `size_margin_rows`-shaped builder, a §13.2 step-4 rule for
       when `validate/recover.py` keeps the parent visible (it is public on 252 of 409 real
       suppressions, so hiding it always scores methods under harder identification than production -- today
@@ -2148,7 +2148,7 @@ the event that makes it reachable rather than a date.
       unmeasured `1131`/`1132` sibling path, MILP only where the new LP width falls under §9.6's
       threshold, and whether Stage 4's comparand is re-run. **Stage 5's roadmap `Consumes` blocks
       on this.**
-      Size: plan. Done when: `specs/stage5-parent-margin.md` §4's six conditions hold.
+      Size: plan. Done when: `specs/completed/stage5-parent-margin.md` §4's six conditions hold.
       → done in plan 15 (2026-09-13), `bea8721`..`0e473e9`: all six of
       `specs/completed/stage5-parent-margin.md` §4's conditions hold. (1) `runs/4cf47a918dd8` carries a
       finite `selected_upper` on 756 suppressed state cells, the finding's count. (2)
@@ -2231,7 +2231,7 @@ deliberately left open.
       rewrites `data/staged/cbp_state_size.parquet`, which changes `runs.run_id` for every command and
       fails `tests/integration/test_stage4_acceptance.py::test_the_shipped_config_still_resolves_to_the_stage_4_acceptance_run`,
       the pin to the Stage 4 comparand `runs/f03023ac9f3a`. `fetching.py` writes the same stamp on
-      both CBP snapshot rows, where it moves no run id. `specs/stage5-parent-margin.md` R-PM-7
+      both CBP snapshot rows, where it moves no run id. `specs/completed/stage5-parent-margin.md` R-PM-7
       decides whether that comparand is re-run, so the correction should ride that rebuild rather
       than force a second one.
       Size: quick-fix. Done when: the CBP stamp in `build.py` and `fetching.py` derives from the

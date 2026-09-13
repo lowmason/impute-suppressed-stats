@@ -109,7 +109,7 @@ def bound_tightness(child: pl.DataFrame, parent: pl.DataFrame) -> pl.Series:
     Measured on disclosed pairs because it is unmeasurable on a suppressed one. It therefore
     describes the PUBLISHED joint distribution and is NOT the bound's tightness on the bounded
     cells: those are suppressed cells, a different population, and small cells are exactly the ones
-    suppressed. `specs/stage5-parent-margin.md` R-PM-8 forbids reading it otherwise.
+    suppressed. `specs/completed/stage5-parent-margin.md` R-PM-8 forbids reading it otherwise.
     """
     published = pl.col("disclosure_code") == ""
     pairs = (
@@ -446,7 +446,7 @@ month-observations):
 **Not vacuous on the published distribution** — where both are published, `113310` is a median
 {100 * r_med:.0f}% of `113`. That describes DISCLOSED pairs. The bounded cells are suppressed ones,
 a different population (small cells are the ones suppressed), so this is **not** the bound's
-tightness on them, and `specs/stage5-parent-margin.md` R-PM-8 forbids quoting it as such. It
+tightness on them, and `specs/completed/stage5-parent-margin.md` R-PM-8 forbids quoting it as such. It
 establishes only that nothing in the published data suggests `113` routinely dwarfs `113310` (the
 renderer halts if that median falls below {RATIO_FLOOR:g}).
 
@@ -474,7 +474,7 @@ published, all three are published on **{sib["exact_where_child_suppressed"]}**,
 **{sib["exact_where_child_suppressed_if_absent_is_zero"]}** when a state-quarter with no sibling row
 at all is read as zero establishments — an inference, reported beside the strict count rather than
 folded into the ladder. **The sibling path reconstructs no suppressed quarter**, so `REQ-027` /
-§14.4 has no live instance through any margin measured here, and `specs/stage5-parent-margin.md`
+§14.4 has no live instance through any margin measured here, and `specs/completed/stage5-parent-margin.md`
 R-PM-4 does not bind (`D-110`). One sibling is published on
 **{sib["a_sibling_published_where_113_bounds"]}** of those quarters, which tightens the bound to
 `113 - sibling` without closing it; no constraint row builds that tighter bound.

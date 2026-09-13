@@ -54,7 +54,7 @@ def parents_to_hide(parent: pl.DataFrame, chosen: pl.DataFrame) -> pl.DataFrame:
     other parent as public as it really is. Establishment counts are published even for suppressed
     cells, so the rule reads nothing a real suppression would withhold.
 
-    Why this rule and not a propensity, measured 2026-09-12 (`specs/stage5-parent-margin.md` R-PM-3):
+    Why this rule and not a propensity, measured 2026-09-12 (`specs/completed/stage5-parent-margin.md` R-PM-3):
 
     * Where the child is all of the parent's establishments BLS hid the parent on 123 of 123 real
       suppressions, and on all 336 published month-values with no sibling establishments the parent

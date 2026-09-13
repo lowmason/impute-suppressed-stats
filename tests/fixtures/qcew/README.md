@@ -95,7 +95,7 @@ PY
 ## `slice_113_2017q1.csv` — audited bytes, cut to state and national rows
 
 The private `113` parent series behind `tests/integration/test_build_harmonized.py`'s parent-table
-tests (`specs/stage5-parent-margin.md` R-PM-1). It is
+tests (`specs/completed/stage5-parent-margin.md` R-PM-1). It is
 `data/raw/audit/qcew_parent_margins/113/2017q1.csv`, one of the extracts
 `specs/findings/qcew-parent-margins.md` pins, with every row whose `area_fips` does not end in `000`
 removed. Kept lines are byte-identical: the header, and the state and national rows at every

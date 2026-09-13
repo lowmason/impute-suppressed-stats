@@ -4,7 +4,9 @@
 
 # The §9.3 parent-industry margin: turning a measured disclosure into a bound
 
-**Status:** NOT STARTED — requirements input for `writing-plans`.
+**Status:** COMPLETE (2026-09-13) — implemented by plan 15
+(`specs/plans/completed/15-stage5-parent-margin.md`). Retired to `specs/completed/`. All six §4
+conditions hold (`D-111` closed); §13.2 step 6 cannot yet fire end to end on the state arm (`D-118`).
 
 **Measured input.** `specs/findings/qcew-parent-margins.md` (2026-09-11), produced by
 `scripts/audit/qcew_parent_margins.py` over 128 QCEW slices, all 200 and all parsable. Its three

@@ -459,7 +459,7 @@ def size_support_rows(cells_frame: pl.DataFrame, size_rows: pl.DataFrame) -> lis
 def parent_margin_rows(cells_frame: pl.DataFrame) -> list[ConstraintDraft]:
     """`child - parent <= 0` for every published private `113` parent over a suppressed child.
 
-    §9.3's parent-total constraint (`specs/stage5-parent-margin.md` R-PM-2). Forestry and Logging
+    §9.3's parent-total constraint (`specs/completed/stage5-parent-margin.md` R-PM-2). Forestry and Logging
     `113` is `1131 + 1132 + 1133`, and `1133 -> 11331 -> 113310` is single-child, so with both
     siblings nonnegative `113310 <= 113` in the same state, month and ownership. Written with the
     parent as a CELL pinned by its own fixing row, rather than as `child <= <number>`, for the

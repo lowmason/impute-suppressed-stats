@@ -31,7 +31,7 @@ QCEW_ALL_SIZES_CODE = "0"  # "All establishment sizes"
 # correct response to a set that was only ever observed.
 QCEW_DISCLOSURE_CODES = frozenset({"", "N", "-"})
 
-# The parent series that bounds `113310` from above (§9.3; `specs/stage5-parent-margin.md` R-PM-1).
+# The parent series that bounds `113310` from above (§9.3; `specs/completed/stage5-parent-margin.md` R-PM-1).
 # MEASURED, not documented: `specs/findings/qcew-parent-margins.md` found private `113` state rows on
 # all 32 D1 slices of `industry/113.csv`, every one at agglvl 55 -- NOT at `QCEW_STATE_AGGLVL`, the
 # 6-digit level. A route filtering on 58 reads zero parent rows as a clean absence, which is why

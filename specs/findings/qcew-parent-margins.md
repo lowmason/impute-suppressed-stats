@@ -110,7 +110,7 @@ month-observations):
 **Not vacuous on the published distribution** — where both are published, `113310` is a median
 92% of `113`. That describes DISCLOSED pairs. The bounded cells are suppressed ones,
 a different population (small cells are the ones suppressed), so this is **not** the bound's
-tightness on them, and `specs/stage5-parent-margin.md` R-PM-8 forbids quoting it as such. It
+tightness on them, and `specs/completed/stage5-parent-margin.md` R-PM-8 forbids quoting it as such. It
 establishes only that nothing in the published data suggests `113` routinely dwarfs `113310` (the
 renderer halts if that median falls below 0.5).
 
@@ -139,7 +139,7 @@ published, all three are published on **0**, and on
 **0** when a state-quarter with no sibling row
 at all is read as zero establishments — an inference, reported beside the strict count rather than
 folded into the ladder. **The sibling path reconstructs no suppressed quarter**, so `REQ-027` /
-§14.4 has no live instance through any margin measured here, and `specs/stage5-parent-margin.md`
+§14.4 has no live instance through any margin measured here, and `specs/completed/stage5-parent-margin.md`
 R-PM-4 does not bind (`D-110`). One sibling is published on
 **17** of those quarters, which tightens the bound to
 `113 - sibling` without closing it; no constraint row builds that tighter bound.

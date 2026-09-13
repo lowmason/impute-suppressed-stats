@@ -733,7 +733,7 @@ class HarmonizedData:
     fails on the first missing file rather than deferring to a Polars error at first use, so a run
     started before `build-harmonized` halts with the path it wanted.
 
-    `qcew_state_parent` is the private `113` state series (`specs/stage5-parent-margin.md` R-PM-1),
+    `qcew_state_parent` is the private `113` state series (`specs/completed/stage5-parent-margin.md` R-PM-1),
     in `QCEW_MONTHLY_SCHEMA` because it is the same QCEW product through the same parser. It is a
     TABLE OF ITS OWN rather than extra rows in `qcew_monthly` because two consumers select a cell
     from that table by `(state_fips, reference_month)` alone -- `validate/mask.apply_mask` and
