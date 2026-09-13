@@ -457,3 +457,62 @@ def test_a_pre_2017_window_is_refused_before_anything_is_requested_or_stored(
     assert requested == []
     assert not (tmp_path / "raw").exists()
     assert not (tmp_path / "runs" / "source_manifest.parquet").exists()
+
+
+def _dated_handler(stamp: str | None):
+    """Serve every source's fixture bytes, with `Last-Modified: stamp` on each response or none."""
+    census = _cbp_handler(set())
+    headers = {} if stamp is None else {"Last-Modified": stamp}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.census.gov":
+            served = census(request)
+            return httpx.Response(served.status_code, content=served.content, headers=headers)
+        return httpx.Response(200, content=SLICE, headers=headers)
+
+    return handler
+
+
+def _fetch_one_period(source: str, tmp_path: Path) -> list[dict[str, object]]:
+    year = 2023 if source == "cbp" else 2017
+    return fetch_source(
+        source,
+        _cfg(),
+        env_path=None,
+        raw_root=tmp_path,
+        output_root=tmp_path,
+        years=[year],
+        quarters=[1],
+    )
+
+
+@pytest.mark.parametrize("source", ["qcew", "qcew_size", "cbp"])
+def test_source_publication_date_carries_the_last_modified_header_verbatim(
+    source: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-100. All three producer sites wrote the literal "" into `source_publication_date`, so no
+    reader could tell "the source sent no date" from "nobody filled it in". The value is the
+    stamp data.bls.gov actually sent for the 2017q1 slice on 2026-09-12."""
+    stamp = "Tue, 28 Aug 2018 16:22:41 GMT"
+    _mock_transport(monkeypatch, _dated_handler(stamp))
+    monkeypatch.setenv("CENSUS_API_KEY", "SECRET-CENSUS-KEY")
+    rows = _fetch_one_period(source, tmp_path)
+    assert rows
+    assert {row["source_publication_date"] for row in rows} == {stamp}
+    manifest = pl.read_parquet(tmp_path / "source_manifest.parquet")
+    assert set(manifest["source_publication_date"].to_list()) == {stamp}
+
+
+@pytest.mark.parametrize("source", ["qcew", "qcew_size", "cbp"])
+def test_a_response_without_last_modified_records_null_rather_than_an_empty_string(
+    source: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-100. Census's `variables.json` sends no `Last-Modified` (probed 2026-09-12). Null says the
+    header was absent; the empty string now marks only rows written before this change."""
+    _mock_transport(monkeypatch, _dated_handler(None))
+    monkeypatch.setenv("CENSUS_API_KEY", "SECRET-CENSUS-KEY")
+    rows = _fetch_one_period(source, tmp_path)
+    assert rows
+    assert {row["source_publication_date"] for row in rows} == {None}
+    manifest = pl.read_parquet(tmp_path / "source_manifest.parquet")
+    assert manifest["source_publication_date"].to_list() == [None] * manifest.height

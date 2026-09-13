@@ -188,7 +188,7 @@ def fetch_source(
                             naics_vintage=vintage_for_year(year),
                             schema_fingerprint=schema_fingerprint(QCEW_MONTHLY_SCHEMA),
                             parser_version=qcew.PARSER_VERSION,
-                            source_publication_date="",
+                            source_publication_date=fetched.last_modified,
                             secrets=secrets,
                         )
                     )
@@ -211,7 +211,7 @@ def fetch_source(
                         naics_vintage=vintage_for_year(year),
                         schema_fingerprint=schema_fingerprint(QCEW_NATIONAL_SIZE_SCHEMA),
                         parser_version=qcew_size.PARSER_VERSION,
-                        source_publication_date="",
+                        source_publication_date=fetched.last_modified,
                         secrets=secrets,
                     )
                 )
@@ -243,7 +243,7 @@ def fetch_source(
                         naics_vintage=vintage_for_year(year),
                         schema_fingerprint=schema_fingerprint(CBP_STATE_SIZE_SCHEMA),
                         parser_version=cbp.PARSER_VERSION,
-                        source_publication_date="",
+                        source_publication_date=fetched.last_modified,
                         secrets=secrets,
                     )
                 )

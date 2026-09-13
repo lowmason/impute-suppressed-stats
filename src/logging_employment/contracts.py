@@ -55,6 +55,12 @@ SOURCE_SNAPSHOT_SCHEMA: dict[str, pl.DataType] = {
     "request_url_or_file": pl.String,
     "request_parameters_json": pl.String,
     "retrieved_at_utc": pl.String,
+    # §7.2's `source_publication_date` holds the response's `Last-Modified` header, verbatim, and
+    # is null when the server sent none (D-100). It is the server's modification time, not a
+    # release calendar. Probed 2026-09-12: data.bls.gov answered 2018-08-28 for the 2017q1 slice
+    # and 2025-09-02 for the 2024q4 slice; Census answered 2026-07-27 for the 2023 CBP data query
+    # and sent no header for that year's `variables.json`. An empty string marks a row written
+    # before 2026-09-12, when every producer site wrote "" here.
     "source_publication_date": pl.String,
     "reference_start": pl.String,
     "reference_end": pl.String,

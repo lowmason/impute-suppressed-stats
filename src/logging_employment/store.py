@@ -73,10 +73,14 @@ def snapshot_row(
     naics_vintage: str,
     schema_fingerprint: str,
     parser_version: str,
-    source_publication_date: str,
+    source_publication_date: str | None,
     secrets: Sequence[str | None],
 ) -> dict[str, object]:
-    """Build one `source_snapshot` row, refusing to emit it if a secret is present."""
+    """Build one `source_snapshot` row, refusing to emit it if a secret is present.
+
+    `source_publication_date` is the response's `Last-Modified` header or None (D-100); the note
+    beside `contracts.SOURCE_SNAPSHOT_SCHEMA` says what that column can and cannot be read as.
+    """
     params_json = json.dumps(fetched.params, sort_keys=True)
     assert_no_secret(fetched.url, secrets)
     assert_no_secret(params_json, secrets)
