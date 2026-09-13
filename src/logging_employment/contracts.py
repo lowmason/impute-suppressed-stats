@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import polars as pl
@@ -711,7 +711,18 @@ def assert_required_columns_present(frame: pl.DataFrame, name: str) -> None:
         )
 
 
-_HARMONIZED_TABLES = ("qcew_monthly", "qcew_national_size", "cbp_state_size", "bridge")
+_HARMONIZED_TABLES = (
+    "qcew_monthly",
+    "qcew_national_size",
+    "cbp_state_size",
+    "bridge",
+    "qcew_state_parent",
+)
+
+
+def _no_state_parent() -> pl.DataFrame:
+    """The parent table a directly built `HarmonizedData` carries when its caller supplies none."""
+    return pl.DataFrame(schema=QCEW_MONTHLY_SCHEMA)
 
 
 @dataclass(frozen=True)
@@ -721,16 +732,26 @@ class HarmonizedData:
     Every downstream stage reads only this layer, never a source endpoint. Loading is eager and
     fails on the first missing file rather than deferring to a Polars error at first use, so a run
     started before `build-harmonized` halts with the path it wanted.
+
+    `qcew_state_parent` is the private `113` state series (`specs/stage5-parent-margin.md` R-PM-1),
+    in `QCEW_MONTHLY_SCHEMA` because it is the same QCEW product through the same parser. It is a
+    TABLE OF ITS OWN rather than extra rows in `qcew_monthly` because two consumers select a cell
+    from that table by `(state_fips, reference_month)` alone -- `validate/mask.apply_mask` and
+    `validate/leakage.assert_no_retained_truth` -- and a parent row shares both keys with its
+    child. It defaults to an EMPTY frame only for a directly constructed instance, which is how
+    every fixture-built test predates it; `load` still requires the file, so a staged layer
+    without it halts rather than silently building no parent margin.
     """
 
     qcew_monthly: pl.DataFrame
     qcew_national_size: pl.DataFrame
     cbp_state_size: pl.DataFrame
     bridge: pl.DataFrame
+    qcew_state_parent: pl.DataFrame = field(default_factory=_no_state_parent)
 
     @classmethod
     def load(cls, staged_root: Path) -> HarmonizedData:
-        """Read the four Stage 1 tables from a `data/staged`-shaped directory."""
+        """Read the five Stage 1 tables from a `data/staged`-shaped directory."""
         frames = {}
         for name in _HARMONIZED_TABLES:
             path = staged_root / f"{name}.parquet"

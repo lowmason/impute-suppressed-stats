@@ -206,6 +206,7 @@ def parse_qcew_monthly(
     release_vintage: str,
     release_status: str,
     naics_vintage: str,
+    state_agglvl: str = QCEW_STATE_AGGLVL,
 ) -> pl.DataFrame:
     """Turn quarterly QCEW rows into normalized monthly rows (§7.3, SRC-QCEW-002/003/004).
 
@@ -215,6 +216,11 @@ def parse_qcew_monthly(
     `source_row_hash` is unique within one call, and stable across calls that differ only in
     `release_vintage` -- see `_ROW_IDENTITY_COLUMNS` for why, and for what that means when frames
     from several vintages are concatenated.
+
+    `state_agglvl` names the aggregation level whose rows are this frame's STATE rows. It defaults to
+    `constants.QCEW_STATE_AGGLVL` (58, the 6-digit level `113310` is served at). The private `113`
+    parent is served at its own digit-depth level, `constants.QCEW_PARENT_STATE_AGGLVL`, so its
+    caller names that level rather than this parser learning a second industry (R-PM-1).
     """
     _check_disclosure_codes(frame)
     _check_dash_rows_carry_no_establishments(frame)
@@ -272,7 +278,7 @@ def parse_qcew_monthly(
             pl.lit("unknown").alias("suppression_type"),
             pl.when(pl.col("agglvl_code") == QCEW_NATIONAL_AGGLVL)
             .then(pl.lit("national"))
-            .when(pl.col("agglvl_code") == QCEW_STATE_AGGLVL)
+            .when(pl.col("agglvl_code") == state_agglvl)
             .then(pl.lit("state"))
             .otherwise(pl.lit("other"))
             .alias("area_type"),

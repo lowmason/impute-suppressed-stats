@@ -23,7 +23,13 @@ def workspace(tmp_path: Path) -> Path:
     """A config whose storage roots point inside tmp_path, with the golden staged tables."""
     staged = tmp_path / "staged"
     staged.mkdir()
-    for name in ("qcew_monthly", "qcew_national_size", "cbp_state_size", "bridge"):
+    for name in (
+        "qcew_monthly",
+        "qcew_national_size",
+        "cbp_state_size",
+        "bridge",
+        "qcew_state_parent",
+    ):
         pl.read_parquet(FIXTURES / f"{name}.parquet").write_parquet(staged / f"{name}.parquet")
     raw = yaml.safe_load((REPO / "config.yaml").read_text())
     raw["storage"]["staged_uri"] = str(staged)

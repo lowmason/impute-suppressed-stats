@@ -93,6 +93,7 @@ def test_the_golden_fixture_is_tracked_in_git_not_rebuilt_from_ignored_data() ->
         "qcew_national_size",
         "cbp_state_size",
         "bridge",
+        "qcew_state_parent",
         "baseline_results_golden",
         "anchor_audit_golden",
     ):

@@ -10,9 +10,10 @@ import httpx
 import polars as pl
 import pytest
 
+from logging_employment import build
 from logging_employment.build import build_harmonized, write_parquet_deterministic
 from logging_employment.config import load_config
-from logging_employment.errors import UnknownDisclosureRegimeError
+from logging_employment.errors import ConceptViolationError, UnknownDisclosureRegimeError
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURES = REPO / "tests" / "fixtures"
@@ -40,6 +41,10 @@ def frozen_raw(tmp_path: Path) -> Path:
     shutil.copy(
         FIXTURES / "cbp" / "variables_2023.json", raw / "cbp" / "frozen" / "2023_variables.json"
     )
+    (raw / "qcew_parent" / "frozen").mkdir(parents=True)
+    shutil.copy(
+        FIXTURES / "qcew" / "slice_113_2017q1.csv", raw / "qcew_parent" / "frozen" / "2017q1.csv"
+    )
     return raw
 
 
@@ -51,7 +56,13 @@ def test_rebuild_is_byte_identical(frozen_raw: Path, tmp_path: Path) -> None:
     first = build_harmonized(_cfg(), raw_root=frozen_raw, out_root=tmp_path / "a")
     second = build_harmonized(_cfg(), raw_root=frozen_raw, out_root=tmp_path / "b")
     assert first == second
-    assert set(first) == {"qcew_monthly", "qcew_national_size", "cbp_state_size", "bridge"}
+    assert set(first) == {
+        "qcew_monthly",
+        "qcew_national_size",
+        "cbp_state_size",
+        "bridge",
+        "qcew_state_parent",
+    }
 
 
 def test_the_rebuild_compares_two_runs_rather_than_a_pinned_hash(
@@ -222,7 +233,7 @@ def test_the_run_manifest_resolves_which_snapshot_the_build_reads(
     hashes = build_harmonized(
         _cfg(), raw_root=frozen_raw, out_root=tmp_path / "i", manifest_path=manifest
     )
-    assert len(hashes) == 4
+    assert len(hashes) == 5
 
 
 def test_a_manifest_naming_an_absent_snapshot_halts(frozen_raw: Path, tmp_path: Path) -> None:
@@ -355,7 +366,13 @@ def test_the_run_manifest_names_which_metadata_copy_the_build_reads(
     hashes = build_harmonized(
         _cfg(), raw_root=frozen_raw, out_root=tmp_path / "j", manifest_path=manifest
     )
-    assert set(hashes) == {"qcew_monthly", "qcew_national_size", "cbp_state_size", "bridge"}
+    assert set(hashes) == {
+        "qcew_monthly",
+        "qcew_national_size",
+        "cbp_state_size",
+        "bridge",
+        "qcew_state_parent",
+    }
 
 
 def test_cbp_rows_carry_the_vintage_their_own_metadata_serves(
@@ -365,3 +382,33 @@ def test_cbp_rows_carry_the_vintage_their_own_metadata_serves(
     build_harmonized(_cfg(), raw_root=frozen_raw, out_root=tmp_path)
     stamped = pl.read_parquet(tmp_path / "cbp_state_size.parquet")["naics_vintage"].unique()
     assert stamped.to_list() == ["NAICS 2017"]
+
+
+def test_the_parent_table_is_the_private_113_state_series(frozen_raw: Path, tmp_path: Path) -> None:
+    """R-PM-1: only private state rows of `113`, read at the level `113` is served at."""
+    build_harmonized(_cfg(), raw_root=frozen_raw, out_root=tmp_path)
+    parent = pl.read_parquet(tmp_path / "qcew_state_parent.parquet")
+    assert parent.height > 0
+    assert set(parent["industry_code"]) == {"113"}
+    assert set(parent["aggregation_level"]) == {"55"}
+    assert set(parent["area_type"]) == {"state"}
+    assert set(parent["ownership_code"]) == {"5"}
+
+
+def test_a_parent_slice_read_at_the_wrong_level_halts_rather_than_building_nothing(
+    frozen_raw: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The level is a measurement: a changed one must halt, never read as a clean absence."""
+    monkeypatch.setattr(build, "QCEW_PARENT_STATE_AGGLVL", "58")
+    with pytest.raises(ConceptViolationError, match="agglvl 58"):
+        build_harmonized(_cfg(), raw_root=frozen_raw, out_root=tmp_path)
+
+
+def test_a_raw_store_with_no_parent_slice_halts_before_writing_anything(
+    frozen_raw: Path, tmp_path: Path
+) -> None:
+    shutil.rmtree(frozen_raw / "qcew_parent")
+    out = tmp_path / "out"
+    with pytest.raises(FileNotFoundError, match="fetch --source qcew_parent"):
+        build_harmonized(_cfg(), raw_root=frozen_raw, out_root=out)
+    assert not list(out.glob("*.parquet"))

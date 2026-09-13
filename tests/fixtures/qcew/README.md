@@ -91,3 +91,24 @@ with zipfile.ZipFile(DST, "w") as dst:
 print(hashlib.sha256(DST.read_bytes()).hexdigest())
 PY
 ```
+
+## `slice_113_2017q1.csv` — audited bytes, cut to state and national rows
+
+The private `113` parent series behind `tests/integration/test_build_harmonized.py`'s parent-table
+tests (`specs/stage5-parent-margin.md` R-PM-1). It is
+`data/raw/audit/qcew_parent_margins/113/2017q1.csv`, one of the extracts
+`specs/findings/qcew-parent-margins.md` pins, with every row whose `area_fips` does not end in `000`
+removed. Kept lines are byte-identical: the header, and the state and national rows at every
+ownership. County and MSA rows bound no state cell, and the whole extract is 304,909 bytes.
+
+```bash
+uv run python - <<'PY'
+from pathlib import Path
+source = Path("data/raw/audit/qcew_parent_margins/113/2017q1.csv")
+lines = source.read_bytes().splitlines(keepends=True)
+kept = [lines[0]] + [
+    line for line in lines[1:] if line.split(b",", 1)[0].strip(b'"').endswith(b"000")
+]
+Path("tests/fixtures/qcew/slice_113_2017q1.csv").write_bytes(b"".join(kept))
+PY
+```

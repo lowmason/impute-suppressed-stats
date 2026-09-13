@@ -9,7 +9,8 @@ from pathlib import Path
 import polars as pl
 
 from .config import Config
-from .errors import AmbiguousSnapshotError, UnknownDisclosureRegimeError
+from .constants import QCEW_PARENT_INDUSTRY, QCEW_PARENT_STATE_AGGLVL
+from .errors import AmbiguousSnapshotError, ConceptViolationError, UnknownDisclosureRegimeError
 from .harmonize import bridge, disclosure
 from .harmonize.naics import assert_113310_survives_the_window, vintage_for_year
 from .ingest import cbp, qcew, qcew_size
@@ -189,6 +190,39 @@ def snapshot_paths(
     return [by_key[k][0] for k in sorted(by_key)]
 
 
+def state_parent_rows(
+    raw: bytes, *, snapshot_id: str, release_status: str, naics_vintage: str
+) -> pl.DataFrame:
+    """The private `113` state rows of one stored parent slice (R-PM-1).
+
+    Parsed at `QCEW_PARENT_STATE_AGGLVL`, universe-filtered exactly as the `113310` table is
+    (REQ-002), then kept to state rows of the parent industry: the slice also carries national, MSA
+    and county rows, none of which bounds a state cell. AN EMPTY RESULT HALTS. The level is a
+    measurement, not a documented constant, and a changed level would otherwise build a table with
+    no rows -- a margin that silently vanished rather than one measured absent.
+    """
+    parsed = qcew.apply_universe_filter(
+        qcew.parse_qcew_monthly(
+            qcew.read_slice_csv(raw),
+            snapshot_id=snapshot_id,
+            release_vintage=snapshot_id,
+            release_status=release_status,
+            naics_vintage=naics_vintage,
+            state_agglvl=QCEW_PARENT_STATE_AGGLVL,
+        )
+    )
+    rows = parsed.filter(
+        (pl.col("area_type") == "state") & (pl.col("industry_code") == QCEW_PARENT_INDUSTRY)
+    )
+    if rows.is_empty():
+        raise ConceptViolationError(
+            f"{snapshot_id}: the stored parent slice carries no private {QCEW_PARENT_INDUSTRY} "
+            f"state row at agglvl {QCEW_PARENT_STATE_AGGLVL}; the level is measured, not "
+            "documented, so a changed one halts rather than building an empty parent table (R-PM-1)"
+        )
+    return rows
+
+
 def build_harmonized(
     cfg: Config,
     *,
@@ -210,6 +244,16 @@ def build_harmonized(
     # (D-102).
     assert_113310_survives_the_window()
     hashes: dict[str, str] = {}
+    # Resolved BEFORE the first table is written. A raw store without the parent series would
+    # otherwise leave a partial staged layer behind -- one whose digests re-id a run from inputs no
+    # build ever completed.
+    parent_paths = snapshot_paths("qcew_parent", raw_root, "*.csv", manifest_path=manifest_path)
+    if not parent_paths:
+        raise FileNotFoundError(
+            f"no stored qcew_parent slice under {raw_root / 'qcew_parent'}; the §9.3 parent margin "
+            "needs the private 113 state series -- run `logging-estimates fetch --source "
+            "qcew_parent` first"
+        )
 
     # REQ-002 binds the pipeline, not the parser: `parse_qcew_monthly` returns whatever rows it
     # is given, which is right for a parser, so the universe filter is applied here -- on the
@@ -228,6 +272,20 @@ def build_harmonized(
     ]
     hashes["qcew_monthly"] = write_parquet_deterministic(
         pl.concat(qcew_frames), out_root / "qcew_monthly.parquet"
+    )
+    hashes["qcew_state_parent"] = write_parquet_deterministic(
+        pl.concat(
+            [
+                state_parent_rows(
+                    path.read_bytes(),
+                    snapshot_id=path.stem,
+                    release_status=cfg.sources.qcew.release_status,
+                    naics_vintage=vintage_for_year(int(path.stem[:4])),
+                )
+                for path in parent_paths
+            ]
+        ),
+        out_root / "qcew_state_parent.parquet",
     )
 
     size_frames = [
