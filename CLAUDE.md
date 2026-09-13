@@ -17,7 +17,7 @@ stage is done; it also records what each stage re-validated about later ones. Pl
 ## Commands
 
 ```
-uv run pytest                    # whole suite; green without data/, data-bound tests skip (gotchas)
+uv run pytest                    # whole suite; data-bound tests skip without data/ (gotchas)
 uv run ruff format src tests     # the single formatter; NEVER `ruff format .` (see gotchas)
 uv run ruff check src tests      # clean; a bare `.` also lints scripts/ (see gotchas)
 uv run interrogate src           # docstring gate, fail-under = 100
@@ -52,6 +52,16 @@ a green check says nothing about the D1 integration tests — those still need a
 `data/` lives. Measured 2026-09-13 without `data/`: the expression deselects 27 tests (the six
 `slow` sites are mostly module-level) and passed stays at 1388, so it removes nothing that would
 have run.
+
+**CI also deselects two float goldens**, which still run locally:
+`test_validation_golden.py::test_the_metrics_match_the_golden` and
+`test_baseline_golden.py::test_the_baseline_output_matches_its_golden_fixture`. Both compare floats
+exactly against goldens written on an arm64 Mac at 14 polars threads, and both failed on
+ubuntu-latest (run 34763305304). The first depends on the THREAD COUNT: polars returns
+`(estimate - truth).abs()` in one chunk per thread and `.sum()`/`.mean()` in `validate/metrics.py`
+round per chunk, so `POLARS_MAX_THREADS=4` reproduces it here. The second passes locally at any
+thread count, so its cause is architecture or BLAS and is not yet isolated. Corollary: the dataless
+"green" counts in Gotchas are this Mac's, not a Linux runner's.
 
 ## Architecture
 
