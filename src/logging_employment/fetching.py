@@ -138,14 +138,21 @@ def fetch_source(
     """
     if source not in KNOWN_SOURCES:
         raise ValueError(f"unknown source {source!r}; known: {KNOWN_SOURCES}")
+    window_years = list(
+        years or range(int(cfg.project.start_month[:4]), int(cfg.project.end_month[:4]) + 1)
+    )
+    # Refuse an unsupported year BEFORE any side effect (D-081). Every arm below stamps
+    # `vintage_for_year(year)` inside `snapshot_row`, after `store.put` has written the bytes, so a
+    # pre-2017 `start_month` used to leave one blob in the immutable store and raise before
+    # `merge_source_manifest` recorded anything: an orphan that every manifest-less build then
+    # globs. Checked here, the refusal costs a message instead.
+    for year in window_years:
+        vintage_for_year(year)
     creds = credentials(env_path)
     contact = creds.get("BLS_CONTACT_EMAIL") or os.environ.get("BLS_CONTACT_EMAIL", "")
     secrets = [creds.get(name) for name in SECRET_ENV_VARS]
     store = RawStore(Path(raw_root or cfg.storage.raw_uri))
     fetcher = HttpFetcher(contact_email=contact)
-    window_years = list(
-        years or range(int(cfg.project.start_month[:4]), int(cfg.project.end_month[:4]) + 1)
-    )
     rows: list[dict[str, object]] = []
     try:
         if source == "qcew":

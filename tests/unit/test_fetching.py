@@ -14,7 +14,7 @@ from typer.testing import CliRunner
 from logging_employment.cli import app
 from logging_employment.config import load_config
 from logging_employment.contracts import SOURCE_SNAPSHOT_SCHEMA, validate_frame
-from logging_employment.errors import SourceFetchError
+from logging_employment.errors import SourceFetchError, UnsupportedReferenceYearError
 from logging_employment.fetching import (
     fetch_source,
     merge_source_manifest,
@@ -424,3 +424,36 @@ def test_a_cbp_data_leg_that_fails_after_its_metadata_succeeded_halts(
             "cbp", _cfg(), env_path=None, raw_root=tmp_path, output_root=tmp_path, years=[2023]
         )
     assert not (tmp_path / "source_manifest.parquet").exists()
+
+
+@pytest.mark.parametrize("source", ["qcew", "qcew_size", "cbp"])
+def test_a_pre_2017_window_is_refused_before_anything_is_requested_or_stored(
+    source: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-081. `vintage_for_year` refuses a year below 2017, but every source arm called it inside
+    `snapshot_row`, after `store.put`. A pre-2017 `start_month` therefore wrote one blob into the
+    immutable store and raised before `merge_source_manifest`, leaving an orphan that a later
+    manifest-less `build-harmonized` globs. The window must be refused before a request is made or
+    the store is opened."""
+    requested: list[str] = []
+    census = _cbp_handler(set())
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(str(request.url))
+        if request.url.host == "api.census.gov":
+            return census(request)
+        return httpx.Response(200, content=SLICE)
+
+    _mock_transport(monkeypatch, handler)
+    monkeypatch.setenv("CENSUS_API_KEY", "SECRET-CENSUS-KEY")
+    cfg = _cfg()
+    early = cfg.model_copy(
+        update={"project": cfg.project.model_copy(update={"start_month": "2016-01"})}
+    )
+    with pytest.raises(UnsupportedReferenceYearError, match="2016"):
+        fetch_source(
+            source, early, env_path=None, raw_root=tmp_path / "raw", output_root=tmp_path / "runs"
+        )
+    assert requested == []
+    assert not (tmp_path / "raw").exists()
+    assert not (tmp_path / "runs" / "source_manifest.parquet").exists()
