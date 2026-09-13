@@ -152,6 +152,42 @@ def test_a_duplicated_target_is_refused():
         apply_mask(data, [target, target])
 
 
+def test_a_cell_with_no_published_row_is_refused_as_a_target():
+    """The row-count guard, exercised directly from the fewer-rows side.
+
+    A never-observed state that still has rows passes this guard and is refused by the status one;
+    what trips this side is a (state, month) with no published row at all. Without the guard such a
+    target is a silent no-op — every later filter is empty — so it returns an empty truth table. The
+    row is dropped from a copy of the frame rather than looked up, because which state-months the
+    panel omits is a measurement a rebuild moves.
+    """
+    data = _data()
+    cell = (pl.col("state_fips") == "41") & (pl.col("reference_month") == "2019-06")
+    with pytest.raises(ConceptViolationError, match="rows matched"):
+        apply_mask(
+            dataclasses.replace(data, qcew_monthly=data.qcew_monthly.filter(~cell)),
+            [MaskTarget("41", "2019-06", "state_total", "primary_like")],
+        )
+
+
+def test_a_cell_matching_two_rows_is_refused_as_a_target():
+    """The same guard from the other side: one (state, month) that matches two rows.
+
+    Measured 2026-09-13: no two D1 rows share a (state_fips, reference_month), so the staged layer
+    cannot reach this side today; a second series parsed into `qcew_monthly` on the same keys
+    would. Without the guard both rows are hidden and the truth table carries two truths for one
+    target. The row is duplicated on a copy of the frame, as above.
+    """
+    data = _data()
+    cell = (pl.col("state_fips") == "41") & (pl.col("reference_month") == "2019-06")
+    doubled = pl.concat([data.qcew_monthly, data.qcew_monthly.filter(cell)])
+    with pytest.raises(ConceptViolationError, match="rows matched"):
+        apply_mask(
+            dataclasses.replace(data, qcew_monthly=doubled),
+            [MaskTarget("41", "2019-06", "state_total", "primary_like")],
+        )
+
+
 def test_no_column_of_a_masked_size_row_retains_the_withheld_truth():
     """The size-arm counterpart of the state-arm leak test, which reads only `qcew_monthly`.
 
