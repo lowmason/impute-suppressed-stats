@@ -109,7 +109,8 @@ synthetic masks. Outputs land in `runs/<run_id>/` beside one JSON manifest per c
   2017` before it, and *refuses* years < 2017 (`UnsupportedReferenceYearError`) rather than
   mislabelling them. `INV-007` (never stack incompatible vintages) is enforced at four separate
   points: `build.snapshot_paths` (the gotcha below), `constraints/cells.py::_assert_one_vintage_per_cell`,
-  `constraints/compat.py` (`:141`, `:154`) and `constraints/rows.py::constraint`.
+  `constraints/compat.py` (`:141`, `:154`, and `assert_parent_margin_compatible` since plan 15) and
+  `constraints/rows.py::constraint`.
   None of them is a general guarantee — `constraints/CLAUDE.md` says exactly what each covers.
 - **Docstrings are the design record.** Nearly every callable has one, and the house style is to
   say *why this and not the obvious alternative*, citing §/`INV-`/`REQ-`/`SRC-` ids; move those

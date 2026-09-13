@@ -99,7 +99,11 @@ class InactiveSourceConfig(_Strict):
 
 
 class SourcesConfig(_Strict):
-    """The three sources Stage 1 ingests, plus Appendix A's seven declared-inactive entries.
+    """The configured sources Stage 1 ingests, plus Appendix A's seven declared-inactive entries.
+
+    Plan 15's `qcew_parent`, the private `113` state series, has no entry and needs none: it is the
+    same QCEW product on the same route, so `fetching.py` fetches it with the `qcew` client and its
+    own industry constant, and it adds nothing to `resolved_dict`.
 
     Appendix A's `sources:` block lists ten. Seven of them -- `tpo`, `fia`, `ces`, `susb`, `bds`,
     `nonemployer`, `bea` -- carry `enabled: false` and belong to Stages 4-8; before they were

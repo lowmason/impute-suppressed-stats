@@ -93,7 +93,7 @@ def test_property_1_no_bound_scaling_sums_exactly_to_the_residual() -> None:
 
 
 def test_property_2_bounded_scaling_respects_every_bound() -> None:
-    """SYNTHETIC finite uppers: on D1 every state cell is unbounded above."""
+    """SYNTHETIC finite uppers: on D1 only the 756 parent-bounded state cells carry one."""
     rng = np.random.default_rng(SEED + 1)
     for _ in range(TRIALS):
         cells = _cells(int(rng.integers(2, 10)))

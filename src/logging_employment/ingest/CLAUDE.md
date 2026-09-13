@@ -1,7 +1,9 @@
 # `ingest/` — one module per source, plus the shared HTTP client
 
-Turns fetched bytes into the three source tables of §7.3 `qcew_monthly`, §7.4 `qcew_national_size`,
-§7.5 `cbp_state_size`. Nothing here decides *when* to fetch or *what* to write: `fetching.py`
+Turns fetched bytes into the source tables of §7.3 `qcew_monthly`, §7.4 `qcew_national_size` and
+§7.5 `cbp_state_size`, plus plan 15's `qcew_state_parent`: the private `113` state series, parsed by
+`qcew.parse_qcew_monthly` at the level `113` is served at (`state_agglvl=`, which `build.py` sets).
+Nothing here decides *when* to fetch or *what* to write: `fetching.py`
 drives acquisition, `build.py` drives parsing, both one level up. Spec obligations: §8.1
 `SRC-QCEW-001..007`, §8.2 `SRC-QSIZE-001..004`, §8.3 `SRC-CBP-001..005`, §18.3 fail-closed, and the
 §2.2 rows "Meaning of a QCEW zero", "QCEW size dimensionality", "CBP completeness and accuracy".

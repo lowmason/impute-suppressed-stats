@@ -191,8 +191,10 @@ def assert_scored_cells_are_primary_like(scored: pl.DataFrame) -> None:
 
     WHY A PRECONDITION IS THE HONEST READING RATHER THAN A GAP. §13.2 step 3's complementary cells
     exist to defeat recovery by subtraction, and on the arm that produces WAPE there is no
-    subtraction to defeat: every one of the 4,716 state cells is a single-cell component, so a
-    masked state total is `unbounded` with and without partners
+    subtraction to defeat: no state cell shares a component with another state cell -- since
+    `D-111` the only row coupling a state cell to anything is its `parent_margin`, whose other
+    cell is the state's own private `113` parent -- so a masked state total's interval is the
+    same with and without partners
     (`test_a_complementary_mask_changes_nothing_about_state_total_identification`, SRC-QCEW-006).
     The arm where steps 3 and 6 do bind -- the national-size March margin, `recover.mask_and_solve_size`
     -- produces no WAPE at all, because the §10 baselines estimate state totals and not size

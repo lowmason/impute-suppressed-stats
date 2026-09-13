@@ -145,6 +145,10 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
   `mask_and_solve` also HALTS on a withheld truth outside its masked bounds (§13.5,
   `ConstraintDataError`) and returns `recoverable`, the targets it still pins exactly, which
   `harness.reject_exactly_recoverable` drops from scoring and counts per regime (§13.2 step 6).
+  §13.5's bound metrics read the rows from BEFORE that rejection, so `exact_recovery_rate` counts
+  what step 6 removes. On the state arm exact recovery means a zero truth, and
+  `leakage.assert_no_retained_truth` refuses a zero truth first (`mask._hide` writes the literal
+  `"0"` a real `N` row publishes), so step 6 cannot fire there end to end (`D-118`).
 - **A masked cell's private `113` parent is hidden exactly when it holds no other establishments**
   (`mask.parents_to_hide`, §13.2 step 4) and keeps its real visibility otherwise;
   `leakage.assert_no_retained_truth` re-applies the rule to the masked layer. The docstring carries
@@ -241,6 +245,8 @@ uv run logging-estimates validate --config config.yaml [--estimators id,id]
   against the process CWD, so a real `validate` from the repo root writes into the checkout.
   Redirecting it to a temp dir *moves the run id* — derive the run path rather than typing it
   (`tests/integration/test_validate_cli.py::_metrics_path`).
-- The dated D1 numbers this package quotes (4,716 single-cell state components, 272/400 fully
-  observed state-years, the six never-observed FIPS, `runs/f03023ac9f3a`) live in the docstrings
-  and in `tests/unit/test_validate_regimes.py`. Recompute before citing one.
+- The dated D1 numbers this package quotes (4,716 state cells in single-cell components before
+  plan 15, 756 of which now share one with their `state_parent`; 272/400 fully observed
+  state-years; the six never-observed FIPS; `runs/f03023ac9f3a`, superseded as §13.10's comparand
+  by `runs/4cf47a918dd8`) live in the docstrings and in `tests/unit/test_validate_regimes.py`.
+  Recompute before citing one.
