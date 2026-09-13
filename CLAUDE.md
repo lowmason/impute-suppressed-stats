@@ -17,7 +17,7 @@ stage is done; it also records what each stage re-validated about later ones. Pl
 ## Commands
 
 ```
-uv run pytest                    # whole suite; NOT green without data/ (see gotchas)
+uv run pytest                    # whole suite; green without data/, data-bound tests skip (gotchas)
 uv run ruff format src tests     # the single formatter; NEVER `ruff format .` (see gotchas)
 uv run ruff check src tests      # clean; a bare `.` also lints scripts/ (see gotchas)
 uv run interrogate src           # docstring gate, fail-under = 100
@@ -42,8 +42,16 @@ command list — five of §16.1's fifteen do not exist yet (`fit-state-model`, `
 `disclosure-review`, `publish`, `run-all`).
 
 Markers are declared but never applied by `addopts`: `slow` is on one unit test and FIVE
-integration modules (measured 2026-09-10: six `mark.slow` sites) and nothing excludes it (pass `-m "not slow"` yourself), and `network` is
+integration modules (measured 2026-09-10: six `mark.slow` sites) and nothing excludes it locally (pass `-m "not slow"` yourself), and `network` is
 declared — its help text even says "excluded from the default run" — but no test carries it.
+
+**CI** (`.github/workflows/ci.yml`, added 2026-09-13) runs the four gates above on every push to
+`main` and every PR, after `uv sync --locked`, with `pytest -m "not slow and not network"`. It is
+the hermetic tier only: no runner has `data/`, so every data-bound test skips there by design, and
+a green check says nothing about the D1 integration tests — those still need a local run where
+`data/` lives. Measured 2026-09-13 without `data/`: the expression deselects 27 tests (the six
+`slow` sites are mostly module-level) and passed stays at 1388, so it removes nothing that would
+have run.
 
 ## Architecture
 
