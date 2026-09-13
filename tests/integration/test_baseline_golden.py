@@ -7,6 +7,17 @@ an intensity -- both change the NUMBERS while every arm stays honestly typed. Si
 the only check that would redden on either. Re-pinning it is therefore a decision about the data,
 not a chore: §17.6 requires a documented reason and reviewer approval, and the reason belongs in
 the commit that regenerates the file.
+
+THE NET IS EXACT EXCEPT IN THE LAST ULPS. `tests/golden_compare.py` compares every non-float
+column exactly -- `estimate_integer` included -- and Float64 values within rel 1e-12 / abs 1e-9.
+That is not a loosening a real move can slip through: a column or vintage change moves an intensity
+by percent.
+It exists because `constrained_regression`'s arithmetic (BLAS `x.T @ y`, LAPACK `solve`, libm
+`exp`/`log`) differs between the Mac that wrote this golden and a Linux runner by up to 1.5e-14
+relative, which an exact `.equals` reported as a failure (CI run 34763305304). A move BEYOND the
+tolerance still means re-pinning, under the rule above. The anchor audit's test stays on an exact
+`.equals`: its one float, `implied_intensity`, is a ratio of integer-valued sums with no BLAS or
+libm call behind it, and it passed on that same Linux run.
 """
 
 from __future__ import annotations
@@ -15,6 +26,7 @@ from pathlib import Path
 
 import polars as pl
 import pytest
+from tests.golden_compare import assert_matches_golden
 
 from logging_employment.baselines.runner import REGISTRY, run_baselines
 from logging_employment.build import deterministic_order
@@ -71,7 +83,7 @@ def test_the_baseline_output_matches_its_golden_fixture(
     """
     results, _ = run_baselines(frozen_harmonized, appendix_a_config)
     golden = pl.read_parquet(FIXTURES / "baseline_results_golden.parquet")
-    assert deterministic_order(results).equals(golden)
+    assert_matches_golden(deterministic_order(results), golden)
 
 
 def test_the_anchor_audit_matches_its_golden_fixture(frozen_harmonized, appendix_a_config) -> None:

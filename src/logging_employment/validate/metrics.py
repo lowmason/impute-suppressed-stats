@@ -9,6 +9,8 @@ what separates the two, and it is on every row for that reason.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import polars as pl
 
@@ -18,6 +20,24 @@ from .regimes import DIVISION_OF
 
 # The sentinel pair an unstratified row carries. A VALUE, never a null -- see `STRATUM_KINDS`.
 _OVERALL: dict[str, object] = {"stratum_kind": "overall", "stratum_value": "all"}
+
+
+def _exact_sum(values: pl.Series) -> float:
+    """The exactly rounded sum of the non-null values, independent of how polars chunked them.
+
+    NOT `Series.sum()`. Polars returns a derived Series such as `(estimate - truth).abs()` in one
+    chunk per thread and rounds each chunk's sum separately, so the same scores gave metric values
+    that moved in the last ulp with `POLARS_MAX_THREADS` -- 56 of the validation golden's 1,490 rows
+    at 4 threads against 14 (measured 2026-09-13). `math.fsum` is exactly rounded, so the result
+    depends on the values alone: §16.1's "same inputs, same output" then holds across core counts.
+    """
+    return math.fsum(values.drop_nulls().to_list())
+
+
+def _exact_mean(values: pl.Series) -> float | None:
+    """`_exact_sum` over the non-null count, and None when there is none -- `Series.mean()`'s nulls."""
+    present = values.drop_nulls()
+    return _exact_sum(present) / present.len() if present.len() else None
 
 
 def with_census_division(scores: pl.DataFrame) -> pl.DataFrame:
@@ -61,7 +81,9 @@ def bound_metrics(scores: pl.DataFrame, *, regime: str, seed: int, arm: str) -> 
             & (pl.col("selected_upper").is_null() | (pl.col("truth") <= pl.col("selected_upper")))
         ).height
         exact = group.filter(pl.col("bound_status") == "exactly_recoverable").height
-        width = (finite["selected_upper"] - finite["selected_lower"]).mean() if n_finite else None
+        width = (
+            _exact_mean(finite["selected_upper"] - finite["selected_lower"]) if n_finite else None
+        )
 
         base = {
             **_OVERALL,
@@ -139,7 +161,7 @@ def _state_share_absolute_error(scored: pl.DataFrame) -> float | None:
     if usable.is_empty():
         return None
     errors = (usable["estimate"] - usable["truth"]).abs() / usable["national_employment"]
-    return float(errors.mean())
+    return _exact_mean(errors)
 
 
 def point_metrics(
@@ -240,17 +262,17 @@ def _point_rows(
         # Null, never 0.0. A zero error over zero rows reads as perfect accuracy.
         return [{**row, "metric_name": n, "value": None} for n in names]
 
+    # Every reduction below is exactly rounded (`_exact_sum`), and the root is `math.sqrt`, never
+    # `** 0.5`: IEEE 754 requires sqrt to be exactly rounded, while `**` goes through libm's `pow`,
+    # which no platform promises to round the same way.
     err = scored["estimate"] - scored["truth"]
     abs_err = err.abs()
+    truth_mass = _exact_sum(scored["truth"].abs())
     values = {
-        "mae": abs_err.mean(),
-        "rmse": float((err**2).mean() ** 0.5),
-        "bias": err.mean(),
-        "wape": (
-            float(abs_err.sum() / scored["truth"].abs().sum())
-            if scored["truth"].abs().sum()
-            else None
-        ),
+        "mae": _exact_mean(abs_err),
+        "rmse": math.sqrt(_exact_mean(err * err)),
+        "bias": _exact_mean(err),
+        "wape": _exact_sum(abs_err) / truth_mass if truth_mass else None,
         "median_ape": (
             float((abs_err / scored["truth"].abs()).median())
             if scored.filter(pl.col("truth").abs() > 0).height == scored.height

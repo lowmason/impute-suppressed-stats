@@ -17,7 +17,7 @@ stage is done; it also records what each stage re-validated about later ones. Pl
 ## Commands
 
 ```
-uv run pytest                    # whole suite; NOT green without data/ (see gotchas)
+uv run pytest                    # whole suite; data-bound tests skip without data/ (gotchas)
 uv run ruff format src tests     # the single formatter; NEVER `ruff format .` (see gotchas)
 uv run ruff check src tests      # clean; a bare `.` also lints scripts/ (see gotchas)
 uv run interrogate src           # docstring gate, fail-under = 100
@@ -42,8 +42,32 @@ command list — five of §16.1's fifteen do not exist yet (`fit-state-model`, `
 `disclosure-review`, `publish`, `run-all`).
 
 Markers are declared but never applied by `addopts`: `slow` is on one unit test and FIVE
-integration modules (measured 2026-09-10: six `mark.slow` sites) and nothing excludes it (pass `-m "not slow"` yourself), and `network` is
+integration modules (measured 2026-09-10: six `mark.slow` sites) and nothing excludes it locally (pass `-m "not slow"` yourself), and `network` is
 declared — its help text even says "excluded from the default run" — but no test carries it.
+
+**CI** (`.github/workflows/ci.yml`, added 2026-09-13) runs the four gates above on every push to
+`main` and every PR, after `uv sync --locked`, with `pytest -m "not slow and not network"`. It is
+the hermetic tier only: no runner has `data/`, so every data-bound test skips there by design, and
+a green check says nothing about the D1 integration tests — those still need a local run where
+`data/` lives. Measured 2026-09-13 without `data/`: the expression deselects 27 tests (the six
+`slow` sites are mostly module-level) and passed stays at 1408, so it removes nothing that would
+have run. Nothing else is deselected. Those counts are THIS MAC's: ubuntu-latest reports 1407
+passed, 46 skipped, 27 deselected (run 34765933053), because
+`tests/audit/test_qcew_codes.py::test_period_basis_quotes_the_reference_verbatim_where_the_reference_is_readable`
+skips where the personal `~/.claude/skills/bls-data-context/` reference is absent (D-055).
+
+**Float goldens compare through `tests/golden_compare.py`, not `.equals`** (2026-09-13). The two
+float goldens (`test_validation_golden.py::test_the_metrics_match_the_golden`,
+`test_baseline_golden.py::test_the_baseline_output_matches_its_golden_fixture`) failed on
+ubuntu-latest (run 34763305304) against files written on an arm64 Mac, for two separate reasons.
+THREAD COUNT: polars returns a derived Series in one chunk per thread and rounds each chunk's sum,
+so `validate/metrics.py` now reduces through `math.fsum` (`_exact_sum`) and the re-pinned
+validation golden is byte-identical at `POLARS_MAX_THREADS` 1, 4 and 14. PLATFORM: OpenBLAS and
+glibc's libm against Accelerate and Apple's libm move `constrained_regression` (`x.T @ y`, `solve`,
+`exp`/`log`) and CRPS (`np.dot`) by up to 1.5e-14 relative (diagnostic run 34764717606), and no
+integer, count or coverage value moved. So the comparator checks every non-float column exactly and
+Float64 within rel 1e-12 / abs 1e-9. Never pin `POLARS_MAX_THREADS` to make a golden pass, and
+diff old against new by join before re-pinning one (§17.6).
 
 ## Architecture
 

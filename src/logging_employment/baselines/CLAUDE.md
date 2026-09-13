@@ -94,8 +94,11 @@ because the value reaches `baseline_manifest.json` as a reviewable claim. Compos
 `compose_with_declared_fallback`. Decide rung membership in both structures from gotcha 2 — an
 estimator in no rung still runs and is still scored, it just cannot become §13.10's comparand.
 Expect `tests/integration/test_baseline_golden.py` to redden: it asserts the result's estimator set
-equals `REGISTRY`'s and pins the whole frame against a committed golden parquet. Re-pinning needs
-§17.6's documented reason, in the commit that regenerates the fixture.
+equals `REGISTRY`'s and pins the whole frame against a committed golden parquet — every non-float
+column exactly, Float64 within rel 1e-12 / abs 1e-9 (`tests/golden_compare.py`), because
+`constrained_regression`'s BLAS/LAPACK/libm arithmetic differs between macOS and Linux by ~1e-14.
+A move beyond that tolerance is real. Re-pinning needs §17.6's documented reason, in the commit
+that regenerates the fixture.
 
 ## Commands (repo root)
 
