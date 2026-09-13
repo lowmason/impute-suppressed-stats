@@ -18,7 +18,8 @@ import render_parent_margins as r
 
 CLEAN = {
     "slice_outcomes": {
-        i: {"ok": 32, "not_found": 0, "unparseable": 0} for i in ("113310", "113", "1133", "11331")
+        i: {"ok": 32, "not_found": 0, "unparseable": 0}
+        for i in ("113310", "113", "1133", "11331", "1131", "1132")
     },
     "parents": {
         "113": {
@@ -36,6 +37,15 @@ CLEAN = {
             "agglvl_codes_present": ["57"],
             "disclosed_where_child_suppressed": 0,
         },
+    },
+    "siblings": {
+        "industries": {
+            "1131": {"fetched": True, "agglvl_codes_present": ["56"]},
+            "1132": {"fetched": True, "agglvl_codes_present": ["56"]},
+        },
+        "exact_where_child_suppressed": 0,
+        "exact_where_child_suppressed_if_absent_is_zero": 0,
+        "a_sibling_published_where_113_bounds": 17,
     },
     "total_ownership_113310": {
         "own_code_0_rows": 0,
@@ -73,6 +83,15 @@ def test_the_measured_summary_supports_every_guarded_sentence():
         ),
         (lambda f: f["identification"].update(exact=1), "exact reconstruction"),
         (lambda f: f["slice_outcomes"]["113"].update(ok=31), "parsable"),
+        (lambda f: f["siblings"]["industries"]["1131"].update(fetched=False), "1131 was fetched"),
+        (
+            lambda f: f["siblings"].update(exact_where_child_suppressed=2),
+            "reconstructs no suppressed quarter",
+        ),
+        (
+            lambda f: f["siblings"].update(exact_where_child_suppressed_if_absent_is_zero=1),
+            "absent sibling",
+        ),
     ],
 )
 def test_each_broken_summary_premise_halts_by_naming_its_sentence(mutate, names):

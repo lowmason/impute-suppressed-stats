@@ -201,6 +201,14 @@ def summary_premises(findings: dict, *, expected_slices: int) -> list[str]:
         broken.append("'the subtraction route is closed from both ends' is false")
     if findings["identification"]["exact"]:
         broken.append("'none carries an exact reconstruction' is false")
+    sib = findings["siblings"]
+    for industry in ("1131", "1132"):
+        if not sib["industries"].get(industry, {}).get("fetched"):
+            broken.append(f"the sibling section assumes {industry} was fetched; it was not")
+    if sib["exact_where_child_suppressed"]:
+        broken.append("'the sibling path reconstructs no suppressed quarter' is false")
+    if sib["exact_where_child_suppressed_if_absent_is_zero"]:
+        broken.append("'reading an absent sibling row as zero reconstructs nothing' is false")
     return broken
 
 
@@ -323,6 +331,12 @@ def render(
         "`unbounded` on 2026-09-11 (a quoted reference);\nthat artifact predates this measurement."
     )
     n_sup = child_f["suppressed_rows"]
+    sib = findings["siblings"]
+    sib_table = "\n".join(
+        f"| `{i}` | {s['agglvl_codes_present'][0]} | {s['state_quarter_rows_private']} | "
+        f"{s['disclosed_private']} | {s['disclosed_where_113_bounds']} |"
+        for i, s in sorted(sib["industries"].items())
+    )
     return f"""# §9.3 parent-industry and ownership margins on D1 — measured
 
 **Measured:** {summary["generated_utc"]} (R-S5G-5, plan 14 Task 2). **Derived from
@@ -347,7 +361,7 @@ uv run --no-project render_parent_margins.py   # rewrites this file from the sto
 {n_q} slices of `https://data.bls.gov/cew/data/api/{{year}}/{{qtr}}/industry/{{industry}}.csv` —
 industries {", ".join(f"`{i}`" for i in sorted(findings["slice_outcomes"]))} across {years}
 ({len(cov["covered"])} years x 4 quarters). Every one answered 200 with a parsable CSV:
-`not_found` and `unparseable` are 0 for all four industries, so no count below is short a quarter.
+`not_found` and `unparseable` are 0 for all {len(findings["slice_outcomes"])} industries, so no count below is short a quarter.
 
 **Region margins were not fetched and need not be.** QCEW publishes no region level; Stage 0's
 measured agglvl inventory for `113310` is 18 National / 48 MSA / 58 State / 78 County. A
@@ -403,8 +417,8 @@ subtraction route is closed from both ends.
 | **identified at all** | **{ids}** | **{ident["months_identified"]}** |
 
 **{pct:.1f}%** of the suppressed state-quarters carry a finite upper bound from a disclosed `113`
-parent. None carries an exact reconstruction through a MEASURED margin — see *What this does not
-measure*.
+parent. None carries an exact reconstruction through a MEASURED margin — see *The sibling path
+(R-PM-5)*.
 
 ### Why `exact` is 0 by measurement, not by construction
 
@@ -445,13 +459,25 @@ are below it, touching **{q_under}** of the {ident["upper_bound"]} bounded quart
 finite but stay LP-only, so `D-093`'s MILP gap binds on that subset, not on all {n_values}. (This
 assumes the parent row is the only restriction added; another margin could narrow widths further.)
 
-## What this does not measure
+## The sibling path (R-PM-5)
 
 `113 - 1131 - 1132 = 1133`, and the chain below `1133` is 1:1 — so a quarter with `113`, `1131`
-and `1132` all disclosed is an **exact** reconstruction of `113310`. `1131` and `1132` are outside
-R-S5G-5's named scope and were not fetched. On the {parents["113"]["disclosed_where_child_suppressed"]}
-quarters where `113` is disclosed, REQ-027's status is therefore **unknown**, not absent (`D-110`),
-and `specs/stage5-parent-margin.md` R-PM-5 owns measuring it.
+and `1132` all published is an **exact** reconstruction of `113310`. Both siblings were walked with
+the industries above and judged by the same ladder.
+
+| sibling | agglvl | private state-quarters | published | published where `113` bounds a suppressed `113310` |
+|---|---|---|---|---|
+{sib_table}
+
+On the {parents["113"]["disclosed_where_child_suppressed"]} suppressed quarters where `113` is
+published, all three are published on **{sib["exact_where_child_suppressed"]}**, and on
+**{sib["exact_where_child_suppressed_if_absent_is_zero"]}** when a state-quarter with no sibling row
+at all is read as zero establishments — an inference, reported beside the strict count rather than
+folded into the ladder. **The sibling path reconstructs no suppressed quarter**, so `REQ-027` /
+§14.4 has no live instance through any margin measured here, and `specs/stage5-parent-margin.md`
+R-PM-4 does not bind (`D-110`). One sibling is published on
+**{sib["a_sibling_published_where_113_bounds"]}** of those quarters, which tightens the bound to
+`113 - sibling` without closing it; no constraint row builds that tighter bound.
 """
 
 
