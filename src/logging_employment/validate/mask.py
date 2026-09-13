@@ -76,8 +76,9 @@ def apply_mask(
     if chosen.height != len(set(keys)):
         raise ConceptViolationError(
             f"{len(set(keys))} targets requested but {chosen.height} rows matched; a target with "
-            "no published row cannot be masked (the six never-observed states are permanently in "
-            "the missing set and are never eligible)"
+            "no published row (a month outside the window, or a state-month the panel omits) "
+            "cannot be masked, and a (state_fips, reference_month) matching more than one row "
+            "would hide all of them"
         )
     bad_status = chosen.filter(pl.col("observation_status") != "observed")
     if bad_status.height:
