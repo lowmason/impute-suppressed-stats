@@ -108,7 +108,7 @@ def vintage_for_predicate(predicate: str) -> str:
     """
     found = _PREDICATE_VINTAGE.fullmatch(predicate)
     if found is None:
-        raise ValueError(
+        raise SchemaMismatchError(
             f"CBP predicate {predicate!r} names no NAICS vintage; expected NAICS<year>"
         )
     return f"NAICS {found.group(1)}"

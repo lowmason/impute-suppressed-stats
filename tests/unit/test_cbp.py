@@ -291,5 +291,5 @@ def test_the_vintage_is_the_one_the_stored_metadata_serves() -> None:
 
 @pytest.mark.parametrize("predicate", ["NAICS", "NAICS17", "NAICS2017_LABEL", "SIC1987"])
 def test_a_predicate_that_names_no_vintage_is_refused(predicate: str) -> None:
-    with pytest.raises(ValueError, match="names no NAICS vintage"):
+    with pytest.raises(SchemaMismatchError, match="names no NAICS vintage"):
         cbp.vintage_for_predicate(predicate)

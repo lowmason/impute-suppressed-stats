@@ -77,6 +77,7 @@ The two QCEW tables do not share a column vocabulary (`size_class` vs `size_code
 | QCEW size code with no published bounds | `UnknownSizeCodeError` | `qcew_size.py::_check_size_codes` |
 | state × industry × size rows present (§2.2 row 3 assumed absent) | `MissingCrossTabulationError` | `qcew_size.py::assert_no_state_industry_size` |
 | Census echoing a predicate column twice with disagreeing values | `SchemaMismatchError` | `cbp.py::_frame_from_rows` |
+| a stored metadata NAICS predicate that names no vintage (`NAICS<year>`) | `SchemaMismatchError` | `cbp.py::vintage_for_predicate` |
 | `disclosure_code == "-"` with `qtrly_estabs > 0` (breaks the true-zero premise) | `ValueError` | `qcew.py::_check_dash_rows_carry_no_establishments` |
 | bulk-zip industry substring does not narrow to one member (`11331` hits `111331 Apple orchards`) | `ValueError` | `qcew.py::read_bulk_zip` |
 | by-size zip does not hold exactly one CSV; boundary probe served no year | `ValueError` | `qcew_size.py::read_by_size_zip`, `qcew.py::probe_slice_boundary` |
