@@ -148,3 +148,19 @@ def test_an_explicitly_quarantined_component_records_infeasible_instead_of_halti
         )["bound_status"]
     ) == {"infeasible"}
     assert len(result.diagnostics) == 1
+
+
+def test_the_diagnostic_judges_feasibility_at_the_configured_tolerance(
+    make_monthly, make_size
+) -> None:
+    """D-099. `diagnose` took `config` and read none of it, so it solved at HiGHS defaults while
+    the bound solver ran at `feasibility_tolerance`, and the two could disagree about whether a
+    component is infeasible at all. The fixture's conflict is 50 employees and a tolerance of 100
+    absorbs it: the bound solver finds the component feasible, so the diagnosis of that component
+    must agree rather than report a 50-employee slack."""
+    built, membership, component, cfg = _infeasible(make_monthly, make_size)
+    loose = cfg.constraints.model_copy(update={"feasibility_tolerance": 100.0})
+    bounds.solve_component(built, component, membership, loose, integer=False)
+    report = diagnostics.diagnose(built, component, membership, loose)
+    assert report.minimum_slack == 0.0
+    assert report.iis_constraint_ids == ()

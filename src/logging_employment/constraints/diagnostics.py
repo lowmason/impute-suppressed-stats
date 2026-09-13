@@ -19,7 +19,7 @@ import highspy
 import numpy as np
 import polars as pl
 
-from .bounds import INFINITY, BoundConfig, column_specs, matrix_rows
+from .bounds import INFINITY, BoundConfig, column_specs, configured_highs, matrix_rows
 from .index import SystemIndex
 from .system import BuiltSystem
 
@@ -63,7 +63,12 @@ def diagnose(
     *,
     index: SystemIndex | None = None,
 ) -> InfeasibilityDiagnostic:
-    """Build both accounts of one component's infeasibility."""
+    """Build both accounts of one component's infeasibility, at the configured tolerances.
+
+    Both solvers come from `bounds.configured_highs`, the constructor the bound solver uses, so
+    this diagnosis cannot call a component infeasible that `solve_bounds` found feasible, or the
+    reverse (`D-099`).
+    """
     specs = column_specs(built, component_id, membership, index=index)
     coupling = matrix_rows(built, component_id, index=index)
     rows = built.rows.filter(pl.col("component_id") == component_id)
@@ -71,8 +76,7 @@ def diagnose(
     at = {cell: i for i, cell in enumerate(order)}
 
     # --- account one: an irreducible infeasible subsystem, if HiGHS offers one ------------------
-    plain = highspy.Highs()
-    plain.setOptionValue("output_flag", False)
+    plain = configured_highs(config)
     plain.addVars(
         len(order),
         np.array([specs[c].lower for c in order]),
@@ -92,8 +96,7 @@ def diagnose(
         iis_cells = tuple(order[i] for i in list(iis.col_index_) if i < len(order))
 
     # --- account two: the minimum total slack, and where it lands -------------------------------
-    slack = highspy.Highs()
-    slack.setOptionValue("output_flag", False)
+    slack = configured_highs(config)
     slack.addVars(
         len(order),
         np.array([specs[c].lower for c in order]),

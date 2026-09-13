@@ -164,6 +164,24 @@ def matrix_rows(
     return kept
 
 
+def configured_highs(config: BoundConfig) -> highspy.Highs:
+    """A silent HiGHS instance at the configured feasibility tolerances.
+
+    Every solver the engine builds starts here: `_model` for each bound, and both of
+    `diagnostics.diagnose`'s §9.7 accounts. So the bound that halts a run and the diagnosis that
+    explains the halt judge feasibility at one tolerance. Before `D-099` the diagnostic built its
+    own `highspy.Highs()` at solver defaults while accepting this config and reading none of it,
+    so loosening `feasibility_tolerance` moved every bound but not the diagnosis, and the two
+    accounts could disagree about whether a component was infeasible at all.
+    """
+    model = highspy.Highs()
+    model.setOptionValue("output_flag", False)
+    model.setOptionValue("primal_feasibility_tolerance", config.feasibility_tolerance)
+    model.setOptionValue("dual_feasibility_tolerance", config.feasibility_tolerance)
+    model.setOptionValue("mip_feasibility_tolerance", config.feasibility_tolerance)
+    return model
+
+
 def _model(
     specs: dict[str, ColumnSpec],
     rows: list[dict[str, object]],
@@ -174,11 +192,7 @@ def _model(
     """A HiGHS model for one component, and the column index of each cell."""
     order = list(specs)
     at = {cell: i for i, cell in enumerate(order)}
-    model = highspy.Highs()
-    model.setOptionValue("output_flag", False)
-    model.setOptionValue("primal_feasibility_tolerance", config.feasibility_tolerance)
-    model.setOptionValue("dual_feasibility_tolerance", config.feasibility_tolerance)
-    model.setOptionValue("mip_feasibility_tolerance", config.feasibility_tolerance)
+    model = configured_highs(config)
     model.addVars(
         len(order),
         np.array([specs[cell].lower for cell in order]),
