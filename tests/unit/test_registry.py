@@ -69,5 +69,5 @@ def test_verify_flags_a_duplicate_source_id() -> None:
 
 def test_the_seed_registry_is_sound() -> None:
     rows = load_registry(SEED)
-    assert {r.source_id for r in rows} == {"qcew", "qcew_size", "cbp"}
+    assert {r.source_id for r in rows} == {"qcew", "qcew_parent", "qcew_size", "cbp"}
     assert verify(rows) == []

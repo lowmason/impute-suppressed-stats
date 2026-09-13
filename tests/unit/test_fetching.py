@@ -16,10 +16,12 @@ from logging_employment.config import load_config
 from logging_employment.contracts import SOURCE_SNAPSHOT_SCHEMA, validate_frame
 from logging_employment.errors import SourceFetchError, UnsupportedReferenceYearError
 from logging_employment.fetching import (
+    KNOWN_SOURCES,
     fetch_source,
     merge_source_manifest,
     write_source_manifest,
 )
+from logging_employment.registry.loader import load_registry
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -434,7 +436,7 @@ def test_a_cbp_data_leg_that_fails_after_its_metadata_succeeded_halts(
     assert not (tmp_path / "source_manifest.parquet").exists()
 
 
-@pytest.mark.parametrize("source", ["qcew", "qcew_size", "cbp"])
+@pytest.mark.parametrize("source", ["qcew", "qcew_parent", "qcew_size", "cbp"])
 def test_a_pre_2017_window_is_refused_before_anything_is_requested_or_stored(
     source: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -494,7 +496,7 @@ def _fetch_one_period(source: str, tmp_path: Path) -> list[dict[str, object]]:
     )
 
 
-@pytest.mark.parametrize("source", ["qcew", "qcew_size", "cbp"])
+@pytest.mark.parametrize("source", ["qcew", "qcew_parent", "qcew_size", "cbp"])
 def test_source_publication_date_carries_the_last_modified_header_verbatim(
     source: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -511,7 +513,7 @@ def test_source_publication_date_carries_the_last_modified_header_verbatim(
     assert set(manifest["source_publication_date"].to_list()) == {stamp}
 
 
-@pytest.mark.parametrize("source", ["qcew", "qcew_size", "cbp"])
+@pytest.mark.parametrize("source", ["qcew", "qcew_parent", "qcew_size", "cbp"])
 def test_a_response_without_last_modified_records_null_rather_than_an_empty_string(
     source: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -540,3 +542,46 @@ def test_every_stored_cbp_object_has_a_snapshot_row(
     stored = {p for p in (tmp_path / "cbp").rglob("*") if p.is_file()}
     manifest = pl.read_parquet(tmp_path / "source_manifest.parquet")
     assert {Path(p) for p in manifest["raw_path"].to_list()} == stored
+
+
+def _recording_slice_handler(seen: list[str]):
+    """Serve the 2017q1 slice for every request, recording each URL the fetch actually asked for."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(200, content=SLICE)
+
+    return handler
+
+
+def test_the_parent_source_fetches_the_113_slice_into_its_own_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R-PM-1: the private `113` series rides `ingest/qcew.py`'s slice route under its own source id.
+
+    Every request names `industry/113.csv` -- the boundary probe included, because a route property
+    measured for `113310` is not a measurement for `113` -- and nothing lands in `qcew`'s store.
+    """
+    seen: list[str] = []
+    _mock_transport(monkeypatch, _recording_slice_handler(seen))
+    rows = fetch_source(
+        "qcew_parent",
+        _cfg(),
+        env_path=None,
+        raw_root=tmp_path,
+        output_root=tmp_path,
+        years=[2017],
+        quarters=[1],
+    )
+    assert [row["source_id"] for row in rows] == ["qcew_parent"]
+    assert seen and all(url.endswith("/industry/113.csv") for url in seen)
+    assert len(list((tmp_path / "qcew_parent").rglob("2017q1.csv"))) == 1
+    assert not (tmp_path / "qcew").exists()
+    manifest = pl.read_parquet(tmp_path / "source_manifest.parquet")
+    assert manifest["source_id"].to_list() == ["qcew_parent"]
+
+
+def test_every_fetchable_source_has_a_registry_row() -> None:
+    """§7.1: a source the pipeline can fetch is a source the registry describes."""
+    registry = load_registry(REPO / "src" / "logging_employment" / "registry" / "sources.yaml")
+    assert set(KNOWN_SOURCES) <= {row.source_id for row in registry}

@@ -63,13 +63,14 @@ def registry_verify(
 
 @app.command("fetch")
 def fetch(
-    source: str = typer.Option(..., "--source", help="qcew, qcew_size, or cbp"),
+    source: str = typer.Option(..., "--source", help="qcew, qcew_parent, qcew_size, or cbp"),
     config: Path = typer.Option(..., "--config", exists=True, dir_okay=False),
 ) -> None:
     """Acquire raw bytes for one source into the immutable store and record a snapshot row."""
-    if source not in {"qcew", "qcew_size", "cbp"}:
+    from .fetching import KNOWN_SOURCES, fetch_source
+
+    if source not in KNOWN_SOURCES:
         raise typer.BadParameter(f"unknown source {source!r}")
-    from .fetching import fetch_source
 
     cfg = load_config(config)
     rows = fetch_source(source, cfg, env_path=Path(".env"))

@@ -1,4 +1,4 @@
-# The §7.1 source registry, seeded for the three sources Stage 1 ingests.
+# The §7.1 source registry, seeded for the three sources Stage 1 ingests and plan 15's qcew_parent.
 #
 # Provenance. Every field below is either MEASURED -- rendered from Stage 0's shipped summaries
 # under `data/raw/audit/<source>/summary.json` and reproducible by re-reading them -- or marked
@@ -69,4 +69,23 @@ sources:
     revision_policy: "Stage 0 ran no revision probe for CBP; one dataset is published per reference year and no re-release was measured [documented-not-measured]"
     model_role: "auxiliary size-shape source, cross-checked against qcew_size"
     limitations: "EMP_N_F (labelled 'Flag for Noise range for number of employees' in this run's fetched variable metadata) is CBP's actual per-cell noise-magnitude flag (documented in methodology.html's Noise Infusion section as low/moderate/high, G/H/J) -- and it appears in no year's response, because it was never selected as an output column. Years available: 2017-2023; the 2024 dataset probe returned 404, so the regime for 2024 is unknown and must halt the run rather than inherit its predecessor (cbp_regime.findings.unknown_years)."
+
+  - source_id: "qcew_parent"
+    agency: "BLS"
+    dataset: "Quarterly Census of Employment and Wages, quarterly industry data: the private 113 (Forestry and Logging) state series"
+    landing_url: "https://www.bls.gov/cew/"
+    endpoint_pattern: "https://data.bls.gov/cew/data/api/{year}/{qtr}/industry/113.csv"
+    access_status: "verified"
+    frequency: "quarterly"
+    reference_period: "calendar quarter; employment arrives as three monthly columns, as for qcew. All 32 D1 quarters answered 200 with a parsable CSV (qcew_parent_margins.findings.slice_outcomes)"
+    geography: "state rows at agglvl 55, measured (qcew_parent_margins.findings.parents.113.agglvl_codes_present) -- NOT agglvl 58, the 113310 state level, so a route filtering on 58 reads a false absence"
+    industry_detail: "NAICS 3-digit 113, which aggregates 1131, 1132 and 1133; 1133 -> 11331 -> 113310 is single-child, so 113 >= 113310 wherever both are published [documented: NAICS structure]"
+    ownership: "private (own_code 5) is the series used: 1588 private state-quarter rows over D1 (qcew_parent_margins.findings.parents.113.state_quarter_rows_private)"
+    statistical_unit: "establishment (reporting unit) [documented]"
+    employment_concept: "jobs covered by state UI and UCFE programs, counted for the pay period including the 12th of the month [documented]"
+    size_dimension: "all establishment sizes only, as for the qcew slice route; not separately measured for 113 [documented-not-measured]"
+    disclosure_regime: "qcew_disclosure_code_v1"
+    revision_policy: "a quarter is finalized with the following year's Q1 release [documented]"
+    model_role: "hard constraint source: a published private 113 state value bounds the suppressed 113310 cell of the same state-month from above (§9.3 parent-total constraint; specs/stage5-parent-margin.md R-PM-2)"
+    limitations: "published on 1278 of 1588 private state-quarters and on 252 of the 409 where 113310 is suppressed (qcew_parent_margins.findings.parents.113). A bound, never an exact value: the sibling path 113 - 1131 - 1132 reconstructs no suppressed quarter (qcew_parent_margins.findings.siblings, plan 15 Task 1)"
 
