@@ -11,7 +11,7 @@ import polars as pl
 from .config import Config
 from .errors import AmbiguousSnapshotError, UnknownDisclosureRegimeError
 from .harmonize import bridge, disclosure
-from .harmonize.naics import vintage_for_year
+from .harmonize.naics import assert_113310_survives_the_window, vintage_for_year
 from .ingest import cbp, qcew, qcew_size
 
 BUILDER_VERSION = "build_harmonized/1"
@@ -165,6 +165,11 @@ def build_harmonized(
     """
     if allow_network:
         raise ValueError("build_harmonized never fetches; use `fetch` to acquire bytes first")
+    # §3.1: "The ETL MUST verify the 113310 mapping mechanically." Checked before the first table
+    # is written, so a re-vendored crosswalk that no longer carries 113310 unchanged across the
+    # window's two vintages halts the build, not only the unit test that exercises the guard
+    # (D-102).
+    assert_113310_survives_the_window()
     hashes: dict[str, str] = {}
 
     # REQ-002 binds the pipeline, not the parser: `parse_qcew_monthly` returns whatever rows it

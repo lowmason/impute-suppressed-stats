@@ -142,6 +142,9 @@ def assert_113310_survives_the_window(frame: pl.DataFrame | None = None) -> None
     `frame` defaults to the vendored crosswalk. It is injectable so the tests can show each of
     the four branches failing on a doctored frame; a guarantee nothing has been seen to reject is
     not a guarantee.
+
+    `build.build_harmonized` calls it before writing any table, which is what makes it §3.1's
+    ETL-time check rather than a test over a vendored file (D-102).
     """
     frame = crosswalk_113310() if frame is None else frame
     vintages = set(frame["vintage"].to_list())

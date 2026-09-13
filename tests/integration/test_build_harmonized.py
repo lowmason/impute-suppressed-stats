@@ -254,3 +254,20 @@ def test_a_manifest_naming_an_absent_snapshot_halts(frozen_raw: Path, tmp_path: 
     )
     with pytest.raises(FileNotFoundError, match="absent from the store"):
         snapshot_paths("cbp", frozen_raw, "*.json", manifest_path=manifest)
+
+
+def test_a_crosswalk_that_no_longer_pairs_113310_halts_the_build_before_writing(
+    frozen_raw: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-102. §3.1: "The ETL MUST verify the 113310 mapping mechanically." The guard existed, but
+    only a unit test called it, so a re-vendored crosswalk that stopped pairing 113310 one-to-one
+    would redden the suite and still let `build-harmonized` write a staged layer."""
+    from logging_employment.harmonize import naics
+
+    doctored = tmp_path / "naics_113310.csv"
+    doctored.write_text(naics._CROSSWALK.read_text().replace(",1:1\n", ",1:2\n"))
+    monkeypatch.setattr(naics, "_CROSSWALK", doctored)
+    out = tmp_path / "doctored"
+    with pytest.raises(ValueError, match="one-to-one"):
+        build_harmonized(_cfg(), raw_root=frozen_raw, out_root=out)
+    assert not out.exists()
