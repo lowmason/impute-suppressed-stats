@@ -46,6 +46,85 @@ def eligible_targets(monthly: pl.DataFrame) -> pl.DataFrame:
     )
 
 
+def parents_to_hide(parent: pl.DataFrame, chosen: pl.DataFrame) -> pl.DataFrame:
+    """§13.2 step 4 for the §9.3 parent: the masked cells whose published parent is hidden too.
+
+    THE RULE: hide a parent exactly when it holds no establishments besides the masked cell's own --
+    parent `qtrly_establishments` minus child `qtrly_establishments` at most 0 -- and leave every
+    other parent as public as it really is. Establishment counts are published even for suppressed
+    cells, so the rule reads nothing a real suppression would withhold.
+
+    Why this rule and not a propensity, measured 2026-09-12 (`specs/stage5-parent-margin.md` R-PM-3):
+
+    * Where the child is all of the parent's establishments BLS hid the parent on 123 of 123 real
+      suppressions, and on all 336 published month-values with no sibling establishments the parent
+      EQUALS the child. That is the one case where a visible parent recovers the target exactly
+      (§13.2 step 6), and there the rule and BLS's own complementary suppression coincide.
+    * Everywhere else the rule leaves the parent visible, and BLS hid it on 34 of 286 real
+      suppressions: 21 of 95 with one sibling establishment, 13 of 191 with two or more. The rule
+      never hides a parent BLS published; its error is optimism, on 34 of 409 (8.3%). A pseudo-target
+      cannot reach the one-sibling case with its parent visible -- a published child with one sibling
+      establishment never has a published parent (0 of 49) -- so on the synthetic path the optimism
+      is confined to the two-or-more stratum.
+
+    A flat co-suppression rate would ignore the one public variable that measurably drives it, and a
+    propensity fitted to 34 events would describe noise. Returns sorted `(state_fips,
+    reference_month)` keys, so the leakage guard can re-apply the rule to a masked layer.
+    """
+    published = parent.filter(pl.col("observation_status") != "suppressed").select(
+        "state_fips",
+        "reference_month",
+        pl.col("qtrly_establishments").alias("parent_establishments"),
+    )
+    return (
+        chosen.select(
+            "state_fips",
+            "reference_month",
+            pl.col("qtrly_establishments").alias("child_establishments"),
+        )
+        .join(published, on=["state_fips", "reference_month"], how="inner")
+        .filter(pl.col("parent_establishments") - pl.col("child_establishments") <= 0)
+        .select("state_fips", "reference_month")
+        .sort("state_fips", "reference_month")
+    )
+
+
+def _hide(frame: pl.DataFrame, selector: pl.Expr, label: pl.Expr) -> pl.DataFrame:
+    """Rewrite the selected rows exactly as a real `N` suppression publishes them, labelled `label`.
+
+    One rewrite for the `113310` target and its `113` parent, so a hidden parent is
+    indistinguishable from a real suppressed one in precisely the columns a hidden child is.
+    """
+    return frame.with_columns(
+        pl.when(selector)
+        .then(None)
+        .otherwise(pl.col("employment_value"))
+        .alias("employment_value"),
+        pl.when(selector)
+        .then(pl.lit("0"))
+        .otherwise(pl.col("employment_raw"))
+        .alias("employment_raw"),
+        pl.when(selector).then(None).otherwise(pl.col("wages_value")).alias("wages_value"),
+        pl.when(selector).then(pl.lit("0")).otherwise(pl.col("wages_raw")).alias("wages_raw"),
+        pl.when(selector)
+        .then(pl.lit("N"))
+        .otherwise(pl.col("disclosure_code"))
+        .alias("disclosure_code"),
+        pl.when(selector)
+        .then(pl.lit("suppressed"))
+        .otherwise(pl.col("observation_status"))
+        .alias("observation_status"),
+        pl.when(selector)
+        .then(True)
+        .otherwise(pl.col("is_published_numeric_zero"))
+        .alias("is_published_numeric_zero"),
+        pl.when(selector)
+        .then(label)
+        .otherwise(pl.col("suppression_type"))
+        .alias("suppression_type"),
+    )
+
+
 def apply_mask(
     data: HarmonizedData, targets: Sequence[MaskTarget]
 ) -> tuple[HarmonizedData, pl.DataFrame]:
@@ -53,6 +132,9 @@ def apply_mask(
 
     The truth table is captured BEFORE the flip and is the harness's only copy of the held-out
     values. It is never handed to an estimator.
+
+    The private 113 parent of a target is hidden too exactly when `parents_to_hide` names it
+    (§13.2 step 4); every other parent keeps its real visibility.
     """
     for target in targets:
         if target.suppression_type not in SUPPRESSION_TYPES:
@@ -113,39 +195,24 @@ def apply_mask(
         pl.col("_label").alias("suppression_type"),
     )
 
-    masked = (
-        monthly.join(labels, on=["state_fips", "reference_month"], how="left")
-        .with_columns(
-            pl.when(selector)
-            .then(None)
-            .otherwise(pl.col("employment_value"))
-            .alias("employment_value"),
-            pl.when(selector)
-            .then(pl.lit("0"))
-            .otherwise(pl.col("employment_raw"))
-            .alias("employment_raw"),
-            pl.when(selector).then(None).otherwise(pl.col("wages_value")).alias("wages_value"),
-            pl.when(selector).then(pl.lit("0")).otherwise(pl.col("wages_raw")).alias("wages_raw"),
-            pl.when(selector)
-            .then(pl.lit("N"))
-            .otherwise(pl.col("disclosure_code"))
-            .alias("disclosure_code"),
-            pl.when(selector)
-            .then(pl.lit("suppressed"))
-            .otherwise(pl.col("observation_status"))
-            .alias("observation_status"),
-            pl.when(selector)
-            .then(True)
-            .otherwise(pl.col("is_published_numeric_zero"))
-            .alias("is_published_numeric_zero"),
-            pl.when(selector)
-            .then(pl.col("_label"))
-            .otherwise(pl.col("suppression_type"))
-            .alias("suppression_type"),
+    masked = _hide(
+        monthly.join(labels, on=["state_fips", "reference_month"], how="left"),
+        selector,
+        pl.col("_label"),
+    ).drop("_label")
+
+    # §13.2 step 4 for the §9.3 parent: hide exactly the parents `parents_to_hide` names and leave
+    # every other one as public as it really is. `complementary_like` because the parent is hidden
+    # to protect the target, which is what that INV-009 label means.
+    hidden = parents_to_hide(data.qcew_state_parent, chosen)
+    parent = data.qcew_state_parent
+    if hidden.height:
+        parent = _hide(
+            parent,
+            pl.struct("state_fips", "reference_month").is_in(hidden.to_dicts()),
+            pl.lit("complementary_like"),
         )
-        .drop("_label")
-    )
-    return dataclasses.replace(data, qcew_monthly=masked), truth
+    return dataclasses.replace(data, qcew_monthly=masked, qcew_state_parent=parent), truth
 
 
 def apply_size_mask(

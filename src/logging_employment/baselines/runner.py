@@ -386,8 +386,11 @@ def run_baselines(
     the harness pays that per mask replicate.
 
     `bounds` turns on INV-002's per-cell half, and defaults to `None` -- no bound known, no check --
-    for unit tests, which build a `HarmonizedData` with no Stage 2 run behind it. `cli.py` passes
-    the run directory's `deterministic_bounds`.
+    for unit tests, which build a `HarmonizedData` with no Stage 2 run behind it. Both production
+    callers pass one: `cli.py` the run directory's `deterministic_bounds`, and `validate/harness.py`
+    `MaskedSystem.bounds`, solved from the masked system and NEVER the run directory's, whose
+    intervals still contain the truth the harness hid (§13.4). That second caller is `D-087`'s
+    ruling.
 
     A month §12.2's allocation keeps inside every interval is left bit-identical. A month it does
     not is reallocated by §12.3's bounded proportional scaling, the method

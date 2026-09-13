@@ -19,7 +19,9 @@ from logging_employment.contracts import (
     HarmonizedData,
     validate_frame,
 )
+from logging_employment.reconcile.scaling import Bounds
 from logging_employment.runs import run_id
+from logging_employment.validate import harness
 from logging_employment.validate.harness import run_pseudo_suppression
 
 REPO = Path(__file__).resolve().parents[2]
@@ -293,3 +295,23 @@ def test_exactly_four_regimes_carry_a_changed_reason(fixture_run):
         "structural_break",
         "naics_transition",
     }
+
+
+def test_the_harness_hands_the_baselines_the_masked_bounds_it_solved(monkeypatch):
+    """D-087: every scoring call to `run_baselines` carries bounds, never `None`.
+
+    A bound-blind harness would score estimates production rescales before release. This fixture
+    layer carries no parent margin, so no bound binds here and no score moves; the wiring is what is
+    pinned.
+    """
+    seen: list[object] = []
+    real = harness.run_baselines
+
+    def spy(data, config, **kwargs):
+        seen.append(kwargs.get("bounds"))
+        return real(data, config, **kwargs)
+
+    monkeypatch.setattr(harness, "run_baselines", spy)
+    run_pseudo_suppression(HarmonizedData.load(FIXTURE), REGISTRY[:1], _fixture_config())
+    assert seen
+    assert all(isinstance(bounds, Bounds) and bounds.lower for bounds in seen)

@@ -27,7 +27,7 @@ from dataclasses import dataclass
 import polars as pl
 
 from ..baselines.interfaces import Estimator
-from ..baselines.runner import REGISTRY, run_baselines
+from ..baselines.runner import REGISTRY, run_baselines, state_total_bounds
 from ..config import Config
 from ..contracts import (
     REGIME_SWITCHES,
@@ -90,6 +90,7 @@ def run_pseudo_suppression(
             "replicates": 0,
             "hashes": [],
             "estimators": [e.estimator_id for e in estimators],
+            "rejected_exactly_recoverable": 0,
         }
         # THE SWITCH IS CHECKED FIRST, AND THE FAIL-CLOSED REFUSAL SECOND. Order matters: an
         # operator who turns `include_vintage_comparison` ON is ASKING for a regime this window
@@ -159,9 +160,21 @@ def run_pseudo_suppression(
             masked, truth = apply_mask(data, targets)
             assert_no_retained_truth(masked, truth)
             system = mask_and_solve(data, targets, config)
-            results, _audit = run_baselines(masked, config, estimators=estimators)
-            scored = _join_truth(
-                results, truth, system, targets, regime=name, seed=seed, replicate=replicate
+            # D-087: the MASKED bounds, never the run directory's, which still contain the truth
+            # this replicate hid (§13.4). `run_baselines` scales an estimate a finite bound binds on
+            # back into it (§12.3) exactly as production does, so the scoreboard ranks the
+            # estimates a release would publish rather than ones production would have rescaled.
+            results, _audit = run_baselines(
+                masked, config, estimators=estimators, bounds=state_total_bounds(system.bounds)
+            )
+            scored, rejected = reject_exactly_recoverable(
+                _join_truth(
+                    results, truth, system, targets, regime=name, seed=seed, replicate=replicate
+                ),
+                system.recoverable,
+            )
+            entry["rejected_exactly_recoverable"] = (
+                int(entry["rejected_exactly_recoverable"]) + rejected
             )
             assert_declared_provenance(scored)
             # §13.10 gates "on primary-like masks" and nothing downstream carries the label to
@@ -228,6 +241,24 @@ def run_pseudo_suppression(
     assert_declared_provenance(metrics)
     board = build_scoreboard(metrics)
     return ValidationResult(scores, metrics, board, manifest)
+
+
+def reject_exactly_recoverable(
+    scored: pl.DataFrame, recoverable: pl.DataFrame
+) -> tuple[pl.DataFrame, int]:
+    """§13.2 step 6: drop every scored row whose withheld cell the masked system recovers exactly.
+
+    REJECTED, not merely labelled. `bound_status` already rides on each scored row, but a label no
+    metric emitter reads changes no number, and a method scored on a cell the constraints already
+    pin is scored on arithmetic, not estimation. Returns the kept rows and how many CELLS were
+    rejected, which the regime's manifest entry accumulates so a rejection is never silent. On D1
+    the expected count is zero: no published parent equals its child where other establishments
+    exist (0 of 2,742 month-values, measured 2026-09-12).
+    """
+    if recoverable.is_empty():
+        return scored, 0
+    kept = scored.join(recoverable, on=["state_fips", "reference_month"], how="anti")
+    return kept, recoverable.height
 
 
 def _join_truth(
