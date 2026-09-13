@@ -79,8 +79,9 @@ metrics, scoreboard, manifest)`. The only production caller is `cli.py::validate
   `national_size` is declared in `contracts.MASK_ARMS` and implemented
   (`recover.mask_and_solve_size`, `mask.apply_size_mask`) but nothing scores it: the §10 baselines
   estimate state totals, not size classes. `scoreboard._best`'s two-arm refusal guards a future
-  wiring, not a live branch. NOTE `contracts.assert_declared_provenance` still does NOT check
-  `mask_arm` against `MASK_ARMS` — an open item in `specs/deferred_items.md`.
+  wiring, not a live branch. `contracts.assert_declared_provenance` checks `mask_arm` against
+  `MASK_ARMS` as of 2026-09-12 (`D-082`); before that an invented arm reached both validation
+  tables unrefused.
 - **A regime that scores nothing must say why.** Every manifest entry with `n_scored == 0` carries
   a `reason`, pinned by
   `test_d1_validation.py::test_no_regime_reports_zero_scores_without_saying_why`. The empty

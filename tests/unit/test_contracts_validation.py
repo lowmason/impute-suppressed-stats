@@ -16,6 +16,20 @@ def test_the_declared_suppression_types_pass():
     contracts.assert_declared_provenance(frame)
 
 
+def test_a_mask_arm_outside_the_declared_set_is_refused():
+    # D-082. Since plan 12 `mask_arm` is PRODUCED from `MaskTarget.arm` rather than written as a
+    # literal at the emit sites, so its value comes from data and needs the refusal every other
+    # closed provenance set already gets.
+    frame = pl.DataFrame({"mask_arm": ["state_total", "invented_arm"]})
+    with pytest.raises(ConceptViolationError, match="mask_arm"):
+        contracts.assert_declared_provenance(frame)
+
+
+def test_the_declared_mask_arms_pass():
+    frame = pl.DataFrame({"mask_arm": ["state_total", "national_size", None]})
+    contracts.assert_declared_provenance(frame)
+
+
 def test_every_holdout_regime_carries_a_disposition():
     assert set(contracts.REGIME_DISPOSITIONS) == set(contracts.HOLDOUT_REGIMES)
     assert contracts.REGIME_DISPOSITIONS["preliminary_to_final_vintage"] == "cannot_run_on_d1"

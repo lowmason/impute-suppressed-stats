@@ -229,8 +229,9 @@ DECLINE_KINDS: tuple[str, ...] = ("by_design", "data_gap", "reconciliation_failu
 def assert_declared_provenance(frame: pl.DataFrame) -> None:
     """Refuse a provenance value outside its declared tuple.
 
-    The six tuples this checks (`RECONCILIATION_STATUSES`, `WEIGHT_BASES`, `ANCHOR_BASES`,
-    `DECLINE_KINDS`, `SUPPRESSION_TYPES`, `STRATUM_KINDS`) are the closed sets a baseline row's provenance may draw from, but
+    The seven tuples this checks (`RECONCILIATION_STATUSES`, `WEIGHT_BASES`, `ANCHOR_BASES`,
+    `DECLINE_KINDS`, `SUPPRESSION_TYPES`, `STRATUM_KINDS`, `MASK_ARMS`) are the closed sets a
+    baseline row's provenance may draw from, but
     `BASELINE_RESULT_SCHEMA` checks dtypes only -- `pl.String` accepts any string. `weight_basis`
     is the live exposure: `run_baselines` copies it from an estimator's own `outcome.basis`, so a
     third-party estimator's typo reached `baseline_results.parquet` and passed every test. Nulls
@@ -248,6 +249,10 @@ def assert_declared_provenance(frame: pl.DataFrame) -> None:
         # enforced by nothing at runtime, and a second declared-but-unenforced set is what this
         # avoids.
         ("stratum_kind", STRATUM_KINDS),
+        # D-082. Since plan 12 `mask_arm` is PRODUCED from `MaskTarget.arm` rather than written as
+        # a literal at the emit sites, so its value comes from data. Both harness calls pass a
+        # frame that carries it: the scored frame and the assembled metrics.
+        ("mask_arm", MASK_ARMS),
     ):
         if column not in frame.columns:
             continue
