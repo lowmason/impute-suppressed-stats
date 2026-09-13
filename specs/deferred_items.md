@@ -1555,7 +1555,7 @@ that was skipped — work the close itself uncovered.
       BLS's table is recorded as `_BLS_VINTAGE_ERAS` and wired only to the refusal message. Emitted
       values for 2017-2024 are unchanged and the `:86-90` pins are byte-identical, so no `cell_id`
       and no persisted fingerprint moves.
-- [ ] `D-080` **`vintage_for_year`'s refusal message pins its year but not its vintage payload.**
+- [x] `D-080` **`vintage_for_year`'s refusal message pins its year but not its vintage payload.**
       `tests/unit/test_harmonize.py::test_a_reference_year_below_the_naics_2017_era_fails_closed`
       asserts with `pytest.raises(UnsupportedReferenceYearError, match=str(year))`, which matches
       only the interpolated year. Demonstrated by mutation 2026-09-08: replacing
@@ -1571,7 +1571,9 @@ that was skipped — work the close itself uncovered.
       Size: quick-fix. Done when: an assertion inside the `pytest.raises` block pins the vintage
       alongside the year (e.g. `match=r"2011.*NAICS 2012"`), and the `year - 6` mutation reddens
       the suite.
-- [ ] `D-081` **Three of `vintage_for_year`'s six call sites raise after a side effect.**
+      → done 2026-09-12 (/deferred quick fix): `1268223` pins each refused year to BLS's vintage as
+      a literal pair. With the `year - 6` mutation applied the pin fails; on the real code it passes.
+- [x] `D-081` **Three of `vintage_for_year`'s six call sites raise after a side effect.**
       Found by the code review of `41e17cf`, which made the function raise. In `fetching.py` the
       order per year is fetch → status check → `store.put` → `snapshot_row(...,
       vintage_for_year(year), ...)` (`:130`, `:151`, `:181`). A pre-2017 `cfg.project.start_month`
@@ -1584,10 +1586,13 @@ that was skipped — work the close itself uncovered.
       refusal cost a message instead of an orphan.
       Size: quick-fix. Done when: `fetch_source` refuses an out-of-range window before its first
       `store.put`, with a test that asserts the store is untouched after the refusal.
+      → done 2026-09-12 (/deferred quick fix): `5fd653e` checks the window before the store is opened
+      or any request is made. A test over all three sources asserts no request, no store directory
+      and no manifest after the refusal.
 
 ## 12-stage4-harness-completion — 2026-09-09
 
-- [ ] `D-082` **`assert_declared_provenance` does not check `mask_arm` against `MASK_ARMS`.**
+- [x] `D-082` **`assert_declared_provenance` does not check `mask_arm` against `MASK_ARMS`.**
       `contracts.MASK_ARMS` is the declared pair `('state_total', 'national_size')`, and
       `contracts.assert_declared_provenance` loops over six provenance columns (`STRATUM_KINDS` joined them in plan 14) without including
       `mask_arm` — so an invented arm string reaches `validation_scores` and `validation_metrics`
@@ -1601,6 +1606,8 @@ that was skipped — work the close itself uncovered.
       `src/logging_employment/contracts.py` and `tests/unit/test_contracts_validation.py`.
       Size: quick-fix. Done when: `assert_declared_provenance` refuses a `mask_arm` outside
       `MASK_ARMS`, with a test in the shape of the existing `suppression_type` refusal.
+      → done 2026-09-12 (/deferred quick fix): `f892fcf` adds `mask_arm` to the loop, with a refusal
+      test and a test that the declared arms and a null pass.
 - [ ] `D-083` **`metric_name` is NULL on every `declines` metrics row.**
       Measured 2026-09-08 and still true: 70 of 70 rows on the committed golden, 270 of 270 on D1.
       Structurally identical to the `mask_arm` defect plan 12 closed — a null persisted in
@@ -1714,7 +1721,7 @@ work the plan's changes either created, confirmed, or deliberately scoped out.
       `run_baselines` is called with `MaskedSystem.bounds` (never the run directory's) if the
       ruling says to check at all.
 
-- [ ] `D-088` **Five test modules still spell out their own `STAGED` + skipif inline.** Plan 13
+- [x] `D-088` **Five test modules still spell out their own `STAGED` + skipif inline.** Plan 13
       Task 2 (R-S5P-2) put `STAGED` and `requires_staged` in `tests/conftest.py` and applied them
       to the nine modules that were FAILING without `data/`. It did not fold in the five that
       already had a working inline guard: `tests/integration/test_d1_acceptance.py`,
@@ -1733,6 +1740,9 @@ work the plan's changes either created, confirmed, or deliberately scoped out.
       two spellings of one predicate, which is a tidying, not a correctness fix.
       Size: quick-fix. Done when: the five import `STAGED` / `requires_staged` from
       `tests.conftest` and the conftest comment listing them is deleted.
+      → done 2026-09-12 (/deferred quick fix): `447b71b` imports `STAGED` / `requires_staged` in all
+      five and deletes the conftest list. In a dataless worktree the five modules report 14 passed and
+      27 skipped both before and after.
 
 - [ ] `D-089` **`DECLARED_ABSENCES` will silently excuse a real CBP 2024 failure once Census
       publishes that year.** Plan 13 Task 5 (R-S5P-4) made `fetch` halt on any undeclared non-200
@@ -1851,7 +1861,7 @@ the event that makes it reachable rather than a date.
       consumer that needs the declared key -- or sooner, if `source_publication_date` (`D-100`) is
       populated, since both fixes touch the same three call sites.
 
-- [ ] `D-095` **`ExponentiallyWeightedShare` discounts per OBSERVATION while its docstring claims a
+- [x] `D-095` **`ExponentiallyWeightedShare` discounts per OBSERVATION while its docstring claims a
       one-year half-life.** `baselines/historical.py` computes `weights = [self.decay **
       (len(shares) - 1 - i) for i in range(len(shares))]` -- the exponent is the list index -- and
       `observed_share_history` builds `shares` from `partition.disclosed` only, so a suppressed
@@ -1868,8 +1878,10 @@ the event that makes it reachable rather than a date.
       `preferred_baseline` -- measured at `d6591b6` it wins in none of the nine scoring regimes
       (`preferred_baseline` returns `share_last_observed` in 3 and `cbp_intensity` in 6), so it
       cannot move Stage 5's comparand today. Fixing the docstring is correct either way.
+      → done 2026-09-12 (/deferred quick fix): `af2ffff` corrects the docstring to a half-life of
+      twelve observations. The decay-form watch continues as `D-113`.
 
-- [ ] `D-096` **`scale_into_bounds` clamps a contradictory `(lower > upper)` pair to the cap and
+- [x] `D-096` **`scale_into_bounds` clamps a contradictory `(lower > upper)` pair to the cap and
       returns below the declared lower, where its package sibling `integerize` refuses the same
       shape by name.** `reconcile/scaling.py` returns `min(max(lam * w, bounds.lower[cell]),
       bounds.upper_of(cell))`; with `lower={'01':10.0}`, `upper={'01':4.0}` it returns 4.0 and
@@ -1883,8 +1895,10 @@ the event that makes it reachable rather than a date.
       `L > U` does not literally bind. This is a fail-closed asymmetry inside one package.
       Size: quick-fix. Done when: `Bounds` refuses an inverted pair at construction, or
       `scale_into_bounds` raises the named error `integerize` already raises.
+      → done 2026-09-12 (/deferred quick fix): `088dfc4` refuses an inverted pair in
+      `Bounds.__post_init__`, so neither clipping site can receive one.
 
-- [ ] `D-097` **CBP `variables.json` retrievals get no `source_snapshot` row, and
+- [x] `D-097` **CBP `variables.json` retrievals get no `source_snapshot` row, and
       `predicate_from_stored_metadata` picks among copies by sha256 sort order where
       `snapshot_paths` refuses that same ambiguity.** `fetching.py`'s CBP arm calls
       `store.put("cbp", variables, cbp.metadata_filename(year))` with no `snapshot_row` after it,
@@ -1898,8 +1912,11 @@ the event that makes it reachable rather than a date.
       Size: quick-fix. Done when: the metadata `put` records a snapshot row and the candidate pick
       either goes through `snapshot_paths` or raises on more than one copy. (The missing row is
       live today; the sort-order pick is latent -- one metadata object per year on disk now.)
+      → done 2026-09-12 (/deferred quick fix): `8df836b` gives the metadata `put` a snapshot row, skips
+      CBP metadata in `snapshot_paths`' manifest branch, and has `predicate_from_stored_metadata` read
+      the manifest's copy or refuse more than one stored copy.
 
-- [ ] `D-098` **`ingest/cbp.py` asserts CBP 2022/2023 data carry the NAICS 2022 vintage, and the
+- [x] `D-098` **`ingest/cbp.py` asserts CBP 2022/2023 data carry the NAICS 2022 vintage, and the
       stored metadata contradicts it.** The `discover_naics_predicate` docstring reads "Stage 0
       measured `NAICS2017` for every year 2017-2023, INCLUDING THE YEARS WHOSE DATA CARRY THE NAICS
       2022 VINTAGE" -- a premise with no citation. Measured: all seven stored `{year}_variables.json`
@@ -1916,8 +1933,11 @@ the event that makes it reachable rather than a date.
       Size: quick-fix. Done when: the docstring states what the metadata shows, and the stamp is
       either derived from the measured predicate or documented as deliberately QCEW-derived with a
       reason.
+      → done 2026-09-12 (/deferred quick fix): `a2b9129` and `7aaf740` state what the stored metadata
+      shows and document the stamp as deliberately QCEW-derived, with its reason. `a2b9129` alone is
+      red on `test_cbp.py`, and `7aaf740` repairs it. Deriving the stamp continues as `D-114`.
 
-- [ ] `D-099` **§9.7's infeasibility diagnostic accepts `config: BoundConfig` and reads it zero
+- [x] `D-099` **§9.7's infeasibility diagnostic accepts `config: BoundConfig` and reads it zero
       times.** `constraints/diagnostics.py::diagnose` declares the parameter; an AST walk over the
       function body counts zero `Name(id='config')` loads and no `config.<attr>` access, and the
       function builds its own `highspy.Highs()` setting no tolerance, so it runs at HiGHS defaults
@@ -1927,8 +1947,10 @@ the event that makes it reachable rather than a date.
       Size: quick-fix. Done when: `diagnose` sets the configured tolerances on its own solver, or
       its signature drops the parameter and the docstring says the diagnostic is deliberately
       evaluated at solver defaults.
+      → done 2026-09-12 (/deferred quick fix): `c6453a3` builds both diagnostic solvers through
+      `bounds.configured_highs`, the constructor the bound solver uses.
 
-- [ ] `D-100` **`source_publication_date` is the empty string on every snapshot row ever written.**
+- [x] `D-100` **`source_publication_date` is the empty string on every snapshot row ever written.**
       Declared in `store.py` and `contracts.py` per §7.2 and written as the literal `""` at all
       three producer sites in `fetching.py` (qcew, qcew_size, cbp). Measured:
       `runs/source_manifest.parquet` has one distinct value, `""`, on all 47 rows. A reader cannot
@@ -1938,6 +1960,9 @@ the event that makes it reachable rather than a date.
       Size: quick-fix. Done when: the field is populated from the response headers, or the schema
       records it as reserved-and-unpopulated with the reason. Touches the same three call sites as
       `D-094`.
+      → done 2026-09-12 (/deferred quick fix): `e01201c` records the response's `Last-Modified` header
+      verbatim, or null when absent, and `contracts.py` documents it as a server modification time,
+      not a release date. The 47 rows already on disk keep `""` until the next fetch.
 
 - [ ] `D-101` **`SRC-QCEW-005`'s MUST to distinguish preliminary from final observations is met by
       a config literal, not by parsing.** §8.1 `SRC-QCEW-005`: "It MUST distinguish preliminary and
@@ -1954,7 +1979,7 @@ the event that makes it reachable rather than a date.
       equation with a final national control, which is exactly what SRC-QCEW-005 forbids, and
       nothing would notice.
 
-- [ ] `D-102` **§3.1's "The ETL MUST verify the 113310 mapping mechanically" is unmet: the guard
+- [x] `D-102` **§3.1's "The ETL MUST verify the 113310 mapping mechanically" is unmet: the guard
       has no production caller.** `harmonize/naics.py::assert_113310_survives_the_window` is
       invoked only from `tests/unit/test_harmonize.py`; `grep -rn` over `src/` finds its own
       definition and one comment. No `build_harmonized`, `fetch` or CLI path calls it. So the
@@ -1966,6 +1991,8 @@ the event that makes it reachable rather than a date.
       not the roadmap line.
       Size: quick-fix. Done when: `build_harmonized` calls the guard, or §3.1 is amended to require
       a versioned crosswalk test rather than an ETL-time check.
+      → done 2026-09-12 (/deferred quick fix): `36581cc` calls the guard before `build_harmonized`
+      writes any table, with a test that a doctored crosswalk halts the build with nothing written.
 
 - [ ] `D-103` **§6.2's storage layout and its no-re-download MUST both diverge, and nothing records
       either.** §6.2 specifies `data/staged/<source>/...` plus a `harmonized/` directory; measured,
@@ -2004,13 +2031,15 @@ the event that makes it reachable rather than a date.
       than editable from its own checkout -- not reachable from this repo today, so no artifact on
       disk is affected.
 
-- [ ] `D-106` **One regime supplies 69% of all scored rows, and nothing records it.**
+- [x] `D-106` **One regime supplies 69% of all scored rows, and nothing records it.**
       `whole_seasonal_blocks` contributes 8,690 of 12,530 scored rows; the next largest is 600.
       Per-regime scoreboards are unaffected and nothing in `src/` currently pools across regimes, so
       the consequence is latent -- but any future pooled comparison would be dominated by one mask
       design, and `scoreboard.py` already refuses to pool across mask ARMS for the same reason.
       Size: quick-fix. Done when: the concentration is recorded where a pooling author would see it
       -- a note beside `scoreboard.py`'s existing anti-pooling refusal is the natural home.
+      → done 2026-09-12 (/deferred quick fix): `628d4b4` records the concentration beside `_best`'s arm
+      refusal, measured 2026-09-12 as 8,690 of 12,530 score rows and 2,500 of 5,932 estimates.
 
 - [ ] `D-107` **`median_ape` is nulled for the entire estimator when any single scored truth is
       zero.** `validate/metrics.py` guards with an all-or-nothing row-count equality rather than
