@@ -1,0 +1,74 @@
+# The repo's documented gates (CLAUDE.md, "Commands") on every push to main and every pull request.
+#
+# THIS IS THE HERMETIC TIER, NOT THE WHOLE SUITE. `data/` is gitignored and rebuilt only by
+# `logging-estimates fetch` (network; CENSUS_API_KEY for CBP) and `build-harmonized`, so no runner
+# has it. Every test guarded by `tests/conftest.py::requires_staged`, or by its own skip on a
+# gitignored path or a personal file outside the repo (D-055), skips here by design. A green run
+# is therefore no evidence about the D1 integration tests: run those where data/ lives.
+#
+# `-m "not slow and not network"` states the policy the markers declare. Measured 2026-09-13
+# without data/: the bare run gives 1388 passed, 72 skipped; this one 1388 passed, 45 skipped, 27
+# deselected. The six `mark.slow` sites are mostly module-level, so they reach 27 tests, all of
+# which skip without data/, and no test carries `network`: the expression removes nothing that
+# would have run today. It keeps a future slow or live-endpoint test out of this tier instead.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # Pinned by commit. Checked 2026-09-13: astral-sh/setup-uv publishes no floating major tag
+      # (tags run v10.1.0, v10.0.1, v10.0.0), so `@v10` would not resolve; both actions are pinned
+      # the same way rather than mixing a tag with a commit.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          python-version: "3.14"
+          enable-cache: true
+
+      # --locked fails when uv.lock no longer matches pyproject.toml instead of re-resolving it.
+      - id: sync
+        name: uv sync --locked
+        run: uv sync --locked
+
+      # Each gate runs whenever the environment built, so one push reports every failing gate
+      # rather than only the first. Scopes match CLAUDE.md: `src tests`, never `.`.
+      - name: ruff format --check
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        run: uv run ruff format --check src tests
+      - name: ruff check
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        run: uv run ruff check src tests
+      - name: interrogate
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        run: uv run interrogate src
+      # Two float goldens are DESELECTED here, not fixed here. Both compare floats exactly against
+      # goldens written on an arm64 Mac with 14 polars threads; run 34763305304 (2026-09-13) failed
+      # both on ubuntu-latest, and both still pass in a local `uv run pytest`.
+      #  - test_the_metrics_match_the_golden: `(estimate - truth).abs()` comes back in one chunk per
+      #    polars thread, and `.sum()`/`.mean()` in validate/metrics.py round per chunk. Reproduced
+      #    locally with POLARS_MAX_THREADS=4: 56 of 1,490 rows, max relative difference 1.2e-15.
+      #  - test_the_baseline_output_matches_its_golden_fixture: passes locally at 1, 4 and 14
+      #    threads, so this one is an architecture or BLAS difference, not yet isolated.
+      # Making them portable changes what a §17.6 golden means (exact reductions plus a re-pin, or a
+      # tolerance), which is a decision about the data rather than a CI fix.
+      - name: pytest (hermetic tier)
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        run: >-
+          uv run pytest -m "not slow and not network"
+          --deselect tests/integration/test_validation_golden.py::test_the_metrics_match_the_golden
+          --deselect
+          tests/integration/test_baseline_golden.py::test_the_baseline_output_matches_its_golden_fixture
