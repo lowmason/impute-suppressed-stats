@@ -1,9 +1,11 @@
 """CBP ingestion: state x six-digit x establishment-size counts as March-centered measurements.
 
-`naics_vintage` is a caller-supplied stamp this module passes through untouched. Stage 0 measured
-CBP's NAICS *predicate* for every window year but recorded no per-year NAICS vintage, so nothing
-here derives one, and the value a caller passes is documented-not-measured until some later task
-measures it.
+`naics_vintage` is a caller-supplied stamp this module passes through untouched, and the stamp
+`build.build_harmonized` passes is QCEW's reference-year rule, not CBP's classification. CBP's own
+metadata disagrees for two window years. Measured 2026-09-12, every stored `{year}_variables.json`
+for 2017-2023 serves exactly one NAICS variable, `NAICS2017`, labelled "2017 NAICS code", including
+2022 and 2023, which QCEW's rule stamps "NAICS 2022". `build.py` records why the stamp is not yet
+derived from the metadata (`D-098`, `D-114`).
 """
 
 from __future__ import annotations
@@ -78,9 +80,12 @@ def discover_naics_predicate(variables_json: dict) -> str:
     """The NAICS predicate name this vintage actually serves.
 
     Read from fetched metadata, never computed from the reference year's NAICS vintage: Stage 0
-    measured `NAICS2017` for every year 2017-2023, including the years whose data carry the
-    NAICS 2022 vintage, so a name derived from the vintage would ask for a variable CBP does not
-    serve.
+    measured `NAICS2017` for every year 2017-2023, including 2022 and 2023, the years QCEW's vintage
+    rule places on NAICS 2022, so a name derived from that rule would ask for `NAICS2022`, a
+    variable CBP does not serve. The stored metadata labels the variable "2017 NAICS code" in every
+    one of those years (re-read 2026-09-12): it describes CBP's codes as 2017 codes, not only the
+    variable's name. This docstring used to say the 2022 and 2023 data carry the NAICS 2022 vintage,
+    an uncited premise the metadata contradicts (`D-098`).
     """
     names = [n for n in variables_json.get("variables", {}) if n.startswith("NAICS")]
     predicates = [n for n in names if not n.endswith("_LABEL")]

@@ -2150,3 +2150,20 @@ deliberately left open.
       Size: plan. Revisit if: `share_exponentially_weighted` becomes `preferred_baseline` in any
       regime (re-measured 2026-09-12 on `runs/f03023ac9f3a`: preferred in none of the nine, which
       name `share_last_observed` in 3 and `cbp_intensity` in 6), or §10.3 gains a decay form.
+- [ ] `D-114` **CBP's `naics_vintage` stamp is QCEW's rule, so `cbp_state_size`'s 2022 and 2023
+      rows read "NAICS 2022" against CBP's own "2017 NAICS code" label.** Split from `D-098` on
+      2026-09-12, when that item's docstring half was fixed and the stamp was documented at
+      `build.py::build_harmonized` as deliberately QCEW-derived. The stamp is
+      `vintage_for_year(year)`, BLS's rule for QCEW. All seven stored `{year}_variables.json`
+      (2017-2023) serve one NAICS variable, `NAICS2017`, labelled "2017 NAICS code" (re-read
+      2026-09-12). Nothing reads the column, so no number moves. The code change is small: map the
+      stored predicate to its vintage, or refuse one it cannot map. The artifact cost is not: it
+      rewrites `data/staged/cbp_state_size.parquet`, which changes `runs.run_id` for every command and
+      fails `tests/integration/test_stage4_acceptance.py::test_the_shipped_config_still_resolves_to_the_stage_4_acceptance_run`,
+      the pin to the Stage 4 comparand `runs/f03023ac9f3a`. `fetching.py` writes the same stamp on
+      both CBP snapshot rows, where it moves no run id. `specs/stage5-parent-margin.md` R-PM-7
+      decides whether that comparand is re-run, so the correction should ride that rebuild rather
+      than force a second one.
+      Size: quick-fix. Done when: the CBP stamp in `build.py` and `fetching.py` derives from the
+      stored predicate, `cbp_state_size.parquet` is rebuilt, and the Stage 4 acceptance pin moves in
+      the same change that re-runs the comparand.
