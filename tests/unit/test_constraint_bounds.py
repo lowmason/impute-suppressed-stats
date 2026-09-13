@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+import highspy
+import numpy as np
 import polars as pl
 import pytest
 
@@ -256,3 +258,47 @@ def test_matrix_rows_orders_the_size_margin_by_cell_id_with_the_total_last(
     # `column_specs` keys are the HiGHS column indices (`_model` builds `at` from `list(specs)`),
     # so their order is load-bearing in the same way and is fixed by the same cell_id sort.
     assert list(bounds.column_specs(built, coupled, membership)) == list(margin["cells"])
+
+
+def test_every_solver_accepts_a_milp_answer_only_at_zero_relative_gap() -> None:
+    """D-093: §9.1's L and U are exact optima, and HiGHS's default `mip_rel_gap` is 1e-4.
+
+    At the default a minimum may stop up to 1e-4 of its own magnitude above the true optimum --
+    about four employees at the national total -- and still report `kOptimal`, which `_optimize`
+    accepts. At zero relative gap the only slack left is `mip_abs_gap`, whose 1e-6 default is below
+    the unit step of an integer objective.
+    """
+    model = bounds.configured_highs(load_config(REPO / "config.yaml").constraints)
+    _, relative = model.getOptionValue("mip_rel_gap")
+    _, absolute = model.getOptionValue("mip_abs_gap")
+    assert relative == 0.0
+    assert absolute < 1.0
+
+
+def test_a_milp_minimum_is_the_true_optimum_not_one_inside_the_default_gap() -> None:
+    """D-093, reproduced: four integer columns at employment magnitudes and two equality rows.
+
+    Under HiGHS's default `mip_rel_gap` of 1e-4 this minimum stops at 30,528 and still reports
+    `kOptimal`; the true optimum is 30,526. A seeded search found the model while plan 15 was
+    written, and the model itself is the witness. The assertion is the exact optimum, which stays
+    right whatever a later HiGHS does with the default.
+    """
+    model = bounds.configured_highs(load_config(REPO / "config.yaml").constraints)
+    model.addVars(
+        4,
+        np.array([30526.0, 41059.0, 30922.0, 35067.0]),
+        np.array([34113.0, 43223.0, 31221.0, 38993.0]),
+    )
+    for columns, values, rhs in (
+        ([0, 1, 3], [2.0, 13.0, 7.0], 870253.0),
+        ([0, 1, 2, 3], [1.0, 7.0, 13.0, 13.0], 1214441.0),
+    ):
+        model.addRow(rhs, rhs, len(columns), np.array(columns, dtype=np.int32), np.array(values))
+    model.changeColsIntegrality(
+        4, np.arange(4, dtype=np.int32), np.array([highspy.HighsVarType.kInteger] * 4)
+    )
+    model.changeColsCost(1, np.array([0], dtype=np.int32), np.array([1.0]))
+    model.changeObjectiveSense(highspy.ObjSense.kMinimize)
+    model.run()
+    assert model.getModelStatus() == highspy.HighsModelStatus.kOptimal
+    assert model.getInfo().objective_function_value == pytest.approx(30526.0, abs=1e-6)

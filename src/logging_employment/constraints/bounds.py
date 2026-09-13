@@ -173,12 +173,23 @@ def configured_highs(config: BoundConfig) -> highspy.Highs:
     own `highspy.Highs()` at solver defaults while accepting this config and reading none of it,
     so loosening `feasibility_tolerance` moved every bound but not the diagnosis, and the two
     accounts could disagree about whether a component was infeasible at all.
+
+    `mip_rel_gap` is ZERO, not HiGHS's 1e-4 (`D-093`). §9.1 defines each bound as the exact
+    optimum, and `_optimize` accepts `kOptimal`, which HiGHS also returns when branch-and-bound
+    stops inside the relative gap: `tests/unit/test_constraint_bounds.py` pins a four-column model
+    whose default-gap minimum sits two employees above the true one. `mip_abs_gap` keeps its 1e-6
+    default, below the unit step of an integer objective, so it cannot accept a non-optimal
+    integer. The first D1 models to reach MILP are the parent components under
+    `use_milp_when_lp_interval_width_below`, where a one-employee miss is a relative gap of at least
+    1/25, so the default could not have bound on them; the option is set for the engine, not for
+    that case.
     """
     model = highspy.Highs()
     model.setOptionValue("output_flag", False)
     model.setOptionValue("primal_feasibility_tolerance", config.feasibility_tolerance)
     model.setOptionValue("dual_feasibility_tolerance", config.feasibility_tolerance)
     model.setOptionValue("mip_feasibility_tolerance", config.feasibility_tolerance)
+    model.setOptionValue("mip_rel_gap", 0.0)
     return model
 
 
