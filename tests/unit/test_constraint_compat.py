@@ -226,3 +226,56 @@ def test_a_size_row_with_no_reference_month_cannot_slip_the_march_gate(
     nulled = size.with_columns(pl.lit(None, dtype=pl.String).alias("reference_month"))
     with pytest.raises(ConceptViolationError, match="March"):
         compat.assert_size_margin_compatible(monthly, nulled)
+
+
+def _parent_pair(make_monthly, *, child: dict, parent: dict):
+    """A `113310` state row and its private `113` parent row in one state-month."""
+    at = {"state_fips": "41", "area_fips": "41000"}
+    parent_defaults = {
+        "industry_code": "113",
+        "aggregation_level": "55",
+        "qtrly_establishments": 12,
+        "employment_value": 200,
+    }
+    return make_monthly(at | child), make_monthly(at | parent_defaults | parent)
+
+
+def test_a_published_parent_below_its_published_child_is_refused(make_monthly) -> None:
+    """Both published and the parent smaller: `child - parent <= 0` would be infeasible there."""
+    monthly, parent = _parent_pair(
+        make_monthly, child={"employment_value": 120}, parent={"employment_value": 100}
+    )
+    with pytest.raises(IncompatibleMarginError, match="below"):
+        compat.assert_parent_margin_compatible(monthly, parent)
+
+
+def test_a_parent_with_fewer_establishments_than_its_child_is_refused(make_monthly) -> None:
+    """A NAICS parent holds every establishment of its children, and counts are public."""
+    monthly, parent = _parent_pair(
+        make_monthly, child={"qtrly_establishments": 10}, parent={"qtrly_establishments": 9}
+    )
+    with pytest.raises(IncompatibleMarginError, match="fewer establishments"):
+        compat.assert_parent_margin_compatible(monthly, parent)
+
+
+def test_a_parent_published_under_another_vintage_is_refused(make_monthly) -> None:
+    monthly, parent = _parent_pair(make_monthly, child={}, parent={"naics_vintage": "NAICS 2017"})
+    with pytest.raises(IncompatibleMarginError, match="INV-007"):
+        compat.assert_parent_margin_compatible(monthly, parent)
+
+
+def test_the_parent_gate_reports_what_it_checked(make_monthly) -> None:
+    monthly, parent = _parent_pair(
+        make_monthly,
+        child={
+            "observation_status": "suppressed",
+            "employment_value": None,
+            "disclosure_code": "N",
+        },
+        parent={},
+    )
+    assert compat.assert_parent_margin_compatible(monthly, parent) == {
+        "parent_pairs_checked": 1,
+        "published_pairs_checked": 0,
+        "suppressed_cells_with_a_published_parent": 1,
+    }

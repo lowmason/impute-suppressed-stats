@@ -95,6 +95,7 @@ def build_constraint_system(data: HarmonizedData, config: Config) -> BuiltSystem
         *rows_module.integrality_rows(cell_frame),
         *rows_module.size_margin_rows(cell_frame),
         *rows_module.size_support_rows(cell_frame, size),
+        *rows_module.parent_margin_rows(cell_frame),
     ]
     kinds = {cid: cid.split("|")[0] for cid in cell_frame["cell_id"].to_list()}
     rows_module.assert_no_national_employment_margin(drafts, kinds)

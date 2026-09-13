@@ -302,3 +302,52 @@ def test_a_milp_minimum_is_the_true_optimum_not_one_inside_the_default_gap() -> 
     model.run()
     assert model.getModelStatus() == highspy.HighsModelStatus.kOptimal
     assert model.getInfo().objective_function_value == pytest.approx(30526.0, abs=1e-6)
+
+
+def _parent_bounded(make_monthly, make_size, parent_value: int):
+    """A suppressed `113310` state cell under a published private `113` parent, built and solved."""
+    at = {"state_fips": "41", "area_fips": "41000"}
+    data = HarmonizedData(
+        qcew_monthly=make_monthly(
+            at
+            | {"observation_status": "suppressed", "employment_value": None, "disclosure_code": "N"}
+        ),
+        qcew_national_size=make_size(),
+        cbp_state_size=pl.DataFrame(),
+        bridge=pl.DataFrame(),
+        qcew_state_parent=make_monthly(
+            at
+            | {
+                "industry_code": "113",
+                "aggregation_level": "55",
+                "qtrly_establishments": 12,
+                "employment_value": parent_value,
+            }
+        ),
+    )
+    cfg = load_config(REPO / "config.yaml")
+    built = graph.assign_components(system.build_constraint_system(data, cfg))
+    return bounds.solve_bounds(built, cfg.constraints)
+
+
+def _state_row(result) -> dict:
+    return result.bounds.filter(pl.col("cell_id").str.starts_with("state_total|")).row(
+        0, named=True
+    )
+
+
+def test_a_published_parent_bounds_its_suppressed_child_from_above(make_monthly, make_size) -> None:
+    """R-PM-2 end to end: `[0, +inf)` becomes `[0, 150]`, in one two-cell component."""
+    result = _parent_bounded(make_monthly, make_size, 150)
+    child = _state_row(result)
+    assert (child["selected_lower"], child["selected_upper"]) == (0.0, 150.0)
+    assert child["bound_status"] == "partially_identified"
+    assert child["milp_upper"] is None  # width 150 is over the MILP trigger of 25
+    assert result.components["cell_count"].to_list() == [2]
+
+
+def test_a_parent_under_the_milp_width_reaches_the_integer_solve(make_monthly, make_size) -> None:
+    """R-PM-6: a finite width under `use_milp_when_lp_interval_width_below` opens `_needs_milp`."""
+    child = _state_row(_parent_bounded(make_monthly, make_size, 12))
+    assert (child["milp_lower"], child["milp_upper"]) == (0.0, 12.0)
+    assert (child["selected_lower"], child["selected_upper"]) == (0.0, 12.0)

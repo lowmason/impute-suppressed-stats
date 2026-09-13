@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 import polars as pl
 import pytest
 
 from logging_employment.constraints import cells, rows
 from logging_employment.contracts import HarmonizedData
-from logging_employment.errors import ConceptViolationError
+from logging_employment.errors import ConceptViolationError, IncompatibleMarginError
 
 
 def _built(make_monthly, make_size, size_spec):
@@ -187,3 +189,100 @@ def test_the_builder_march_gate_is_also_closed_against_a_null_month(
     nulled = size.with_columns(pl.lit(None, dtype=pl.String).alias("reference_month"))
     with pytest.raises(ConceptViolationError, match="March"):
         rows.size_support_rows(cell_frame, nulled)
+
+
+PARENT_ID = "state_parent|41|2024-03|5|113|NAICS 2022|ALL"
+CHILD_ID = "state_total|41|2024-03|5|113310|NAICS 2022|ALL"
+
+
+def _parent_layer(make_monthly, make_size, *, child_status, parent_status, parent_value):
+    """One state-month: a `113310` child and its private `113` parent, in the statuses named."""
+    child = {
+        "state_fips": "41",
+        "area_fips": "41000",
+        "observation_status": child_status,
+        "employment_value": None if child_status == "suppressed" else 90,
+        "disclosure_code": "N" if child_status == "suppressed" else "",
+    }
+    parent = {
+        "state_fips": "41",
+        "area_fips": "41000",
+        "industry_code": "113",
+        "aggregation_level": "55",
+        "qtrly_establishments": 12,
+        "observation_status": parent_status,
+        "employment_value": parent_value,
+        "disclosure_code": "N" if parent_status == "suppressed" else "",
+    }
+    data = HarmonizedData(
+        qcew_monthly=make_monthly(child),
+        qcew_national_size=make_size(),
+        cbp_state_size=pl.DataFrame(),
+        bridge=pl.DataFrame(),
+        qcew_state_parent=make_monthly(parent),
+    )
+    return cells.build_target_cells(
+        data, industry_code="113310", ownership_code="5", size_concept="march_reference"
+    )
+
+
+def test_a_published_parent_over_a_suppressed_child_becomes_one_cell_and_one_row(
+    make_monthly, make_size
+) -> None:
+    """R-PM-2: `child - parent <= 0`, the parent pinned by its own fixing row, never an rhs literal."""
+    frame = _parent_layer(
+        make_monthly,
+        make_size,
+        child_status="suppressed",
+        parent_status="observed",
+        parent_value=150,
+    )
+    parents = frame.filter(pl.col("cell_id").str.starts_with("state_parent|"))
+    assert parents["cell_id"].to_list() == [PARENT_ID]
+    (draft,) = rows.parent_margin_rows(frame)
+    assert draft.constraint_id == f"parent_margin|{CHILD_ID}"
+    assert (draft.relation, draft.rhs_lower, draft.rhs_upper) == ("le", None, 0.0)
+    assert draft.coefficients == ((CHILD_ID, 1.0), (PARENT_ID, -1.0))
+    assert draft.is_hard and draft.constraint_class == "public_accounting_fact"
+    assert draft.provenance_text.startswith("evidence_kind=published_value; ")
+    fixing = {d.constraint_id: d for d in rows.observed_value_rows(frame)}
+    assert fixing[f"fix|{PARENT_ID}"].rhs_upper == 150.0
+
+
+@pytest.mark.parametrize(
+    ("child_status", "parent_status", "parent_value"),
+    [("observed", "observed", 150), ("suppressed", "suppressed", None)],
+)
+def test_no_parent_cell_without_both_a_published_parent_and_a_suppressed_child(
+    make_monthly, make_size, child_status, parent_status, parent_value
+) -> None:
+    """A parent over a published child restricts nothing; a suppressed parent publishes nothing."""
+    frame = _parent_layer(
+        make_monthly,
+        make_size,
+        child_status=child_status,
+        parent_status=parent_status,
+        parent_value=parent_value,
+    )
+    assert frame.filter(pl.col("cell_id").str.starts_with("state_parent|")).is_empty()
+    assert rows.parent_margin_rows(frame) == []
+
+
+def test_the_parent_row_couples_one_state_cell_so_the_national_guard_still_admits_it(
+    make_monthly, make_size
+) -> None:
+    """R-PM-2: SRC-QCEW-006's guard is untouched -- a state cell and its parent are not a state sum."""
+    frame = _parent_layer(
+        make_monthly,
+        make_size,
+        child_status="suppressed",
+        parent_status="observed",
+        parent_value=150,
+    )
+    drafts = rows.parent_margin_rows(frame)
+    kinds = {cid: cid.split("|")[0] for cid in frame["cell_id"].to_list()}
+    rows.assert_no_national_employment_margin(drafts, kinds)
+    other = "state_total|06|2024-03|5|113310|NAICS 2022|ALL"
+    widened = dataclasses.replace(drafts[0], coefficients=(*drafts[0].coefficients, (other, 1.0)))
+    with pytest.raises(IncompatibleMarginError):
+        rows.assert_no_national_employment_margin([widened], {**kinds, other: "state_total"})
