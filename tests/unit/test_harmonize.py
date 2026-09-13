@@ -100,8 +100,16 @@ def test_a_reference_year_below_the_naics_2017_era_fails_closed() -> None:
     # asserts a single vintage seam by construction, and `baselines/historical.py` filters its
     # lookback on vintage equality -- so a third label would silently shrink every baseline
     # window rather than fail, after composing itself into `cell_id`.
-    for year in (2016, 2011, 2006):
-        with pytest.raises(UnsupportedReferenceYearError, match=str(year)):
+    #
+    # The message is pinned to the vintage it quotes as well as the year it interpolates (D-080).
+    # `match=str(year)` alone stayed green with the message site reading
+    # `bls_vintage_for_year(year - 6)`, which reports 2011 as NAICS 2002. The pairs are literals
+    # from BLS's table as quoted at `_BLS_VINTAGE_ERAS`, not a call to `bls_vintage_for_year`, so a
+    # wrong table entry cannot supply its own expectation.
+    for year, vintage in ((2016, "NAICS 2012"), (2011, "NAICS 2012"), (2006, "NAICS 2002")):
+        with pytest.raises(
+            UnsupportedReferenceYearError, match=rf"reference year {year} .* under {vintage},"
+        ):
             naics.vintage_for_year(year)
 
 
