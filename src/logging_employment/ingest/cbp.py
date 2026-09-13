@@ -81,7 +81,7 @@ def discover_naics_predicate(variables_json: dict) -> str:
 
     Read from fetched metadata, never computed from the reference year's NAICS vintage: Stage 0
     measured `NAICS2017` for every year 2017-2023, including 2022 and 2023, the years QCEW's vintage
-    rule places on NAICS 2022, so a name derived from that rule would ask for `NAICS2022`, a
+    rule places on NAICS 2022, so a name derived from that rule would ask for a 2022-vintage
     variable CBP does not serve. The stored metadata labels the variable "2017 NAICS code" in every
     one of those years (re-read 2026-09-12): it describes CBP's codes as 2017 codes, not only the
     variable's name. This docstring used to say the 2022 and 2023 data carry the NAICS 2022 vintage,

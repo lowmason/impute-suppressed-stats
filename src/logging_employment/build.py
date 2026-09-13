@@ -93,8 +93,8 @@ def predicate_from_stored_metadata(
     """The NAICS predicate for one reference year, read from that year's stored metadata.
 
     A literal here would contradict Task 11's own test: the predicate name is a property of the
-    vintage CBP serves, not of the reference year's NAICS vintage, and Stage 0 measured the two
-    disagreeing for 2022 and 2023.
+    vintage CBP serves, not of QCEW's reference-year vintage rule, and the two disagree for 2022
+    and 2023, where CBP still serves `NAICS2017`.
 
     ONE COPY, CHOSEN THE WAY `snapshot_paths` CHOOSES A DATA FILE (D-097). The predicate decides
     which rows Census returns, and CBP's bytes are not reproducible, so the store can hold two
@@ -267,6 +267,14 @@ def build_harmonized(
                 predicate=predicate_from_stored_metadata(
                     raw_root / "cbp", year, manifest_path=manifest_path
                 ),
+                # DELIBERATELY QCEW-DERIVED, AND WRONG FOR 2022 AND 2023 (D-098). `vintage_for_year`
+                # is BLS's rule for QCEW. CBP's stored metadata serves `NAICS2017`, labelled "2017
+                # NAICS code", for every window year, so the 2022 and 2023 rows read "NAICS 2022"
+                # against CBP's own label. Kept for two reasons: nothing reads CBP's `naics_vintage`
+                # (every CBP consumer keys on `reference_year`), and correcting it rewrites
+                # `cbp_state_size.parquet`, which re-ids every run and fails the Stage 4 acceptance
+                # pin to `runs/f03023ac9f3a`. `D-114` moves the correction into the next deliberate
+                # rebuild of the staged layer.
                 naics_vintage=vintage_for_year(year),
                 regime=regime,
             )
