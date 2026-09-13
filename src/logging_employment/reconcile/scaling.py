@@ -36,6 +36,30 @@ class Bounds:
     lower: dict[str, float]
     upper: dict[str, float | None]
 
+    def __post_init__(self) -> None:
+        """Refuse a cell whose lower bound sits above its upper bound (D-096).
+
+        Refused HERE, once, rather than at each consumer. Both clipping sites in this module,
+        `clipped_sum` and the value `scale_into_bounds` returns, compute `min(max(v, lower), upper)`,
+        which settles an inverted pair in the cap's favour and returns a value below the lower
+        bound the caller declared. §12.3's feasibility predicate reads SUMS, so an inversion passes
+        it whenever the sums stay feasible. `integerize` already refuses this shape by name; this is
+        the same refusal one layer earlier. Equality is not an inversion: a cell pinned to a single
+        value is legitimate, and the strict `>` admits it.
+        """
+        inverted = sorted(
+            cell
+            for cell, low in self.lower.items()
+            if self.upper.get(cell) is not None and low > self.upper[cell]
+        )
+        if inverted:
+            cell = inverted[0]
+            raise ValueError(
+                f"cell {cell!r} has lower bound {self.lower[cell]} above its upper bound "
+                f"{self.upper[cell]} ({len(inverted)} inverted cell(s) in all); clamping to the cap "
+                "would silently return a value below the lower bound the caller declared"
+            )
+
     def upper_of(self, cell: str) -> float:
         """The upper bound as a float, with `None` read as positive infinity."""
         value = self.upper.get(cell)

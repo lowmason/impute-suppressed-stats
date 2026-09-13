@@ -76,7 +76,9 @@ The load-bearing points:
 - **`Bounds.upper = None` means +inf, not "missing"** (`Bounds.upper_of`, `scaling.py::upper_of`). On D1,
   `selected_upper` is null on almost every unknown cell, so the `sum U < R_t` arm of §12.3's
   predicate is vacuous. Coercing null to a large finite number would manufacture the "arbitrary
-  top-class cap" §9.3 forbids by name.
+  top-class cap" §9.3 forbids by name. An inverted pair (`lower > upper`) is refused when `Bounds`
+  is built (`scaling.py::Bounds.__post_init__`, `D-096`): both clipping sites would settle it in the
+  cap's favour, and §12.3's sum predicate cannot see a per-cell inversion.
 - **§12.3's strict predicate is compared against `tolerance`, not in exact float arithmetic**
   (`scaling.py::scale_into_bounds`,83`). Equality is feasible — every cell exactly on its bound must succeed — and
   seven lower bounds of 0.1 sum to 0.7000000000000001.

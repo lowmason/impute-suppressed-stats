@@ -201,3 +201,16 @@ def test_a_float_rounded_lower_sum_equal_to_the_residual_still_succeeds() -> Non
         max_iterations=ITERS,
     )
     assert out == pytest.approx({c: 0.1 for c in cells}, abs=1e-9)
+
+
+def test_an_inverted_bound_pair_is_refused_when_the_bounds_are_built() -> None:
+    """D-096. §12.3's feasibility predicate reads SUMS, so a per-cell inversion passes it whenever
+    the sums stay feasible. With a residual of 100 these sums are 90 and 201, and
+    `scale_into_bounds` used to return 1.0 for '01', below the 90 its caller declared, where
+    `integerize` refuses the same shape by name. Refused at construction, so neither clipping site
+    (`scale_into_bounds`, `clipped_sum`) can receive one."""
+    with pytest.raises(ValueError, match=r"'01' has lower bound 90\.0 above its upper bound 1\.0"):
+        Bounds(
+            lower={"01": 90.0, "02": 0.0, "04": 0.0},
+            upper={"01": 1.0, "02": 100.0, "04": 100.0},
+        )
