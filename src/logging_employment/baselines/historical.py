@@ -203,7 +203,16 @@ class RollingMedianShare(_ShareBaseline):
 
 
 class ExponentiallyWeightedShare(_ShareBaseline):
-    """§10.3 variant 4. The half-life is one year of the lookback, so recency dominates smoothly."""
+    """§10.3 variant 4: a geometric discount whose half-life is twelve OBSERVATIONS, not months.
+
+    `_reduce` raises `decay` to each share's position in `shares`, and `observed_share_history`
+    keeps disclosed months only, so a suppressed month is absent from the list rather than present
+    at a low weight. The half-life is one year only for a gap-free history; every gap stretches it
+    in calendar time. This docstring used to claim a one-year half-life unconditionally, and `D-095`
+    measured how far gappy histories depart from it. §10.3 names no decay form, so this records
+    what the code does rather than a spec violation. A month-based decay would move estimates, and
+    `D-113` records when that becomes worth doing.
+    """
 
     estimator_id = "share_exponentially_weighted"
     decay = 0.5 ** (1.0 / 12.0)

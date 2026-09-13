@@ -2128,3 +2128,25 @@ the event that makes it reachable rather than a date.
       residual` rather than from the code's expression, and fails on the old sign; the golden and its
       hand-derived oracle are regenerated with the delta characterized by join; and
       `runs/f03023ac9f3a` is re-run.
+
+## /deferred quick fixes — 2026-09-12
+
+Filed while fixing the 2026-09-12 triage's quick-fix batch: the halves of fixed items that the fix
+deliberately left open.
+
+- [ ] `D-113` **`ExponentiallyWeightedShare` discounts per observation, so a gappy history's
+      half-life in months exceeds its twelve observations.** Split from `D-095` on 2026-09-12, when
+      that item's docstring half was fixed: `baselines/historical.py` now says the half-life is
+      twelve OBSERVATIONS, and nothing yet decides whether it should be twelve MONTHS. `_reduce`
+      raises `decay` to each share's list position, and `observed_share_history` keeps disclosed
+      months only, so a suppressed month shortens the list instead of down-weighting an entry.
+      `D-095` measured the effect on 2026-09-11 over `data/staged` at a 24-month lookback: of 338
+      histories with at least two points 120 are gappy, and a month-based decay moves 49 of 327
+      shipped cells by more than 1% (maximum 7.18%). §10.3 names no decay form, so this is a
+      modelling choice rather than a spec defect. `_reduce` already receives `history`, whose
+      `reference_month` a month-based decay would read. Closing it moves this estimator's rows in
+      `tests/fixtures/baselines/baseline_results_golden.parquet` and
+      `tests/fixtures/validation/validation_metrics_golden.parquet`, both of which carry it.
+      Size: plan. Revisit if: `share_exponentially_weighted` becomes `preferred_baseline` in any
+      regime (re-measured 2026-09-12 on `runs/f03023ac9f3a`: preferred in none of the nine, which
+      name `share_last_observed` in 3 and `cbp_intensity` in 6), or §10.3 gains a decay form.
