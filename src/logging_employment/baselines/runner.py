@@ -29,6 +29,7 @@ any kind and gates nothing.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 
 import polars as pl
@@ -56,7 +57,7 @@ from ..reconcile.anchor import (
     observed_partition,
 )
 from ..reconcile.integerize import integerize
-from ..reconcile.scaling import Bounds
+from ..reconcile.scaling import Bounds, scale_into_bounds
 from .harvest import HarvestProportional
 from .historical import (
     BreakAdjustedShare,
@@ -216,8 +217,9 @@ def state_total_bounds(bounds: pl.DataFrame) -> Bounds:
     A NULL `selected_lower` IS REFUSED, while a null `selected_upper` is read as unbounded above.
     The asymmetry is §9.3's: nonnegativity is the one public fact touching every cell, so a cell
     with no lower bound at all means the solver did not answer for it -- whereas a null upper is
-    the documented D1 state on 1,227 of 1,241 cells and `Bounds.upper_of` already reads it as
-    positive infinity.
+    the state of every suppressed cell no public fact bounds above -- since `D-111`, every one
+    without a published private `113` parent -- and `Bounds.upper_of` already reads it as positive
+    infinity.
     """
     validate_frame(bounds, DETERMINISTIC_BOUNDS_SCHEMA, "deterministic_bounds")
     rows = bounds.filter(pl.col("cell_id").str.starts_with(f"{KIND_STATE_TOTAL}|"))
@@ -249,6 +251,67 @@ def state_total_bounds(bounds: pl.DataFrame) -> Bounds:
     return Bounds(lower=lower, upper=upper)
 
 
+def assert_bounds_cover(
+    values: Mapping[str, float],
+    bounds: Bounds,
+    *,
+    cell_ids: Mapping[str, str],
+    estimator_id: str,
+    reference_month: str,
+) -> None:
+    """Refuse a month whose cells have no deterministic bound, before anything is scaled into one.
+
+    Split out of `assert_within_bounds`, which calls it, because §12.3's scaling now runs BETWEEN
+    the allocation and that comparison and reads `bounds.lower` by cell. A `Bounds` keyed by bare
+    state would otherwise surface as a `KeyError` inside `month_bounds` rather than as this named
+    refusal.
+    """
+    uncovered = sorted(cell for cell in values if cell_ids[cell] not in bounds.lower)
+    if uncovered:
+        raise ConceptViolationError(
+            f"{reference_month}: {estimator_id} has no deterministic bound for "
+            f"{[cell_ids[cell] for cell in uncovered]}; INV-002 cannot be checked against a "
+            "bound that is absent, and an absent bound is not an unbounded one"
+        )
+
+
+def month_bounds(bounds: Bounds, *, cell_ids: Mapping[str, str], cells: Sequence[str]) -> Bounds:
+    """One month's bounds keyed by bare state, the key §12.3's `scale_into_bounds` reads.
+
+    `state_total_bounds` keys by the seven-field `cell_id` because `run_baselines` walks the whole
+    window in one call; `scale_into_bounds` and `integerize` see one month's missing set, keyed by
+    `anchor.missing_cells`. Projected per month here, so neither convention leaks into the other.
+    """
+    return Bounds(
+        lower={cell: bounds.lower[cell_ids[cell]] for cell in cells},
+        upper={cell: bounds.upper.get(cell_ids[cell]) for cell in cells},
+    )
+
+
+def leaves_its_interval(values: Mapping[str, float], bounds: Bounds, *, tolerance: float) -> bool:
+    """Whether any value sits outside its own `[L, U]` by more than `tolerance`."""
+    return any(
+        value < bounds.lower[cell] - tolerance or value > bounds.upper_of(cell) + tolerance
+        for cell, value in values.items()
+    )
+
+
+def integer_bounds(bounds: Bounds, *, tolerance: float) -> dict[str, dict[str, int | None]]:
+    """A month's float bounds as `integerize`'s integer `lower` and `upper` keywords.
+
+    `tolerance` is the SOLVER's (`constraints.feasibility_tolerance`), not reconciliation's: these
+    endpoints came out of HiGHS, which reports an integer optimum such as 17 only to within that
+    tolerance, and flooring 16.9999999 would cap a cell one employee below its own bound.
+    """
+    return {
+        "lower": {cell: math.ceil(low - tolerance) for cell, low in bounds.lower.items()},
+        "upper": {
+            cell: None if high is None else math.floor(high + tolerance)
+            for cell, high in bounds.upper.items()
+        },
+    }
+
+
 def assert_within_bounds(
     values: Mapping[str, float],
     bounds: Bounds,
@@ -269,22 +332,25 @@ def assert_within_bounds(
     a named refusal. An uncovered cell is a `ConceptViolationError`, not a `BoundViolationError`:
     nothing was violated, the bound is simply missing, and §18.3's fail-closed rule covers both.
 
-    `tolerance` is the caller's, and production passes `reconciliation.tolerance` rather than
-    `constraints.feasibility_tolerance`. `ReconciliationConfig`'s docstring gives the reason: "a
-    bound solved to 1e-7 and a residual reconciled to 1e-9 are different obligations", and reusing
-    the solver's number here would let a solver tuning change move what counts as a violation.
+    `tolerance` is the caller's. For the float estimate production passes
+    `reconciliation.tolerance` rather than `constraints.feasibility_tolerance`.
+    `ReconciliationConfig`'s docstring gives the reason: "a bound solved to 1e-7 and a residual
+    reconciled to 1e-9 are different obligations", and reusing the solver's number here would let a
+    solver tuning change move what counts as a violation. The integer release is the exception and
+    gets the solver's number: `integer_bounds` cut it at that tolerance, which admits 50 under an
+    upper HiGHS reported as 49.99999995, and a stricter check would refuse what the cut allowed.
 
     `quantity` names which released number is being checked, because both are: §12.6's integers
     are released alongside the floats, and largest-remainder rounding can push a value that sat
     exactly on an upper bound past it. Without the label the message cannot say which one moved.
     """
-    uncovered = sorted(cell for cell in values if cell_ids[cell] not in bounds.lower)
-    if uncovered:
-        raise ConceptViolationError(
-            f"{reference_month}: {estimator_id} has no deterministic bound for "
-            f"{[cell_ids[cell] for cell in uncovered]}; INV-002 cannot be checked against a "
-            "bound that is absent, and an absent bound is not an unbounded one"
-        )
+    assert_bounds_cover(
+        values,
+        bounds,
+        cell_ids=cell_ids,
+        estimator_id=estimator_id,
+        reference_month=reference_month,
+    )
     violations = []
     for cell in sorted(values):
         identifier = cell_ids[cell]
@@ -319,27 +385,20 @@ def run_baselines(
     to the rungs it needs: measured, ten estimators cost ~30 s per call against ~0.4 s for one, and
     the harness pays that per mask replicate.
 
-    `bounds` turns on INV-002's per-cell half, and defaults to `None` -- no bound known, no check
-    -- for two different reasons that must not be conflated. For a unit test it is convenience:
-    a toy `HarmonizedData` has no Stage 2 run behind it, exactly as with `constraint_set_hash`.
-    For `validate/harness.py`'s caller it is a DESIGN QUESTION that is still open, and the
-    distinction matters because two different objects could be passed there.
+    `bounds` turns on INV-002's per-cell half, and defaults to `None` -- no bound known, no check --
+    for unit tests, which build a `HarmonizedData` with no Stage 2 run behind it. `cli.py` passes
+    the run directory's `deterministic_bounds`.
 
-    Passing the RUN DIRECTORY's `deterministic_bounds.parquet` would be wrong: it still carries
-    the published value for a cell the pseudo-suppression mask hides, so its intervals were solved
-    from a system containing the truth the harness is scoring against, and whether the check
-    passed would then be a function of the hidden value -- §13.4's `LeakageError` territory. Note
-    that the leak would be in the SIGNAL, not in the numbers: nothing here clips. `bounds` reaches
-    exactly one consumer, `assert_within_bounds`, which compares and raises; no estimate is ever
-    modified by it.
-
-    Passing MASKED bounds would not leak, and they already exist -- `validate/harness.py` calls
-    `recover.mask_and_solve` one line before this function and gets a `MaskedSystem.bounds` solved
-    from the masked system. What is unresolved is what an out-of-interval estimate should MEAN on
-    a scoring path: raising aborts a whole validation run because one estimator missed one
-    interval, which is the opposite of what a scoreboard is for. That ruling is `D-087`, not a
-    missing input. The production caller is `cli.py`, where raising is correct because the values
-    are being released.
+    A month §12.2's allocation keeps inside every interval is left bit-identical. A month it does
+    not is reallocated by §12.3's bounded proportional scaling, the method
+    `reconciliation.single_margin_method` names, so an estimate is moved INTO its interval rather
+    than a run halting on it. Three refusals remain, all raises. `InfeasibleResidualError` when a
+    month's bounds cannot hold its residual at all: unreachable on D1, where no month has every
+    missing cell bounded above (measured 2026-09-12, at most 7 of 9). `integerize`'s `ValueError`
+    when the integer cut of those bounds cannot hold the integer total, which takes a fractional
+    bound. And `BoundViolationError` if a value still escapes after scaling, which would be a defect
+    here rather than a property of an estimator. §12.6's integers are cut to the same bounds, so the
+    number actually published honours the interval too.
     """
     partitions = observed_partition(data.qcew_monthly)
     audit = closure_audit(data.qcew_monthly, partitions)
@@ -408,7 +467,33 @@ def run_baselines(
                     )
                 )
                 continue
+            scoped: Bounds | None = None
             if bounds is not None:
+                assert_bounds_cover(
+                    allocated,
+                    bounds,
+                    cell_ids=ids,
+                    estimator_id=estimator.estimator_id,
+                    reference_month=month,
+                )
+                scoped = month_bounds(bounds, cell_ids=ids, cells=anchor.missing_cells)
+                # §12.3, ONLY WHERE §12.2 LEAVES AN INTERVAL. `allocate` is bounded proportional
+                # scaling's no-bound fast path: where no bound binds, lambda = R / sum(q) clips
+                # nothing and the two agree exactly, so calling `allocate` first keeps every such
+                # month bit-identical while a month a finite upper binds on is scaled into it.
+                # Halting here instead, as before `D-111`, would stop every run: measured
+                # 2026-09-12, 2,184 of the 6,702 estimates `runs/f03023ac9f3a` shipped on
+                # parent-bounded cells sit above the parent, in 850 of 852 estimator-months.
+                if leaves_its_interval(
+                    allocated, scoped, tolerance=config.reconciliation.tolerance
+                ):
+                    allocated = scale_into_bounds(
+                        anchor,
+                        outcome,
+                        scoped,
+                        tolerance=config.reconciliation.tolerance,
+                        max_iterations=config.reconciliation.max_bisection_iterations,
+                    )
                 assert_within_bounds(
                     allocated,
                     bounds,
@@ -420,11 +505,21 @@ def run_baselines(
                 )
             # The margin the integers must honour is the anchor's residual -- the published
             # quantity being allocated -- so it is taken from the anchor rather than re-derived
-            # from the allocation. `allocate` already guarantees the values sum to R_t, so the two
-            # candidates cannot actually disagree; naming the anchor is simply the honest source.
+            # from the allocation. `allocate` and `scale_into_bounds` both make the values sum to
+            # R_t, so the two candidates cannot disagree; naming the anchor is the honest source.
             integer_total = round(anchor.residual)
             integers = (
-                integerize(allocated, total=integer_total)
+                integerize(
+                    allocated,
+                    total=integer_total,
+                    **(
+                        {}
+                        if scoped is None
+                        else integer_bounds(
+                            scoped, tolerance=config.constraints.feasibility_tolerance
+                        )
+                    ),
+                )
                 if config.reconciliation.integerize_release
                 else dict.fromkeys(allocated, None)
             )
@@ -439,17 +534,18 @@ def run_baselines(
                     f"{sum(integers.values())}, not the required {integer_total}"
                 )
             if bounds is not None and config.reconciliation.integerize_release:
-                # §12.6's integers are released too, and largest-remainder rounding moves a value
-                # by up to one whole employee -- so a float that sat exactly on an upper bound can
-                # cross it. Checking only the float would leave the number actually published
-                # unchecked, which is the half INV-002 names.
+                # §12.6's integers are released too. `integerize` is now cut to the month's bounds,
+                # so this is defence in depth: checking only the float would leave the number
+                # actually published unchecked, which is the half INV-002 names. The tolerance is
+                # the one `integer_bounds` cut with -- the solver's -- so the check admits exactly
+                # what that cut was allowed to produce.
                 assert_within_bounds(
                     {cell: float(value) for cell, value in integers.items() if value is not None},
                     bounds,
                     cell_ids=ids,
                     estimator_id=estimator.estimator_id,
                     reference_month=month,
-                    tolerance=config.reconciliation.tolerance,
+                    tolerance=config.constraints.feasibility_tolerance,
                     quantity="estimate_integer",
                 )
             for cell in anchor.missing_cells:

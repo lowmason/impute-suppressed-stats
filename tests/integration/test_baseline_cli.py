@@ -8,7 +8,6 @@ import polars as pl
 from typer.testing import CliRunner
 
 from logging_employment.cli import app
-from logging_employment.errors import BoundViolationError
 
 runner = CliRunner()
 
@@ -137,13 +136,15 @@ def test_run_baselines_refuses_a_run_with_no_solved_bounds(staged_repo) -> None:
     assert "INV-002" in result.output
 
 
-def test_a_finite_upper_below_the_estimate_halts_the_production_path(staged_repo) -> None:
-    """The wiring is not vacuous: the bounds the CLI loads really do gate the estimates.
+def test_the_production_path_scales_an_estimate_into_a_finite_upper_below_it(staged_repo) -> None:
+    """The wiring is not vacuous: the bounds the CLI loads really do reach the estimates.
 
-    Every `selected_upper` this fixture solves is null, exactly as on D1 -- so the passing run
-    above cannot distinguish a working check from one whose mapping is keyed wrong and matches
-    nothing. Tightening ONE cell's upper below the estimate that cell already received is the
-    difference. The estimate is read out of the first run rather than assumed.
+    Every `selected_upper` this fixture solves is null -- its parent table is empty -- so the
+    passing run above cannot distinguish a working check from one whose mapping is keyed wrong and
+    matches nothing. Tightening ONE cell's upper below the estimate that cell already received is
+    the difference. Since `D-111` that no longer halts the run: §12.3 scales the month into the
+    bound, so the run succeeds and the cell's released estimate, float and integer, sits at or
+    under the new upper. The estimate is read out of the first run rather than assumed.
     """
     assert (
         runner.invoke(app, ["run-baselines", "--config", str(staged_repo.config_path)]).exit_code
@@ -163,6 +164,11 @@ def test_a_finite_upper_below_the_estimate_halts_the_production_path(staged_repo
         .alias("selected_upper")
     ).write_parquet(bounds_path)
     result = runner.invoke(app, ["run-baselines", "--config", str(staged_repo.config_path)])
-    assert result.exit_code != 0
-    assert isinstance(result.exception, BoundViolationError)
-    assert row["cell_id"] in str(result.exception)
+    assert result.exit_code == 0, result.output
+    rerun = pl.read_parquet(
+        staged_repo.run_dir / "baseline_results" / "baseline_results.parquet"
+    ).filter(
+        (pl.col("cell_id") == row["cell_id"]) & (pl.col("estimator_id") == row["estimator_id"])
+    )
+    assert rerun["estimate"].item() <= row["estimate"] / 2.0 < row["estimate"]
+    assert rerun["estimate_integer"].item() <= row["estimate"] / 2.0
