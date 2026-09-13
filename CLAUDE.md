@@ -50,18 +50,24 @@ declared — its help text even says "excluded from the default run" — but no 
 the hermetic tier only: no runner has `data/`, so every data-bound test skips there by design, and
 a green check says nothing about the D1 integration tests — those still need a local run where
 `data/` lives. Measured 2026-09-13 without `data/`: the expression deselects 27 tests (the six
-`slow` sites are mostly module-level) and passed stays at 1388, so it removes nothing that would
-have run.
+`slow` sites are mostly module-level) and passed stays at 1408, so it removes nothing that would
+have run. Nothing else is deselected. Those counts are THIS MAC's: ubuntu-latest reports 1407
+passed, 46 skipped, 27 deselected (run 34765933053), because
+`tests/audit/test_qcew_codes.py::test_period_basis_quotes_the_reference_verbatim_where_the_reference_is_readable`
+skips where the personal `~/.claude/skills/bls-data-context/` reference is absent (D-055).
 
-**CI also deselects two float goldens**, which still run locally:
-`test_validation_golden.py::test_the_metrics_match_the_golden` and
-`test_baseline_golden.py::test_the_baseline_output_matches_its_golden_fixture`. Both compare floats
-exactly against goldens written on an arm64 Mac at 14 polars threads, and both failed on
-ubuntu-latest (run 34763305304). The first depends on the THREAD COUNT: polars returns
-`(estimate - truth).abs()` in one chunk per thread and `.sum()`/`.mean()` in `validate/metrics.py`
-round per chunk, so `POLARS_MAX_THREADS=4` reproduces it here. The second passes locally at any
-thread count, so its cause is architecture or BLAS and is not yet isolated. Corollary: the dataless
-"green" counts in Gotchas are this Mac's, not a Linux runner's.
+**Float goldens compare through `tests/golden_compare.py`, not `.equals`** (2026-09-13). The two
+float goldens (`test_validation_golden.py::test_the_metrics_match_the_golden`,
+`test_baseline_golden.py::test_the_baseline_output_matches_its_golden_fixture`) failed on
+ubuntu-latest (run 34763305304) against files written on an arm64 Mac, for two separate reasons.
+THREAD COUNT: polars returns a derived Series in one chunk per thread and rounds each chunk's sum,
+so `validate/metrics.py` now reduces through `math.fsum` (`_exact_sum`) and the re-pinned
+validation golden is byte-identical at `POLARS_MAX_THREADS` 1, 4 and 14. PLATFORM: OpenBLAS and
+glibc's libm against Accelerate and Apple's libm move `constrained_regression` (`x.T @ y`, `solve`,
+`exp`/`log`) and CRPS (`np.dot`) by up to 1.5e-14 relative (diagnostic run 34764717606), and no
+integer, count or coverage value moved. So the comparator checks every non-float column exactly and
+Float64 within rel 1e-12 / abs 1e-9. Never pin `POLARS_MAX_THREADS` to make a golden pass, and
+diff old against new by join before re-pinning one (§17.6).
 
 ## Architecture
 
