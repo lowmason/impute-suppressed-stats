@@ -265,7 +265,47 @@ Moved estimates by estimator: `cbp_intensity` 1054, `constrained_regression` 122
 | `whole_state_year_blocks` | `cbp_intensity` | `cbp_intensity` |
 
 `validation_metrics`: 6932 / 6932 rows, key-only 0 / 0; `value` moved on 3662: `deterministic_bounds` 250, `point` 2392, `probabilistic` 1020.
-Exactly recoverable targets rejected from scoring (§13.2 step 6): 0. `validation_manifest.json` records `code_commit` `bc0498aa1f96e6ec765ae9d1eefabf5fdd98b169`.
+Exactly recoverable targets rejected from scoring (§13.2 step 6): 0. `validation_manifest.json` records `code_commit` `0e473e9dcadf645f8acb5e63ff6e2323d87b7615`.
+
+### Added by plan 15's final review (derived from the run directories)
+
+The tables above were re-measured after the review's fixes; `validation_manifest.json` records `code_commit` `0e473e9dcadf645f8acb5e63ff6e2323d87b7615`.
+
+| `disclosure_flags` | `runs/f03023ac9f3a` | `runs/4cf47a918dd8` |
+|---|---|---|
+| `narrow_feasible_interval_flag`, by cell kind | `national_size` 1 | `national_size` 1, `state_total` 23 |
+| `exact_reconstruction_flag` | 0 | 0 |
+
+The new narrow flags are parent-bounded state cells with `selected_upper` between 2 and 10. A `[0, U]` interval's relative width is 2, so only the absolute arm fires (`narrow_interval_absolute_width: 10`), and `narrow_interval_action: manual_review` routes each to §9.8 review.
+
+**What the WAPE movement is.** Over the 5932 scored rows with an estimate in both runs, the absolute error summed 2,180,827 before and 1,315,134 after, a net 537,515 employees of estimate moved INTO scored targets, and 0 estimates exceed a finite cap. By regime (a scoreboard row counts as worse or better when its WAPE moves by more than 0.05):
+
+| regime | worse | better | median change | max change |
+|---|---|---|---|---|
+| `clustered_states_within_month` | 0 | 11 | -0.0300 | +0.0067 |
+| `concentration_proxy` | 0 | 26 | -0.1473 | -0.0301 |
+| `long_consecutive_runs` | 19 | 2 | +0.2669 | +0.8864 |
+| `naics_transition` | 0 | 23 | -0.1017 | -0.0093 |
+| `regional_blocks` | 0 | 14 | -0.0808 | +0.0372 |
+| `small_cell_biased` | 0 | 21 | -0.1160 | +0.0041 |
+| `structural_break` | 0 | 22 | -0.0892 | -0.0097 |
+| `whole_seasonal_blocks` | 0 | 6 | -0.1858 | -0.0058 |
+| `whole_state_year_blocks` | 3 | 20 | -0.1399 | +8.0117 |
+
+The largest rise, +8.0117 on `whole_state_year_blocks` seed 4096 `equal_residual`, is 12 scored targets with a summed truth of 62, 0 of them with a finite upper bound and 12 above their truth, receiving +496.7 employees of estimate. Clamping an estimate to a valid bound cannot raise the absolute error summed over every suppressed cell of a month -- a capped cell loses exactly the mass the others gain, and stays at or above its truth -- but the harness scores only masked targets. A capped REAL suppression's improvement is unscored, while the mass it sheds lands on scored ones.
+
+**§13.10 caveat.** A masked target's score now depends on which bounds bind on the other cells of its month, so masked-target WAPE is not comparable across runs with different identification sets: read `runs/f03023ac9f3a` and `runs/4cf47a918dd8` as different comparands, not as one comparand improved.
+
+**What the review's fixes moved** (the pre-review run at `code_commit` `bc0498aa1f96e6ec765ae9d1eefabf5fdd98b169`, kept aside, against this one):
+
+| quantity | pre-review / final |
+|---|---|
+| reconcile `max_residual_drift` | 9.932e-10 / 4.547e-13 (Stage 4's comparand: 4.547e-13) |
+| `baseline_results` key-only rows | 0 / 0 |
+| `baseline_results` estimates moved beyond 1e-09, largest change | 0, 7.637e-10 |
+| `validation_scores` estimates moved beyond 1e-09, largest change | 0, 9.068e-10 |
+| `validation_scoreboard` WAPE, largest change | 5.906e-12 |
+| `validation_metrics` `value` moved beyond 1e-09, by family | `probabilistic` 1 |
 
 ## 2026-09-13 — superseded Stage 5 roadmap reading (stage-block rule 1)
 
